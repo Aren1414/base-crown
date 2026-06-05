@@ -1,68 +1,69 @@
+import GameHeader from "@/components/GameHeader";
+import ResourceCard from "@/components/ResourceCard";
+import SectionCard from "@/components/SectionCard";
+import { gameData } from "@/lib/gameData";
+
 export default function Home() {
   return (
     <main className="min-h-screen bg-black text-white p-4">
       <div className="max-w-md mx-auto">
-        <h1 className="text-4xl font-bold text-center">
-          BASE CROWN
-        </h1>
-
-        <p className="text-center text-zinc-400 mt-2">
-          Fully Onchain Strategy Game
-        </p>
+        <GameHeader />
 
         <div className="grid grid-cols-2 gap-3 mt-6">
-          <div className="border border-zinc-800 rounded-xl p-4">
-            <div className="text-zinc-500 text-xs">CROWN</div>
-            <div className="text-xl font-bold">0</div>
-          </div>
+          <ResourceCard
+            title="CROWN"
+            value={gameData.crown}
+          />
 
-          <div className="border border-zinc-800 rounded-xl p-4">
-            <div className="text-zinc-500 text-xs">Fragments</div>
-            <div className="text-xl font-bold">0</div>
-          </div>
+          <ResourceCard
+            title="Fragments"
+            value={gameData.fragments}
+          />
 
-          <div className="border border-zinc-800 rounded-xl p-4">
-            <div className="text-zinc-500 text-xs">Keys</div>
-            <div className="text-xl font-bold">0</div>
-          </div>
+          <ResourceCard
+            title="Keys"
+            value={gameData.keys}
+          />
 
-          <div className="border border-zinc-800 rounded-xl p-4">
-            <div className="text-zinc-500 text-xs">Score</div>
-            <div className="text-xl font-bold">0</div>
-          </div>
+          <ResourceCard
+            title="Score"
+            value={gameData.score}
+          />
         </div>
 
-        <div className="mt-4 border border-zinc-800 rounded-xl p-4">
+        <SectionCard title="Daily Limits">
           <div className="flex justify-between">
             <span>Daily Spins</span>
-            <span>5</span>
+            <span>{gameData.dailySpins}</span>
           </div>
 
           <div className="flex justify-between mt-2">
             <span>Daily Attacks</span>
-            <span>5</span>
+            <span>{gameData.dailyAttacks}</span>
           </div>
-        </div>
+        </SectionCard>
 
-        <div className="mt-4 border border-zinc-800 rounded-xl p-4">
-          <div className="text-sm text-zinc-500">
-            Genesis Crown Key NFT
+        <SectionCard title="Genesis Crown Key NFT">
+          <div className="font-semibold">
+            {gameData.hasGenesisNFT ? "Owned" : "Not Owned"}
           </div>
+        </SectionCard>
 
-          <div className="mt-2 font-semibold">
-            Not Owned
+        <SectionCard title="Wallet">
+          <div className="font-semibold">
+            {gameData.walletConnected
+              ? "Connected"
+              : "Not Connected"}
           </div>
-        </div>
+        </SectionCard>
 
-        <div className="mt-4 border border-zinc-800 rounded-xl p-4">
-          <div className="text-sm text-zinc-500">
-            Wallet
+        <SectionCard title="Season">
+          <div className="space-y-2 text-sm">
+            <div>Season: Alpha</div>
+            <div>Rank: Unranked</div>
+            <div>Reward Pool: Coming Soon</div>
           </div>
-
-          <div className="mt-2 font-semibold">
-            Not Connected
-          </div>
-        </div>
+        </SectionCard>
       </div>
     </main>
   );
