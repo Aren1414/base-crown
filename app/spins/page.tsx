@@ -1,52 +1,43 @@
+import GameHeader from "@/components/GameHeader";
+import SectionCard from "@/components/SectionCard";
+
 export default function SpinsPage() {
   return (
     <main className="min-h-screen bg-black text-white p-4">
       <div className="max-w-md mx-auto">
-        <h1 className="text-3xl font-bold">Spins</h1>
+        <GameHeader />
 
-        <p className="text-zinc-400 mt-2">
-          Use daily spins to earn CROWN, Fragments, Keys and rare rewards.
-        </p>
-
-        <div className="mt-6 border border-zinc-800 rounded-xl p-4">
-          <div className="text-zinc-500 text-sm">
-            Remaining Spins
+        <SectionCard title="Daily Spins">
+          <div className="flex justify-between">
+            <span>Remaining</span>
+            <span className="font-bold">5</span>
           </div>
+        </SectionCard>
 
-          <div className="text-4xl font-bold mt-2">
-            5
+        <SectionCard title="Spin Wheel">
+          <button className="w-full rounded-xl bg-yellow-500 text-black font-bold py-4">
+            SPIN
+          </button>
+        </SectionCard>
+
+        <SectionCard title="Last Reward">
+          <div className="text-zinc-400">
+            No rewards yet
           </div>
-        </div>
+        </SectionCard>
 
-        <button className="w-full mt-4 rounded-xl bg-yellow-500 text-black font-bold py-4">
-          SPIN
-        </button>
-
-        <div className="mt-6 border border-zinc-800 rounded-xl p-4">
-          <div className="font-semibold">
-            Last Reward
-          </div>
-
-          <div className="text-zinc-400 mt-2">
-            No rewards yet.
-          </div>
-        </div>
-
-        <div className="mt-6 border border-zinc-800 rounded-xl p-4">
-          <div className="font-semibold mb-3">
-            Reward Pool
-          </div>
-
+        <SectionCard title="Possible Rewards">
           <div className="space-y-2 text-sm">
             <div>10 CROWN</div>
             <div>50 CROWN</div>
             <div>100 CROWN</div>
+            <div>250 CROWN</div>
             <div>1 Fragment</div>
             <div>3 Fragments</div>
             <div>1 Key</div>
             <div>Rare Relic Fragment</div>
           </div>
-        </div>
+        </SectionCard>
       </div>
     </main>
   );
