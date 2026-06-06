@@ -7,14 +7,16 @@ export default function BottomNav() {
   const pathname = usePathname();
 
   const items = [
-    { href: "/", label: "Home" },
-    { href: "/spins", label: "Spins" },
-    { href: "/attacks", label: "Attacks" },
-    { href: "/relics", label: "Relics" },
-    { href: "/quests", label: "Quests" },
-    { href: "/shop", label: "Shop" },
-    { href: "/profile", label: "Profile" },
-  ];
+  { href: "/", label: "Home" },
+  { href: "/spins", label: "Spins" },
+  { href: "/attacks", label: "Attacks" },
+  { href: "/relics", label: "Relics" },
+  { href: "/quests", label: "Quests" },
+  { href: "/shop", label: "Shop" },
+  { href: "/leaderboard", label: "Ranks" },
+  { href: "/profile", label: "Profile" },
+  { href: "/about", label: "About" },
+];
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 border-t border-zinc-800 bg-black">
