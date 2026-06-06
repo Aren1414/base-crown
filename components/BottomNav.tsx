@@ -7,20 +7,36 @@ export default function BottomNav() {
   const pathname = usePathname();
 
   const items = [
-  { href: "/", label: "Home" },
-  { href: "/spins", label: "Spins" },
-  { href: "/attacks", label: "Attacks" },
-  { href: "/relics", label: "Relics" },
-  { href: "/quests", label: "Quests" },
-  { href: "/shop", label: "Shop" },
-  { href: "/leaderboard", label: "Ranks" },
-  { href: "/profile", label: "Profile" },
-  { href: "/about", label: "About" },
-];
+    {
+      href: "/",
+      label: "Home",
+      icon: "🏠",
+    },
+    {
+      href: "/spins",
+      label: "Play",
+      icon: "🎡",
+    },
+    {
+      href: "/attacks",
+      label: "Battle",
+      icon: "⚔️",
+    },
+    {
+      href: "/profile",
+      label: "Profile",
+      icon: "👤",
+    },
+    {
+      href: "/about",
+      label: "More",
+      icon: "☰",
+    },
+  ];
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 border-t border-zinc-800 bg-black">
-      <div className="flex overflow-x-auto">
+    <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-blue-900/30 bg-slate-950/95 backdrop-blur">
+      <div className="grid grid-cols-5">
         {items.map((item) => {
           const active = pathname === item.href;
 
@@ -28,11 +44,19 @@ export default function BottomNav() {
             <Link
               key={item.href}
               href={item.href}
-              className={`px-4 py-3 text-sm whitespace-nowrap ${
-                active ? "text-white" : "text-zinc-500"
+              className={`flex flex-col items-center justify-center py-3 text-xs transition ${
+                active
+                  ? "text-blue-400"
+                  : "text-slate-400"
               }`}
             >
-              {item.label}
+              <span className="text-lg">
+                {item.icon}
+              </span>
+
+              <span className="mt-1">
+                {item.label}
+              </span>
             </Link>
           );
         })}
