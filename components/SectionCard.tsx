@@ -10,12 +10,23 @@ export default function SectionCard({
   children,
 }: SectionCardProps) {
   return (
-    <div className="mt-4 border border-zinc-800 rounded-xl p-4">
-      <div className="text-sm text-zinc-500">
+    <div
+      className="
+        mt-4
+        rounded-2xl
+        border
+        border-blue-500/15
+        bg-white/5
+        backdrop-blur-md
+        p-4
+        shadow-lg
+      "
+    >
+      <div className="text-sm text-blue-200/70">
         {title}
       </div>
 
-      <div className="mt-2">
+      <div className="mt-3">
         {children}
       </div>
     </div>
