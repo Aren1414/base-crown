@@ -12,56 +12,94 @@ export default function Home() {
         <div className="grid grid-cols-2 gap-3 mt-6">
           <ResourceCard
             title="CROWN"
-            value={gameData.crown}
+            value={gameData.resources.crown}
           />
 
           <ResourceCard
             title="Fragments"
-            value={gameData.fragments}
+            value={gameData.resources.fragments}
           />
 
           <ResourceCard
             title="Keys"
-            value={gameData.keys}
+            value={gameData.resources.keys}
           />
 
           <ResourceCard
             title="Score"
-            value={gameData.score}
+            value={gameData.resources.score}
           />
         </div>
 
         <SectionCard title="Daily Limits">
           <div className="flex justify-between">
-            <span>Daily Spins</span>
-            <span>{gameData.dailySpins}</span>
+            <span>Spins Remaining</span>
+            <span className="font-bold">
+              {gameData.daily.spinsRemaining}
+            </span>
           </div>
 
           <div className="flex justify-between mt-2">
-            <span>Daily Attacks</span>
-            <span>{gameData.dailyAttacks}</span>
+            <span>Attacks Remaining</span>
+            <span className="font-bold">
+              {gameData.daily.attacksRemaining}
+            </span>
           </div>
         </SectionCard>
 
         <SectionCard title="Genesis Crown Key NFT">
           <div className="font-semibold">
-            {gameData.hasGenesisNFT ? "Owned" : "Not Owned"}
+            {gameData.player.hasGenesisNFT
+              ? "Owned"
+              : "Not Owned"}
           </div>
         </SectionCard>
 
         <SectionCard title="Wallet">
           <div className="font-semibold">
-            {gameData.walletConnected
-              ? "Connected"
+            {gameData.player.connected
+              ? gameData.player.wallet
               : "Not Connected"}
           </div>
         </SectionCard>
 
-        <SectionCard title="Season">
+        <SectionCard title="Season Progress">
           <div className="space-y-2 text-sm">
-            <div>Season: Alpha</div>
-            <div>Rank: Unranked</div>
-            <div>Reward Pool: Coming Soon</div>
+            <div>
+              Level: {gameData.season.level}
+            </div>
+
+            <div>
+              Rank: {gameData.season.rank ?? "Unranked"}
+            </div>
+
+            <div>
+              Season Score: {gameData.season.score}
+            </div>
+          </div>
+        </SectionCard>
+
+        <SectionCard title="Lifetime Stats">
+          <div className="space-y-2 text-sm">
+            <div>
+              Total Spins: {gameData.stats.totalSpins}
+            </div>
+
+            <div>
+              Total Attacks: {gameData.stats.totalAttacks}
+            </div>
+
+            <div>
+              Successful Attacks: {gameData.stats.successfulAttacks}
+            </div>
+
+            <div>
+              Relics Forged: {gameData.stats.relicsForged}
+            </div>
+
+            <div>
+              CROWN Earned: {gameData.stats.crownEarned}
+            </div>
           </div>
         </SectionCard>
       </div>
