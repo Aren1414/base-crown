@@ -3,7 +3,7 @@ import SectionCard from "@/components/SectionCard";
 
 export default function ProfilePage() {
   return (
-    <main className="min-h-screen bg-black text-white p-4">
+    <main className="min-h-screen text-white p-4">
       <div className="max-w-md mx-auto">
         <GameHeader />
 
