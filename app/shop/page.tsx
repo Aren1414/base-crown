@@ -3,56 +3,25 @@ import SectionCard from "@/components/SectionCard";
 
 export default function ShopPage() {
   return (
-    <main className="min-h-screen bg-black text-white p-4">
-      <div className="max-w-md mx-auto">
+    <main className="min-h-screen p-4 text-white">
+      <div className="max-w-md mx-auto pb-24">
         <GameHeader />
-
-        <SectionCard title="Genesis Crown Key NFT">
-          <div className="rounded-lg border border-zinc-800 p-4">
-            <div className="font-semibold">
-              Genesis Crown Key
-            </div>
-
-            <div className="mt-2 text-sm text-zinc-500">
-              Limited to 10,000 NFTs.
-            </div>
-
-            <div className="mt-4 flex justify-between">
-              <span className="text-zinc-400">
-                Price
-              </span>
-
-              <span>
-                $1 ETH
-              </span>
-            </div>
-
-            <div className="mt-2 flex justify-between">
-              <span className="text-zinc-400">
-                Bonus
-              </span>
-
-              <span>
-                20,000 CROWN
-              </span>
-            </div>
-
-            <button className="mt-4 w-full rounded-xl bg-yellow-500 py-4 font-bold text-black">
-              MINT NFT
-            </button>
-          </div>
-        </SectionCard>
 
         <SectionCard title="Extra Spins">
           <div className="space-y-3">
             <div className="flex justify-between">
               <span>5 Extra Spins</span>
-              <span>0.25$ ETH</span>
+              <span>100 CROWN</span>
             </div>
 
             <div className="flex justify-between">
               <span>10 Extra Spins</span>
-              <span>0.50$ ETH</span>
+              <span>180 CROWN</span>
+            </div>
+
+            <div className="flex justify-between">
+              <span>25 Extra Spins</span>
+              <span>400 CROWN</span>
             </div>
           </div>
 
@@ -71,6 +40,11 @@ export default function ShopPage() {
             <div className="flex justify-between">
               <span>5 Extra Attacks</span>
               <span>400 CROWN</span>
+            </div>
+
+            <div className="flex justify-between">
+              <span>10 Extra Attacks</span>
+              <span>700 CROWN</span>
             </div>
           </div>
 
@@ -93,7 +67,7 @@ export default function ShopPage() {
 
             <div className="flex justify-between">
               <span>10 Keys</span>
-              <span>0.75$ ETH</span>
+              <span>3,500 CROWN</span>
             </div>
           </div>
 
@@ -116,7 +90,7 @@ export default function ShopPage() {
 
             <div className="flex justify-between">
               <span>Epic Relic Pack</span>
-              <span>1$ ETH</span>
+              <span>5,000 CROWN</span>
             </div>
           </div>
 
@@ -125,11 +99,12 @@ export default function ShopPage() {
           </button>
         </SectionCard>
 
-        <SectionCard title="Accepted Payments">
-          <div className="space-y-2 text-sm">
-            <div>• ETH</div>
-            <div>• CROWN</div>
-            <div>• Some items support both currencies.</div>
+        <SectionCard title="Coming Soon">
+          <div className="space-y-2 text-sm text-zinc-300">
+            <div>• Seasonal Boosters</div>
+            <div>• Guild Upgrades</div>
+            <div>• Legendary Relics</div>
+            <div>• Special Event Packs</div>
           </div>
         </SectionCard>
       </div>
