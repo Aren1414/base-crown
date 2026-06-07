@@ -64,23 +64,21 @@ export default function BottomNav() {
           />
 
           <div className="fixed bottom-14 right-2 z-50 w-44">
-            <div className="rounded-2xl border border-white/10 bg-[#0f172a]/95 backdrop-blur-md p-3 shadow-2xl">
-              <div className="space-y-1">
-                {moreItems.map((item) => (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    onClick={() => setOpen(false)}
-                    className={`block rounded-xl px-3 py-2 text-sm transition ${
-                      pathname === item.href
-                        ? "bg-blue-500/20 text-blue-400 font-semibold"
-                        : "text-zinc-300 hover:bg-white/5"
-                    }`}
-                  >
-                    {item.label}
-                  </Link>
-                ))}
-              </div>
+            <div className="space-y-2">
+              {moreItems.map((item) => (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  onClick={() => setOpen(false)}
+                  className={`block rounded-xl border px-3 py-2 text-sm shadow-lg backdrop-blur-md transition ${
+                    pathname === item.href
+                      ? "border-blue-500/40 bg-blue-500/15 text-blue-400 font-semibold"
+                      : "border-white/10 bg-[#0f172a]/90 text-zinc-300 hover:bg-[#172033]"
+                  }`}
+                >
+                  {item.label}
+                </Link>
+              ))}
             </div>
           </div>
         </>
@@ -130,4 +128,4 @@ export default function BottomNav() {
       </nav>
     </>
   );
-      }
+}
