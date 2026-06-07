@@ -63,7 +63,7 @@ export default function BottomNav() {
             onClick={() => setOpen(false)}
           />
 
-          <div className="fixed bottom-14 right-2 z-50 w-44">
+          <div className="fixed bottom-20 right-2 z-50 w-44">
             <div className="space-y-2">
               {moreItems.map((item) => (
                 <Link
