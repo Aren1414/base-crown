@@ -57,39 +57,28 @@ export default function BottomNav() {
   return (
     <>
       {open && (
-        <>
-          <div
-            className="fixed inset-0 z-40 bg-black/60"
-            onClick={() => setOpen(false)}
-          />
-
-          <div className="fixed bottom-16 left-4 right-4 z-50 rounded-2xl border border-zinc-800 bg-zinc-950 p-4">
-            <div className="mb-3 text-sm font-semibold text-zinc-400">
-              More
-            </div>
-
-            <div className="space-y-2">
-              {moreItems.map((item) => (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  onClick={() => setOpen(false)}
-                  className={`block rounded-xl px-4 py-3 ${
-                    pathname === item.href
-                      ? "bg-zinc-800 text-white"
-                      : "bg-zinc-900 text-zinc-300"
-                  }`}
-                >
-                  {item.label}
-                </Link>
-              ))}
-            </div>
+        <div className="fixed bottom-14 left-0 right-0 z-50 px-6">
+          <div className="flex flex-col items-center gap-3">
+            {moreItems.map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                onClick={() => setOpen(false)}
+                className={`text-sm transition ${
+                  pathname === item.href
+                    ? "text-blue-400 font-semibold"
+                    : "text-zinc-300"
+                }`}
+              >
+                {item.label}
+              </Link>
+            ))}
           </div>
-        </>
+        </div>
       )}
 
-      <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-zinc-800 bg-black/95 backdrop-blur">
-        <div className="grid grid-cols-5">
+      <nav className="fixed bottom-0 left-0 right-0 z-50">
+        <div className="grid grid-cols-5 px-2 pb-2">
           {mainItems.map((item) => {
             const active = pathname === item.href;
 
@@ -97,15 +86,17 @@ export default function BottomNav() {
               <Link
                 key={item.href}
                 href={item.href}
-                className={`flex flex-col items-center justify-center py-3 text-xs ${
-                  active ? "text-white" : "text-zinc-500"
+                className={`flex flex-col items-center justify-center py-2 text-[11px] transition ${
+                  active
+                    ? "text-blue-400"
+                    : "text-zinc-400"
                 }`}
               >
-                <span className="text-lg">
+                <span className="text-base">
                   {item.icon}
                 </span>
 
-                <span className="mt-1">
+                <span className="mt-0.5">
                   {item.label}
                 </span>
               </Link>
@@ -114,11 +105,15 @@ export default function BottomNav() {
 
           <button
             onClick={() => setOpen(!open)}
-            className="flex flex-col items-center justify-center py-3 text-xs text-zinc-500"
+            className={`flex flex-col items-center justify-center py-2 text-[11px] transition ${
+              open
+                ? "text-blue-400"
+                : "text-zinc-400"
+            }`}
           >
-            <span className="text-lg">☰</span>
+            <span className="text-base">☰</span>
 
-            <span className="mt-1">
+            <span className="mt-0.5">
               More
             </span>
           </button>
