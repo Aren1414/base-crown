@@ -63,19 +63,15 @@ export default function BottomNav() {
             onClick={() => setOpen(false)}
           />
 
-          <div className="fixed bottom-14 left-4 right-4 z-50">
-            <div className="rounded-2xl border border-white/10 bg-[#0f172a]/95 backdrop-blur-md p-4 shadow-2xl">
-              <div className="mb-3 text-center text-xs font-semibold uppercase tracking-wider text-zinc-400">
-                More
-              </div>
-
-              <div className="space-y-2">
+          <div className="fixed bottom-14 right-2 z-50 w-44">
+            <div className="rounded-2xl border border-white/10 bg-[#0f172a]/95 backdrop-blur-md p-3 shadow-2xl">
+              <div className="space-y-1">
                 {moreItems.map((item) => (
                   <Link
                     key={item.href}
                     href={item.href}
                     onClick={() => setOpen(false)}
-                    className={`block w-full rounded-xl py-3 text-center text-sm transition ${
+                    className={`block rounded-xl px-3 py-2 text-sm transition ${
                       pathname === item.href
                         ? "bg-blue-500/20 text-blue-400 font-semibold"
                         : "text-zinc-300 hover:bg-white/5"
@@ -134,4 +130,4 @@ export default function BottomNav() {
       </nav>
     </>
   );
-}
+      }
