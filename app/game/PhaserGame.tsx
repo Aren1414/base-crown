@@ -40,20 +40,20 @@ export default function PhaserGame() {
       }
     }
 
-    const config: Phaser.Types.Core.GameConfig = {
+    const config = {
       type: Phaser.AUTO,
       width: 800,
       height: 600,
       parent: gameRef.current,
       physics: {
         default: 'arcade',
-        arcade: { 
-          gravity: { y: 600 as any }, 
-          debug: false 
+        arcade: {
+          gravity: { y: 600 },
+          debug: false
         }
       },
       scene: PrankScene
-    };
+    } as Phaser.Types.Core.GameConfig;
 
     const game = new Phaser.Game(config);
 
