@@ -47,7 +47,10 @@ export default function PhaserGame() {
       parent: gameRef.current,
       physics: {
         default: 'arcade',
-        arcade: { gravity: { y: 600 }, debug: false }
+        arcade: { 
+          gravity: { y: 600 as any }, 
+          debug: false 
+        }
       },
       scene: PrankScene
     };
