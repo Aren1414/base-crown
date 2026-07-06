@@ -14,7 +14,7 @@ export default function PhaserGame() {
       private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
       private score = 0;
       private scoreText!: Phaser.GameObjects.Text;
-      private bananas: Phaser.Physics.Arcade.Group;
+      private bananas!: Phaser.Physics.Arcade.Group;
 
       constructor() {
         super({ key: 'PrankScene' });
@@ -47,15 +47,7 @@ export default function PhaserGame() {
 
         this.cursors = this.input.keyboard!.createCursorKeys();
 
-        // Tap to jump
-        this.input.on('pointerdown', () => {
-          const body = this.runner.body as Phaser.Physics.Arcade.Body;
-          if (body.touching.down) {
-            this.runner.setVelocityY(-650);
-          }
-        });
-
-        // Create banana traps
+        // Create bananas
         this.bananas = this.physics.add.group();
 
         for (let i = 0; i < 8; i++) {
@@ -70,13 +62,18 @@ export default function PhaserGame() {
           this.scoreText.setText('Score: ' + this.score);
           (banana as Phaser.Physics.Arcade.Sprite).destroy();
         });
+
+        this.add.text(80, 50, 'Prank Squad - Arrow Keys + SPACE / TAP to Jump!', {
+          fontSize: '22px',
+          color: '#ffffff',
+          fontStyle: 'bold'
+        });
       }
 
       update() {
         const body = this.runner.body as Phaser.Physics.Arcade.Body;
         if (!body) return;
 
-        // Horizontal movement
         this.runner.setVelocityX(0);
 
         if (this.cursors.left.isDown) {
@@ -118,4 +115,4 @@ export default function PhaserGame() {
       </div>
     </div>
   );
-           }
+}
