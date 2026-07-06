@@ -25,10 +25,10 @@ export default function PhaserGame() {
       }
 
       create() {
-        this.add.image(400, 300, 'sky');
+        this.add.image(450, 300, 'sky');
 
         const platforms = this.physics.add.staticGroup();
-        platforms.create(400, 580, 'ground').setScale(2).refreshBody();
+        platforms.create(450, 580, 'ground').setScale(2).refreshBody();
 
         this.runner = this.physics.add.sprite(100, 450, 'runner');
         this.runner.setBounce(0.2);
@@ -45,32 +45,37 @@ export default function PhaserGame() {
 
         this.runner.setVelocityX(0);
 
-        // Keyboard
+        // Keyboard movement
         if (this.cursors.left.isDown) this.runner.setVelocityX(-300);
         if (this.cursors.right.isDown) this.runner.setVelocityX(300);
 
-        // Mobile
+        // Mobile movement
         if (left) this.runner.setVelocityX(-300);
         if (right) this.runner.setVelocityX(300);
 
-        // Jump
+        // Jump (keyboard + mobile)
         if ((this.cursors.space.isDown || jump) && body.touching.down) {
           this.runner.setVelocityY(-650);
         }
       }
     }
 
-    const game = new Phaser.Game({
+    const config: Phaser.Types.Core.GameConfig = {
       type: Phaser.AUTO,
       width: 900,
       height: 600,
       parent: gameRef.current,
       physics: {
         default: 'arcade',
-        arcade: { gravity: { y: 600 }, debug: false }
+        arcade: {
+          gravity: { x: 0, y: 600 }, 
+          debug: false
+        }
       },
       scene: GameScene
-    });
+    };
+
+    const game = new Phaser.Game(config);
 
     return () => game.destroy(true);
   }, [left, right, jump]);
@@ -87,13 +92,14 @@ export default function PhaserGame() {
 
       {/* Mobile Controls */}
       <div className="bg-zinc-900 border-t border-zinc-700 py-6">
-        <div className="flex justify-center gap-12">
+        <div className="flex justify-center gap-14">
 
           {/* Left */}
           <button
             onTouchStart={() => setLeft(true)}
             onTouchEnd={() => setLeft(false)}
-            className="w-24 h-24 rounded-3xl bg-gradient-to-br from-zinc-800 to-zinc-700 active:from-zinc-600 active:to-zinc-500 text-white text-4xl shadow-xl"
+            className="w-28 h-28 rounded-3xl bg-gradient-to-br from-zinc-800 to-zinc-700 
+                       active:from-zinc-600 active:to-zinc-500 text-white text-5xl shadow-xl"
           >
             ←
           </button>
@@ -102,7 +108,8 @@ export default function PhaserGame() {
           <button
             onTouchStart={() => setJump(true)}
             onTouchEnd={() => setJump(false)}
-            className="w-28 h-28 rounded-full bg-gradient-to-br from-blue-600 to-blue-500 active:from-blue-700 active:to-blue-600 text-white text-5xl shadow-2xl"
+            className="w-32 h-32 rounded-full bg-gradient-to-br from-blue-600 to-blue-500 
+                       active:from-blue-700 active:to-blue-600 text-white text-6xl shadow-2xl"
           >
             ↑
           </button>
@@ -111,7 +118,8 @@ export default function PhaserGame() {
           <button
             onTouchStart={() => setRight(true)}
             onTouchEnd={() => setRight(false)}
-            className="w-24 h-24 rounded-3xl bg-gradient-to-br from-zinc-800 to-zinc-700 active:from-zinc-600 active:to-zinc-500 text-white text-4xl shadow-xl"
+            className="w-28 h-28 rounded-3xl bg-gradient-to-br from-zinc-800 to-zinc-700 
+                       active:from-zinc-600 active:to-zinc-500 text-white text-5xl shadow-xl"
           >
             →
           </button>
@@ -120,4 +128,4 @@ export default function PhaserGame() {
       </div>
     </div>
   );
-          }
+}
