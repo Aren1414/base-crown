@@ -25,7 +25,7 @@ export default function PhaserGame() {
 
       create() {
         this.add.image(400, 300, 'sky');
-        
+
         const platforms = this.physics.add.staticGroup();
         platforms.create(400, 568, 'ground').setScale(2).refreshBody();
 
@@ -46,18 +46,18 @@ export default function PhaserGame() {
 
         // Touch / Tap
         this.input.on('pointerdown', () => {
-          if (this.runner.body.touching.down) {
+          const body = this.runner?.body as Phaser.Physics.Arcade.Body | null;
+          if (body && body.touching.down) {
             this.runner.setVelocityY(-600);
           }
         });
       }
 
       update() {
-        if (!this.runner) return;
+        const body = this.runner?.body as Phaser.Physics.Arcade.Body | null;
+        if (!body) return;
 
-        const velocity = this.runner.body.velocity;
-
-        if (this.cursors.space.isDown && this.runner.body.touching.down) {
+        if (this.cursors.space.isDown && body.touching.down) {
           this.runner.setVelocityY(-600);
         }
       }
@@ -70,9 +70,9 @@ export default function PhaserGame() {
       parent: gameRef.current,
       physics: {
         default: 'arcade',
-        arcade: { 
+        arcade: {
           gravity: { x: 0, y: 600 },
-          debug: false 
+          debug: false
         }
       },
       scene: PrankScene
