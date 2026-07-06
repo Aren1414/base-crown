@@ -12,6 +12,8 @@ export default function PhaserGame() {
     class PrankScene extends Phaser.Scene {
       private runner!: Phaser.Physics.Arcade.Sprite;
       private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
+      private score = 0;
+      private scoreText!: Phaser.GameObjects.Text;
 
       constructor() {
         super({ key: 'PrankScene' });
@@ -21,6 +23,7 @@ export default function PhaserGame() {
         this.load.image('sky', 'https://labs.phaser.io/assets/skies/space3.png');
         this.load.image('ground', 'https://labs.phaser.io/assets/sprites/platform.png');
         this.load.image('runner', 'https://labs.phaser.io/assets/sprites/phaser-dude.png');
+        this.load.image('banana', 'https://labs.phaser.io/assets/sprites/banana.png');
       }
 
       create() {
@@ -35,30 +38,40 @@ export default function PhaserGame() {
 
         this.physics.add.collider(this.runner, platforms);
 
-        this.add.text(80, 50, 'Prank Squad - SPACE or TAP to Jump!', {
+        this.scoreText = this.add.text(16, 16, 'Score: 0', {
           fontSize: '24px',
-          color: '#ffffff',
-          fontStyle: 'bold'
+          color: '#ffffff'
         });
 
         // Keyboard
         this.cursors = this.input.keyboard!.createCursorKeys();
 
-        // Touch / Tap
+        // Tap to jump
         this.input.on('pointerdown', () => {
-          const body = this.runner?.body as Phaser.Physics.Arcade.Body | null;
-          if (body && body.touching.down) {
-            this.runner.setVelocityY(-600);
+          const body = this.runner.body as Phaser.Physics.Arcade.Body;
+          if (body.touching.down) {
+            this.runner.setVelocityY(-650);
           }
         });
+
+        // Create some banana traps
+        for (let i = 0; i < 5; i++) {
+          const banana = this.physics.add.sprite(200 + i * 120, 400, 'banana');
+          banana.setScale(0.5);
+          this.physics.add.collider(this.runner, banana, () => {
+            this.score += 10;
+            this.scoreText.setText('Score: ' + this.score);
+            banana.destroy();
+          });
+        }
       }
 
       update() {
-        const body = this.runner?.body as Phaser.Physics.Arcade.Body | null;
+        const body = this.runner.body as Phaser.Physics.Arcade.Body;
         if (!body) return;
 
         if (this.cursors.space.isDown && body.touching.down) {
-          this.runner.setVelocityY(-600);
+          this.runner.setVelocityY(-650);
         }
       }
     }
