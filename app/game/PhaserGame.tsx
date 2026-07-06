@@ -53,7 +53,7 @@ export default function PhaserGame() {
         if (left) this.runner.setVelocityX(-300);
         if (right) this.runner.setVelocityX(300);
 
-        // Jump (keyboard + mobile)
+        // Jump
         if ((this.cursors.space.isDown || jump) && body.touching.down) {
           this.runner.setVelocityY(-650);
         }
@@ -65,10 +65,14 @@ export default function PhaserGame() {
       width: 900,
       height: 600,
       parent: gameRef.current,
+      scale: {
+        mode: Phaser.Scale.FIT,
+        autoCenter: Phaser.Scale.CENTER_BOTH
+      },
       physics: {
         default: 'arcade',
         arcade: {
-          gravity: { x: 0, y: 600 }, 
+          gravity: { x: 0, y: 600 },
           debug: false
         }
       },
@@ -85,8 +89,8 @@ export default function PhaserGame() {
 
       {/* Game */}
       <div className="flex-1 flex items-center justify-center p-2">
-        <div className="rounded-3xl overflow-hidden border border-zinc-700 shadow-2xl">
-          <div ref={gameRef} className="w-[900px] h-[600px]" />
+        <div className="rounded-3xl overflow-hidden border border-zinc-700 shadow-2xl w-full max-w-[900px]">
+          <div ref={gameRef} className="w-full aspect-[3/2]" />
         </div>
       </div>
 
@@ -98,8 +102,8 @@ export default function PhaserGame() {
           <button
             onTouchStart={() => setLeft(true)}
             onTouchEnd={() => setLeft(false)}
-            className="w-28 h-28 rounded-3xl bg-gradient-to-br from-zinc-800 to-zinc-700 
-                       active:from-zinc-600 active:to-zinc-500 text-white text-5xl shadow-xl"
+            className="w-28 h-28 rounded-3xl bg-white/10 backdrop-blur-xl 
+                       border border-white/20 text-white text-5xl shadow-xl active:bg-white/20"
           >
             ←
           </button>
@@ -108,8 +112,8 @@ export default function PhaserGame() {
           <button
             onTouchStart={() => setJump(true)}
             onTouchEnd={() => setJump(false)}
-            className="w-32 h-32 rounded-full bg-gradient-to-br from-blue-600 to-blue-500 
-                       active:from-blue-700 active:to-blue-600 text-white text-6xl shadow-2xl"
+            className="w-32 h-32 rounded-full bg-blue-600/80 backdrop-blur-xl 
+                       border border-blue-300/30 text-white text-6xl shadow-2xl active:bg-blue-700/80"
           >
             ↑
           </button>
@@ -118,8 +122,8 @@ export default function PhaserGame() {
           <button
             onTouchStart={() => setRight(true)}
             onTouchEnd={() => setRight(false)}
-            className="w-28 h-28 rounded-3xl bg-gradient-to-br from-zinc-800 to-zinc-700 
-                       active:from-zinc-600 active:to-zinc-500 text-white text-5xl shadow-xl"
+            className="w-28 h-28 rounded-3xl bg-white/10 backdrop-blur-xl 
+                       border border-white/20 text-white text-5xl shadow-xl active:bg-white/20"
           >
             →
           </button>
