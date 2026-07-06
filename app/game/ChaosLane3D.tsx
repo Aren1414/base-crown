@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 
-export default function ChaosLane3D() {
+export default function ChaosRunner3D() {
   const mountRef = useRef<HTMLDivElement>(null);
   const [score, setScore] = useState(0);
   const [bestScore, setBestScore] = useState(0);
@@ -13,78 +13,149 @@ export default function ChaosLane3D() {
     if (!mountRef.current) return;
 
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color('#020617');
+    scene.fog = new THREE.Fog('#020617', 10, 80);
 
     const camera = new THREE.PerspectiveCamera(
-      60,
+      65,
       window.innerWidth / window.innerHeight,
       0.1,
-      100
+      200
     );
-    camera.position.set(0, 4, 8);
-    camera.lookAt(0, 0, 0);
+    camera.position.set(0, 6, 14);
 
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.outputEncoding = THREE.sRGBEncoding;
     mountRef.current.appendChild(renderer.domElement);
 
-    const light = new THREE.DirectionalLight(0xffffff, 1);
-    light.position.set(5, 10, 5);
-    scene.add(light);
+    const hemiLight = new THREE.HemisphereLight(0x4f46e5, 0x020617, 1);
+    scene.add(hemiLight);
 
-    const ambient = new THREE.AmbientLight(0xffffff, 0.3);
-    scene.add(ambient);
+    const dirLight = new THREE.DirectionalLight(0xffffff, 1.6);
+    dirLight.position.set(10, 20, 10);
+    dirLight.castShadow = true;
+    scene.add(dirLight);
 
-    const groundGeo = new THREE.BoxGeometry(10, 0.5, 200);
-    const groundMat = new THREE.MeshStandardMaterial({ color: '#0f172a' });
+    const groundGeo = new THREE.BoxGeometry(14, 0.6, 320);
+    const groundMat = new THREE.MeshStandardMaterial({
+      color: '#0a0f1f',
+      emissive: '#0f172a',
+      metalness: 0.5,
+      roughness: 0.4
+    });
     const ground = new THREE.Mesh(groundGeo, groundMat);
-    ground.position.set(0, -1, -80);
+    ground.position.set(0, -1.4, -140);
+    ground.receiveShadow = true;
     scene.add(ground);
 
-    const playerGeo = new THREE.BoxGeometry(1, 2, 1);
-    const playerMat = new THREE.MeshStandardMaterial({ color: '#22c55e' });
+    const neonLaneGeo = new THREE.BoxGeometry(0.12, 0.08, 320);
+    const neonLeft = new THREE.Mesh(
+      neonLaneGeo,
+      new THREE.MeshStandardMaterial({
+        color: '#22c55e',
+        emissive: '#22c55e',
+        emissiveIntensity: 2
+      })
+    );
+    neonLeft.position.set(-2, -0.95, -140);
+
+    const neonCenter = new THREE.Mesh(
+      neonLaneGeo,
+      new THREE.MeshStandardMaterial({
+        color: '#38bdf8',
+        emissive: '#38bdf8',
+        emissiveIntensity: 2
+      })
+    );
+    neonCenter.position.set(0, -0.95, -140);
+
+    const neonRight = new THREE.Mesh(
+      neonLaneGeo,
+      new THREE.MeshStandardMaterial({
+        color: '#f97316',
+        emissive: '#f97316',
+        emissiveIntensity: 2
+      })
+    );
+    neonRight.position.set(2, -0.95, -140);
+
+    scene.add(neonLeft, neonCenter, neonRight);
+
+    const starsGeo = new THREE.BufferGeometry();
+    const starCount = 600;
+    const positions = new Float32Array(starCount * 3);
+    for (let i = 0; i < starCount; i++) {
+      positions[i * 3] = (Math.random() - 0.5) * 80;
+      positions[i * 3 + 1] = Math.random() * 30 + 5;
+      positions[i * 3 + 2] = -Math.random() * 200 - 40;
+    }
+    starsGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    const starsMat = new THREE.PointsMaterial({
+      color: '#38bdf8',
+      size: 0.18
+    });
+    const stars = new THREE.Points(starsGeo, starsMat);
+    scene.add(stars);
+
+    const playerGeo = new THREE.CapsuleGeometry(1, 1.4, 8, 16);
+    const playerMat = new THREE.MeshStandardMaterial({
+      color: '#22c55e',
+      emissive: '#16a34a',
+      metalness: 0.4,
+      roughness: 0.3
+    });
     const player = new THREE.Mesh(playerGeo, playerMat);
     player.position.set(0, 0, 0);
+    player.castShadow = true;
     scene.add(player);
 
     let lane = 0;
-    let speed = 0.25;
+    let speed = 0.38;
     let jumpVelocity = 0;
     let isJumping = false;
     let currentScore = 0;
     let isGameOver = false;
 
     const obstacles: THREE.Mesh[] = [];
-    const obstacleGeo = new THREE.BoxGeometry(1.5, 2, 1.5);
-    const obstacleMat = new THREE.MeshStandardMaterial({ color: '#ef4444' });
+    const obstacleGeo = new THREE.BoxGeometry(1.6, 2.4, 1.6);
+    const obstacleMat = new THREE.MeshStandardMaterial({
+      color: '#ef4444',
+      emissive: '#b91c1c',
+      metalness: 0.4,
+      roughness: 0.4
+    });
 
     const spawnObstacle = () => {
       const laneIndex = Math.floor(Math.random() * 3) - 1;
-      const zPos = player.position.z - 60 - Math.random() * 40;
+      const zPos = -40 - Math.random() * 80;
       const obstacle = new THREE.Mesh(obstacleGeo, obstacleMat);
       obstacle.position.set(laneIndex * 2, 0, zPos);
+      obstacle.castShadow = true;
       scene.add(obstacle);
       obstacles.push(obstacle);
     };
 
-    for (let i = 0; i < 12; i++) {
+    for (let i = 0; i < 16; i++) {
       spawnObstacle();
     }
 
     const clock = new THREE.Clock();
 
     const animate = () => {
-      if (isGameOver) return;
+      if (isGameOver) {
+        renderer.render(scene, camera);
+        return;
+      }
 
       requestAnimationFrame(animate);
 
       const delta = clock.getDelta();
 
       player.position.z -= speed;
-      player.position.x = THREE.MathUtils.lerp(player.position.x, lane * 2, 0.2);
+      player.position.x = THREE.MathUtils.lerp(player.position.x, lane * 2, 0.18);
 
       if (isJumping) {
-        jumpVelocity -= 20 * delta;
+        jumpVelocity -= 22 * delta;
         player.position.y += jumpVelocity * delta;
         if (player.position.y <= 0) {
           player.position.y = 0;
@@ -95,7 +166,7 @@ export default function ChaosLane3D() {
 
       obstacles.forEach((obs) => {
         if (obs.position.z > player.position.z + 10) {
-          obs.position.z = player.position.z - 60 - Math.random() * 40;
+          obs.position.z = player.position.z - 60 - Math.random() * 60;
           const laneIndex = Math.floor(Math.random() * 3) - 1;
           obs.position.x = laneIndex * 2;
         }
@@ -105,15 +176,17 @@ export default function ChaosLane3D() {
         const dz = obs.position.z - player.position.z;
         const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
 
-        if (dist < 1.5) {
+        if (dist < 1.6) {
           isGameOver = true;
           setGameOver(true);
           setBestScore((prev) => (currentScore > prev ? currentScore : prev));
         }
       });
 
-      currentScore += Math.floor(speed * 10);
+      currentScore += Math.floor(speed * 12);
       setScore(currentScore);
+
+      stars.rotation.z += 0.02 * delta;
 
       renderer.render(scene, camera);
     };
@@ -126,7 +199,7 @@ export default function ChaosLane3D() {
       if (e.key === 'ArrowRight' && lane < 1) lane++;
       if (e.key === 'ArrowUp' && !isJumping) {
         isJumping = true;
-        jumpVelocity = 12;
+        jumpVelocity = 14;
       }
     };
 
@@ -149,7 +222,7 @@ export default function ChaosLane3D() {
 
   const moveLane = (dir: -1 | 1) => {
     const event = new KeyboardEvent('keydown', {
-      key: dir === -1 ? 'ArrowLeft' : 'ArrowRight',
+      key: dir === -1 ? 'ArrowLeft' : 'ArrowRight'
     });
     window.dispatchEvent(event);
   };
@@ -196,12 +269,10 @@ export default function ChaosLane3D() {
             <div className="text-lg font-semibold">Game Over</div>
             <div className="text-sm">Score: {score}</div>
             <div className="text-sm">Best: {bestScore}</div>
-            <div className="text-xs opacity-70 mt-2">
-              Refresh to play again
-            </div>
+            <div className="text-xs opacity-70 mt-2">Refresh to play again</div>
           </div>
         </div>
       )}
     </div>
   );
-        }
+      }
