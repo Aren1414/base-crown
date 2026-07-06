@@ -7,36 +7,28 @@ export default function PhaserGame() {
   const gameRef = useRef<HTMLDivElement>(null);
 
   // Mobile control states
-  const [moveLeft, setMoveLeft] = useState(false);
-  const [moveRight, setMoveRight] = useState(false);
+  const [left, setLeft] = useState(false);
+  const [right, setRight] = useState(false);
   const [jump, setJump] = useState(false);
 
   useEffect(() => {
     if (!gameRef.current) return;
 
-    class PrankScene extends Phaser.Scene {
-      private runner!: Phaser.Physics.Arcade.Sprite;
-      private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
-      private score = 0;
-      private scoreText!: Phaser.GameObjects.Text;
-      private bananas!: Phaser.Physics.Arcade.Group;
-
-      constructor() {
-        super({ key: 'PrankScene' });
-      }
+    class GameScene extends Phaser.Scene {
+      runner!: Phaser.Physics.Arcade.Sprite;
+      cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
 
       preload() {
         this.load.image('sky', 'https://labs.phaser.io/assets/skies/space3.png');
         this.load.image('ground', 'https://labs.phaser.io/assets/sprites/platform.png');
         this.load.image('runner', 'https://labs.phaser.io/assets/sprites/phaser-dude.png');
-        this.load.image('banana', 'https://labs.phaser.io/assets/sprites/banana.png');
       }
 
       create() {
         this.add.image(400, 300, 'sky');
 
         const platforms = this.physics.add.staticGroup();
-        platforms.create(400, 568, 'ground').setScale(2).refreshBody();
+        platforms.create(400, 580, 'ground').setScale(2).refreshBody();
 
         this.runner = this.physics.add.sprite(100, 450, 'runner');
         this.runner.setBounce(0.2);
@@ -44,27 +36,7 @@ export default function PhaserGame() {
 
         this.physics.add.collider(this.runner, platforms);
 
-        this.scoreText = this.add.text(16, 16, 'Score: 0', {
-          fontSize: '24px',
-          color: '#ffffff',
-          fontStyle: 'bold'
-        });
-
         this.cursors = this.input.keyboard!.createCursorKeys();
-
-        this.bananas = this.physics.add.group();
-
-        for (let i = 0; i < 8; i++) {
-          const x = 150 + Math.random() * 500;
-          const banana = this.bananas.create(x, 300 + Math.random() * 200, 'banana');
-          banana.setScale(0.6);
-        }
-
-        this.physics.add.collider(this.runner, this.bananas, (runner, banana) => {
-          this.score += 20;
-          this.scoreText.setText('Score: ' + this.score);
-          (banana as Phaser.Physics.Arcade.Sprite).destroy();
-        });
       }
 
       update() {
@@ -73,64 +45,55 @@ export default function PhaserGame() {
 
         this.runner.setVelocityX(0);
 
-        // Keyboard movement
-        if (this.cursors.left.isDown) this.runner.setVelocityX(-350);
-        if (this.cursors.right.isDown) this.runner.setVelocityX(350);
+        // Keyboard
+        if (this.cursors.left.isDown) this.runner.setVelocityX(-300);
+        if (this.cursors.right.isDown) this.runner.setVelocityX(300);
 
-        // Mobile movement
-        if (moveLeft) this.runner.setVelocityX(-350);
-        if (moveRight) this.runner.setVelocityX(350);
+        // Mobile
+        if (left) this.runner.setVelocityX(-300);
+        if (right) this.runner.setVelocityX(300);
 
         // Jump
         if ((this.cursors.space.isDown || jump) && body.touching.down) {
-          this.runner.setVelocityY(-700);
+          this.runner.setVelocityY(-650);
         }
       }
     }
 
-    const config: Phaser.Types.Core.GameConfig = {
+    const game = new Phaser.Game({
       type: Phaser.AUTO,
-      width: 800,
+      width: 900,
       height: 600,
       parent: gameRef.current,
-      scale: {
-        mode: Phaser.Scale.FIT,
-        autoCenter: Phaser.Scale.CENTER_BOTH
-      },
       physics: {
         default: 'arcade',
-        arcade: {
-          gravity: { x: 0, y: 600 },
-          debug: false
-        }
+        arcade: { gravity: { y: 600 }, debug: false }
       },
-      scene: PrankScene
-    };
-
-    const game = new Phaser.Game(config);
+      scene: GameScene
+    });
 
     return () => game.destroy(true);
-  }, [moveLeft, moveRight, jump]);
+  }, [left, right, jump]);
 
   return (
     <div className="min-h-screen bg-zinc-950 flex flex-col">
 
-      {/* Game Container */}
-      <div className="flex-1 flex items-center justify-center p-2 bg-black">
-        <div className="rounded-3xl overflow-hidden border border-zinc-700 shadow-2xl w-full max-w-[900px]">
-          <div ref={gameRef} className="w-full aspect-[4/3]" />
+      {/* Game */}
+      <div className="flex-1 flex items-center justify-center p-2">
+        <div className="rounded-3xl overflow-hidden border border-zinc-700 shadow-2xl">
+          <div ref={gameRef} className="w-[900px] h-[600px]" />
         </div>
       </div>
 
-      {/* Professional Mobile Controls */}
+      {/* Mobile Controls */}
       <div className="bg-zinc-900 border-t border-zinc-700 py-6">
-        <div className="flex justify-center gap-12 max-w-[900px] mx-auto">
+        <div className="flex justify-center gap-12">
 
           {/* Left */}
           <button
-            onTouchStart={() => setMoveLeft(true)}
-            onTouchEnd={() => setMoveLeft(false)}
-            className="w-24 h-24 bg-white/10 backdrop-blur-xl border border-white/20 rounded-3xl flex items-center justify-center text-4xl text-white shadow-2xl active:bg-white/20"
+            onTouchStart={() => setLeft(true)}
+            onTouchEnd={() => setLeft(false)}
+            className="w-24 h-24 rounded-3xl bg-gradient-to-br from-zinc-800 to-zinc-700 active:from-zinc-600 active:to-zinc-500 text-white text-4xl shadow-xl"
           >
             ←
           </button>
@@ -139,16 +102,16 @@ export default function PhaserGame() {
           <button
             onTouchStart={() => setJump(true)}
             onTouchEnd={() => setJump(false)}
-            className="w-28 h-28 bg-blue-600/80 backdrop-blur-xl border border-blue-300/30 rounded-full flex items-center justify-center text-5xl text-white shadow-2xl active:bg-blue-700/80"
+            className="w-28 h-28 rounded-full bg-gradient-to-br from-blue-600 to-blue-500 active:from-blue-700 active:to-blue-600 text-white text-5xl shadow-2xl"
           >
             ↑
           </button>
 
           {/* Right */}
           <button
-            onTouchStart={() => setMoveRight(true)}
-            onTouchEnd={() => setMoveRight(false)}
-            className="w-24 h-24 bg-white/10 backdrop-blur-xl border border-white/20 rounded-3xl flex items-center justify-center text-4xl text-white shadow-2xl active:bg-white/20"
+            onTouchStart={() => setRight(true)}
+            onTouchEnd={() => setRight(false)}
+            className="w-24 h-24 rounded-3xl bg-gradient-to-br from-zinc-800 to-zinc-700 active:from-zinc-600 active:to-zinc-500 text-white text-4xl shadow-xl"
           >
             →
           </button>
@@ -157,4 +120,4 @@ export default function PhaserGame() {
       </div>
     </div>
   );
-}
+          }
