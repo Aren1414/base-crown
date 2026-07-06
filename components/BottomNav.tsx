@@ -20,9 +20,9 @@ export default function BottomNav() {
       icon: "🎡",
     },
     {
-      href: "/attacks",
-      label: "Attacks",
-      icon: "⚔️",
+      href: "/game",
+      label: "Game",
+      icon: "🎮",
     },
     {
       href: "/profile",
