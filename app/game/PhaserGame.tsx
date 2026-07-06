@@ -10,6 +10,9 @@ export default function PhaserGame() {
     if (!gameRef.current) return;
 
     class PrankScene extends Phaser.Scene {
+      private runner!: Phaser.Physics.Arcade.Sprite;
+      private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
+
       constructor() {
         super({ key: 'PrankScene' });
       }
@@ -26,17 +29,37 @@ export default function PhaserGame() {
         const platforms = this.physics.add.staticGroup();
         platforms.create(400, 568, 'ground').setScale(2).refreshBody();
 
-        const runner = this.physics.add.sprite(100, 450, 'runner');
-        runner.setBounce(0.2);
-        runner.setCollideWorldBounds(true);
+        this.runner = this.physics.add.sprite(100, 450, 'runner');
+        this.runner.setBounce(0.2);
+        this.runner.setCollideWorldBounds(true);
 
-        this.physics.add.collider(runner, platforms);
+        this.physics.add.collider(this.runner, platforms);
 
-        this.add.text(80, 50, 'Prank Squad - Tap to Jump & Prank!', {
-          fontSize: '28px',
+        this.add.text(80, 50, 'Prank Squad - SPACE or TAP to Jump!', {
+          fontSize: '24px',
           color: '#ffffff',
           fontStyle: 'bold'
         });
+
+        // Keyboard
+        this.cursors = this.input.keyboard!.createCursorKeys();
+
+        // Touch / Tap
+        this.input.on('pointerdown', () => {
+          if (this.runner.body.touching.down) {
+            this.runner.setVelocityY(-600);
+          }
+        });
+      }
+
+      update() {
+        if (!this.runner) return;
+
+        const velocity = this.runner.body.velocity;
+
+        if (this.cursors.space.isDown && this.runner.body.touching.down) {
+          this.runner.setVelocityY(-600);
+        }
       }
     }
 
@@ -47,9 +70,9 @@ export default function PhaserGame() {
       parent: gameRef.current,
       physics: {
         default: 'arcade',
-        arcade: {
+        arcade: { 
           gravity: { x: 0, y: 600 },
-          debug: false
+          debug: false 
         }
       },
       scene: PrankScene
