@@ -74,17 +74,14 @@ export default function PhaserGame() {
         this.runner.setVelocityX(0);
 
         // Keyboard movement
-        if (this.cursors.left.isDown) {
-          this.runner.setVelocityX(-350);
-        } else if (this.cursors.right.isDown) {
-          this.runner.setVelocityX(350);
-        }
+        if (this.cursors.left.isDown) this.runner.setVelocityX(-350);
+        if (this.cursors.right.isDown) this.runner.setVelocityX(350);
 
         // Mobile movement
         if (moveLeft) this.runner.setVelocityX(-350);
         if (moveRight) this.runner.setVelocityX(350);
 
-        // Jump (keyboard + mobile)
+        // Jump
         if ((this.cursors.space.isDown || jump) && body.touching.down) {
           this.runner.setVelocityY(-700);
         }
@@ -96,6 +93,10 @@ export default function PhaserGame() {
       width: 800,
       height: 600,
       parent: gameRef.current,
+      scale: {
+        mode: Phaser.Scale.FIT,
+        autoCenter: Phaser.Scale.CENTER_BOTH
+      },
       physics: {
         default: 'arcade',
         arcade: {
@@ -114,27 +115,22 @@ export default function PhaserGame() {
   return (
     <div className="min-h-screen bg-zinc-950 flex flex-col">
 
-      {/* Header */}
-      <div className="bg-zinc-900 border-b border-zinc-700 p-4 text-center">
-        <h1 className="text-3xl font-bold text-white">Prank Squad</h1>
-      </div>
-
       {/* Game Container */}
-      <div className="flex-1 flex items-center justify-center p-4 bg-black relative">
-        <div className="rounded-3xl overflow-hidden border border-zinc-700 shadow-2xl max-w-full">
-          <div ref={gameRef} className="w-full max-w-[800px] aspect-[4/3]" />
+      <div className="flex-1 flex items-center justify-center p-2 bg-black">
+        <div className="rounded-3xl overflow-hidden border border-zinc-700 shadow-2xl w-full max-w-[900px]">
+          <div ref={gameRef} className="w-full aspect-[4/3]" />
         </div>
       </div>
 
       {/* Professional Mobile Controls */}
-      <div className="bg-zinc-900 border-t border-zinc-700 p-6">
-        <div className="flex justify-between max-w-[800px] mx-auto">
+      <div className="bg-zinc-900 border-t border-zinc-700 py-6">
+        <div className="flex justify-center gap-12 max-w-[900px] mx-auto">
 
           {/* Left */}
           <button
             onTouchStart={() => setMoveLeft(true)}
             onTouchEnd={() => setMoveLeft(false)}
-            className="w-24 h-24 bg-gradient-to-br from-zinc-800 to-zinc-700 active:from-zinc-600 active:to-zinc-500 rounded-3xl flex items-center justify-center text-4xl text-white shadow-xl"
+            className="w-24 h-24 bg-white/10 backdrop-blur-xl border border-white/20 rounded-3xl flex items-center justify-center text-4xl text-white shadow-2xl active:bg-white/20"
           >
             ←
           </button>
@@ -143,7 +139,7 @@ export default function PhaserGame() {
           <button
             onTouchStart={() => setJump(true)}
             onTouchEnd={() => setJump(false)}
-            className="w-28 h-28 bg-gradient-to-br from-blue-600 to-blue-500 active:from-blue-700 active:to-blue-600 rounded-full flex items-center justify-center text-5xl text-white shadow-2xl"
+            className="w-28 h-28 bg-blue-600/80 backdrop-blur-xl border border-blue-300/30 rounded-full flex items-center justify-center text-5xl text-white shadow-2xl active:bg-blue-700/80"
           >
             ↑
           </button>
@@ -152,7 +148,7 @@ export default function PhaserGame() {
           <button
             onTouchStart={() => setMoveRight(true)}
             onTouchEnd={() => setMoveRight(false)}
-            className="w-24 h-24 bg-gradient-to-br from-zinc-800 to-zinc-700 active:from-zinc-600 active:to-zinc-500 rounded-3xl flex items-center justify-center text-4xl text-white shadow-xl"
+            className="w-24 h-24 bg-white/10 backdrop-blur-xl border border-white/20 rounded-3xl flex items-center justify-center text-4xl text-white shadow-2xl active:bg-white/20"
           >
             →
           </button>
