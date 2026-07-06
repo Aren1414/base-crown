@@ -1,15 +1,17 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import Phaser from 'phaser';
+
+
+const controls = {
+  left: false,
+  right: false,
+  jump: false,
+};
 
 export default function PhaserGame() {
   const gameRef = useRef<HTMLDivElement>(null);
-
-  // Mobile control states
-  const [left, setLeft] = useState(false);
-  const [right, setRight] = useState(false);
-  const [jump, setJump] = useState(false);
 
   useEffect(() => {
     if (!gameRef.current) return;
@@ -45,16 +47,15 @@ export default function PhaserGame() {
 
         this.runner.setVelocityX(0);
 
-        // Keyboard movement
+        
         if (this.cursors.left.isDown) this.runner.setVelocityX(-300);
         if (this.cursors.right.isDown) this.runner.setVelocityX(300);
 
-        // Mobile movement
-        if (left) this.runner.setVelocityX(-300);
-        if (right) this.runner.setVelocityX(300);
+        
+        if (controls.left) this.runner.setVelocityX(-300);
+        if (controls.right) this.runner.setVelocityX(300);
 
-        // Jump
-        if ((this.cursors.space.isDown || jump) && body.touching.down) {
+        if ((this.cursors.space.isDown || controls.jump) && body.touching.down) {
           this.runner.setVelocityY(-650);
         }
       }
@@ -67,63 +68,94 @@ export default function PhaserGame() {
       parent: gameRef.current,
       scale: {
         mode: Phaser.Scale.FIT,
-        autoCenter: Phaser.Scale.CENTER_BOTH
+        autoCenter: Phaser.Scale.CENTER_BOTH,
       },
       physics: {
         default: 'arcade',
         arcade: {
           gravity: { x: 0, y: 600 },
-          debug: false
-        }
+          debug: false,
+        },
       },
-      scene: GameScene
+      scene: GameScene,
     };
 
     const game = new Phaser.Game(config);
 
     return () => game.destroy(true);
-  }, [left, right, jump]);
+  }, []);
+
+  
+  const pressLeft = () => {
+    controls.left = true;
+  };
+  const releaseLeft = () => {
+    controls.left = false;
+  };
+
+  const pressRight = () => {
+    controls.right = true;
+  };
+  const releaseRight = () => {
+    controls.right = false;
+  };
+
+  const pressJump = () => {
+    controls.jump = true;
+  };
+  const releaseJump = () => {
+    controls.jump = false;
+  };
 
   return (
     <div className="min-h-screen bg-zinc-950 flex flex-col">
 
-      {/* Game */}
+      
       <div className="flex-1 flex items-center justify-center p-2">
         <div className="rounded-3xl overflow-hidden border border-zinc-700 shadow-2xl w-full max-w-[900px]">
           <div ref={gameRef} className="w-full aspect-[3/2]" />
         </div>
       </div>
 
-      {/* Mobile Controls */}
+      
       <div className="bg-zinc-900 border-t border-zinc-700 py-6">
-        <div className="flex justify-center gap-14">
+        <div className="flex justify-center gap-12 max-w-[900px] mx-auto">
 
-          {/* Left */}
+          
           <button
-            onTouchStart={() => setLeft(true)}
-            onTouchEnd={() => setLeft(false)}
-            className="w-28 h-28 rounded-3xl bg-white/10 backdrop-blur-xl 
-                       border border-white/20 text-white text-5xl shadow-xl active:bg-white/20"
+            onTouchStart={pressLeft}
+            onTouchEnd={releaseLeft}
+            onMouseDown={pressLeft}
+            onMouseUp={releaseLeft}
+            className="w-20 h-20 md:w-24 md:h-24 rounded-3xl 
+                       bg-white/10 backdrop-blur-xl border border-white/20 
+                       text-white text-3xl md:text-4xl shadow-xl active:bg-white/20"
           >
             ←
           </button>
 
-          {/* Jump */}
+          
           <button
-            onTouchStart={() => setJump(true)}
-            onTouchEnd={() => setJump(false)}
-            className="w-32 h-32 rounded-full bg-blue-600/80 backdrop-blur-xl 
-                       border border-blue-300/30 text-white text-6xl shadow-2xl active:bg-blue-700/80"
+            onTouchStart={pressJump}
+            onTouchEnd={releaseJump}
+            onMouseDown={pressJump}
+            onMouseUp={releaseJump}
+            className="w-24 h-24 md:w-28 md:h-28 rounded-full 
+                       bg-blue-600/80 backdrop-blur-xl border border-blue-300/30 
+                       text-white text-4xl md:text-5xl shadow-2xl active:bg-blue-700/80"
           >
             ↑
           </button>
 
-          {/* Right */}
+          
           <button
-            onTouchStart={() => setRight(true)}
-            onTouchEnd={() => setRight(false)}
-            className="w-28 h-28 rounded-3xl bg-white/10 backdrop-blur-xl 
-                       border border-white/20 text-white text-5xl shadow-xl active:bg-white/20"
+            onTouchStart={pressRight}
+            onTouchEnd={releaseRight}
+            onMouseDown={pressRight}
+            onMouseUp={releaseRight}
+            className="w-20 h-20 md:w-24 md:h-24 rounded-3xl 
+                       bg-white/10 backdrop-blur-xl border border-white/20 
+                       text-white text-3xl md:text-4xl shadow-xl active:bg:white/20"
           >
             →
           </button>
