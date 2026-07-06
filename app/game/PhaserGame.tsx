@@ -47,7 +47,6 @@ export default function PhaserGame() {
 
         this.cursors = this.input.keyboard!.createCursorKeys();
 
-        // Bananas
         this.bananas = this.physics.add.group();
 
         for (let i = 0; i < 8; i++) {
@@ -62,10 +61,9 @@ export default function PhaserGame() {
           (banana as Phaser.Physics.Arcade.Sprite).destroy();
         });
 
-        this.add.text(50, 50, '← → Move | SPACE or TAP to Jump', {
-          fontSize: '22px',
-          color: '#ffffff',
-          fontStyle: 'bold'
+        this.add.text(50, 50, '← → Move | SPACE / TAP to Jump', {
+          fontSize: '20px',
+          color: '#ffffff'
         });
       }
 
@@ -108,9 +106,29 @@ export default function PhaserGame() {
   }, []);
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-zinc-950 p-4">
-      <div className="border-2 border-zinc-700 rounded-2xl overflow-hidden shadow-2xl">
-        <div ref={gameRef} className="w-[800px] h-[600px]" />
+    <div className="min-h-screen bg-zinc-950 flex flex-col">
+      {/* Header */}
+      <div className="bg-zinc-900 border-b border-zinc-700 p-4 text-center">
+        <h1 className="text-2xl font-bold text-white">Prank Squad</h1>
+      </div>
+
+      {/* Game Area */}
+      <div className="flex-1 flex items-center justify-center p-4">
+        <div className="border-2 border-zinc-700 rounded-2xl overflow-hidden shadow-2xl bg-black">
+          <div ref={gameRef} className="w-[800px] h-[600px]" />
+        </div>
+      </div>
+
+      {/* On-Screen Controls */}
+      <div className="bg-zinc-900 border-t border-zinc-700 p-4">
+        <div className="flex justify-center gap-8 text-white text-sm">
+          <div className="text-center">
+            ← → <span className="block text-xs text-zinc-500 mt-1">Move</span>
+          </div>
+          <div className="text-center">
+            SPACE / TAP <span className="block text-xs text-zinc-500 mt-1">Jump</span>
+          </div>
+        </div>
       </div>
     </div>
   );
