@@ -61,8 +61,8 @@ export default function PhaserGame() {
           (banana as Phaser.Physics.Arcade.Sprite).destroy();
         });
 
-        this.add.text(50, 50, '← → Move | SPACE / TAP to Jump', {
-          fontSize: '20px',
+        this.add.text(50, 50, '← → Move | TAP to Jump', {
+          fontSize: '22px',
           color: '#ffffff'
         });
       }
@@ -87,7 +87,7 @@ export default function PhaserGame() {
 
     const config: Phaser.Types.Core.GameConfig = {
       type: Phaser.AUTO,
-      width: 800,
+      width: window.innerWidth > 800 ? 800 : window.innerWidth - 40,
       height: 600,
       parent: gameRef.current,
       physics: {
@@ -109,24 +109,30 @@ export default function PhaserGame() {
     <div className="min-h-screen bg-zinc-950 flex flex-col">
       {/* Header */}
       <div className="bg-zinc-900 border-b border-zinc-700 p-4 text-center">
-        <h1 className="text-2xl font-bold text-white">Prank Squad</h1>
+        <h1 className="text-3xl font-bold text-white tracking-tight">Prank Squad</h1>
       </div>
 
-      {/* Game Area */}
-      <div className="flex-1 flex items-center justify-center p-4">
-        <div className="border-2 border-zinc-700 rounded-2xl overflow-hidden shadow-2xl bg-black">
-          <div ref={gameRef} className="w-[800px] h-[600px]" />
+      {/* Game */}
+      <div className="flex-1 flex items-center justify-center p-4 bg-black">
+        <div className="rounded-3xl overflow-hidden border border-zinc-700 shadow-2xl">
+          <div ref={gameRef} className="rounded-3xl" />
         </div>
       </div>
 
       {/* On-Screen Controls */}
-      <div className="bg-zinc-900 border-t border-zinc-700 p-4">
-        <div className="flex justify-center gap-8 text-white text-sm">
+      <div className="bg-zinc-900 border-t border-zinc-700 p-6">
+        <div className="flex justify-center gap-12 text-white">
           <div className="text-center">
-            ← → <span className="block text-xs text-zinc-500 mt-1">Move</span>
+            <div className="text-3xl mb-1">←</div>
+            <div className="text-xs text-zinc-400">LEFT</div>
           </div>
           <div className="text-center">
-            SPACE / TAP <span className="block text-xs text-zinc-500 mt-1">Jump</span>
+            <div className="text-3xl mb-1">→</div>
+            <div className="text-xs text-zinc-400">RIGHT</div>
+          </div>
+          <div className="text-center">
+            <div className="text-3xl mb-1">↑</div>
+            <div className="text-xs text-zinc-400">JUMP</div>
           </div>
         </div>
       </div>
