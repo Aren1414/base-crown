@@ -25,7 +25,6 @@ export default function ChaosRunner3D() {
 
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.outputEncoding = THREE.sRGBEncoding;
     mountRef.current.appendChild(renderer.domElement);
 
     const hemiLight = new THREE.HemisphereLight(0x4f46e5, 0x020617, 1);
@@ -275,4 +274,4 @@ export default function ChaosRunner3D() {
       )}
     </div>
   );
-      }
+                                       }
