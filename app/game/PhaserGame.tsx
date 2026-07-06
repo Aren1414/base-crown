@@ -14,6 +14,7 @@ export default function PhaserGame() {
       private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
       private score = 0;
       private scoreText!: Phaser.GameObjects.Text;
+      private bananas: Phaser.Physics.Arcade.Group;
 
       constructor() {
         super({ key: 'PrankScene' });
@@ -40,10 +41,10 @@ export default function PhaserGame() {
 
         this.scoreText = this.add.text(16, 16, 'Score: 0', {
           fontSize: '24px',
-          color: '#ffffff'
+          color: '#ffffff',
+          fontStyle: 'bold'
         });
 
-        // Keyboard
         this.cursors = this.input.keyboard!.createCursorKeys();
 
         // Tap to jump
@@ -54,21 +55,35 @@ export default function PhaserGame() {
           }
         });
 
-        // Create some banana traps
-        for (let i = 0; i < 5; i++) {
-          const banana = this.physics.add.sprite(200 + i * 120, 400, 'banana');
-          banana.setScale(0.5);
-          this.physics.add.collider(this.runner, banana, () => {
-            this.score += 10;
-            this.scoreText.setText('Score: ' + this.score);
-            banana.destroy();
-          });
+        // Create banana traps
+        this.bananas = this.physics.add.group();
+
+        for (let i = 0; i < 8; i++) {
+          const x = 150 + Math.random() * 500;
+          const banana = this.bananas.create(x, 300 + Math.random() * 200, 'banana');
+          banana.setScale(0.6);
+          banana.setBounce(0.5);
         }
+
+        this.physics.add.collider(this.runner, this.bananas, (runner, banana) => {
+          this.score += 20;
+          this.scoreText.setText('Score: ' + this.score);
+          (banana as Phaser.Physics.Arcade.Sprite).destroy();
+        });
       }
 
       update() {
         const body = this.runner.body as Phaser.Physics.Arcade.Body;
         if (!body) return;
+
+        // Horizontal movement
+        this.runner.setVelocityX(0);
+
+        if (this.cursors.left.isDown) {
+          this.runner.setVelocityX(-300);
+        } else if (this.cursors.right.isDown) {
+          this.runner.setVelocityX(300);
+        }
 
         if (this.cursors.space.isDown && body.touching.down) {
           this.runner.setVelocityY(-650);
@@ -103,4 +118,4 @@ export default function PhaserGame() {
       </div>
     </div>
   );
-}
+           }
