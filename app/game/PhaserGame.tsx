@@ -60,11 +60,6 @@ export default function PhaserGame() {
           this.scoreText.setText('Score: ' + this.score);
           (banana as Phaser.Physics.Arcade.Sprite).destroy();
         });
-
-        this.add.text(50, 50, '← → Move | TAP to Jump', {
-          fontSize: '22px',
-          color: '#ffffff'
-        });
       }
 
       update() {
@@ -87,7 +82,7 @@ export default function PhaserGame() {
 
     const config: Phaser.Types.Core.GameConfig = {
       type: Phaser.AUTO,
-      width: window.innerWidth > 800 ? 800 : window.innerWidth - 40,
+      width: 800,
       height: 600,
       parent: gameRef.current,
       physics: {
@@ -109,31 +104,42 @@ export default function PhaserGame() {
     <div className="min-h-screen bg-zinc-950 flex flex-col">
       {/* Header */}
       <div className="bg-zinc-900 border-b border-zinc-700 p-4 text-center">
-        <h1 className="text-3xl font-bold text-white tracking-tight">Prank Squad</h1>
+        <h1 className="text-3xl font-bold text-white">Prank Squad</h1>
       </div>
 
-      {/* Game */}
-      <div className="flex-1 flex items-center justify-center p-4 bg-black">
-        <div className="rounded-3xl overflow-hidden border border-zinc-700 shadow-2xl">
-          <div ref={gameRef} className="rounded-3xl" />
+      {/* Game Container */}
+      <div className="flex-1 flex items-center justify-center p-4 bg-black relative">
+        <div className="rounded-3xl overflow-hidden border border-zinc-700 shadow-2xl max-w-full">
+          <div ref={gameRef} className="w-full max-w-[800px] aspect-[4/3]" />
         </div>
       </div>
 
-      {/* On-Screen Controls */}
+      {/* Modern Bottom Controls */}
       <div className="bg-zinc-900 border-t border-zinc-700 p-6">
-        <div className="flex justify-center gap-12 text-white">
-          <div className="text-center">
-            <div className="text-3xl mb-1">←</div>
-            <div className="text-xs text-zinc-400">LEFT</div>
-          </div>
-          <div className="text-center">
-            <div className="text-3xl mb-1">→</div>
-            <div className="text-xs text-zinc-400">RIGHT</div>
-          </div>
-          <div className="text-center">
-            <div className="text-3xl mb-1">↑</div>
-            <div className="text-xs text-zinc-400">JUMP</div>
-          </div>
+        <div className="flex justify-between max-w-[800px] mx-auto">
+          {/* Left */}
+          <button 
+            onTouchStart={() => { /* left logic */ }}
+            className="w-20 h-20 bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 rounded-2xl flex items-center justify-center text-4xl transition-all"
+          >
+            ←
+          </button>
+
+          {/* Jump */}
+          <button 
+            onTouchStart={() => { /* jump logic */ }}
+            className="w-24 h-24 bg-blue-600 hover:bg-blue-500 active:bg-blue-700 rounded-3xl flex items-center justify-center text-5xl transition-all shadow-lg"
+          >
+            ↑
+          </button>
+
+          {/* Right */}
+          <button 
+            onTouchStart={() => { /* right logic */ }}
+            className="w-20 h-20 bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 rounded-2xl flex items-center justify-center text-4xl transition-all"
+          >
+            →
+          </button>
         </div>
       </div>
     </div>
