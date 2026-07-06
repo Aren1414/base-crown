@@ -47,14 +47,13 @@ export default function PhaserGame() {
 
         this.cursors = this.input.keyboard!.createCursorKeys();
 
-        // Create bananas
+        // Bananas
         this.bananas = this.physics.add.group();
 
         for (let i = 0; i < 8; i++) {
           const x = 150 + Math.random() * 500;
           const banana = this.bananas.create(x, 300 + Math.random() * 200, 'banana');
           banana.setScale(0.6);
-          banana.setBounce(0.5);
         }
 
         this.physics.add.collider(this.runner, this.bananas, (runner, banana) => {
@@ -63,7 +62,7 @@ export default function PhaserGame() {
           (banana as Phaser.Physics.Arcade.Sprite).destroy();
         });
 
-        this.add.text(80, 50, 'Prank Squad - Arrow Keys + SPACE / TAP to Jump!', {
+        this.add.text(50, 50, '← → Move | SPACE or TAP to Jump', {
           fontSize: '22px',
           color: '#ffffff',
           fontStyle: 'bold'
@@ -77,13 +76,13 @@ export default function PhaserGame() {
         this.runner.setVelocityX(0);
 
         if (this.cursors.left.isDown) {
-          this.runner.setVelocityX(-300);
+          this.runner.setVelocityX(-350);
         } else if (this.cursors.right.isDown) {
-          this.runner.setVelocityX(300);
+          this.runner.setVelocityX(350);
         }
 
         if (this.cursors.space.isDown && body.touching.down) {
-          this.runner.setVelocityY(-650);
+          this.runner.setVelocityY(-700);
         }
       }
     }
