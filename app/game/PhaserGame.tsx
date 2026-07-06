@@ -3,7 +3,7 @@
 import { useEffect, useRef } from 'react';
 import Phaser from 'phaser';
 
-
+// کنترل‌های مشترک بین React و Phaser
 const controls = {
   left: false,
   right: false,
@@ -47,11 +47,11 @@ export default function PhaserGame() {
 
         this.runner.setVelocityX(0);
 
-        
+        // کیبورد
         if (this.cursors.left.isDown) this.runner.setVelocityX(-300);
         if (this.cursors.right.isDown) this.runner.setVelocityX(300);
 
-        
+        // موبایل
         if (controls.left) this.runner.setVelocityX(-300);
         if (controls.right) this.runner.setVelocityX(300);
 
@@ -85,79 +85,58 @@ export default function PhaserGame() {
     return () => game.destroy(true);
   }, []);
 
-  
-  const pressLeft = () => {
-    controls.left = true;
-  };
-  const releaseLeft = () => {
-    controls.left = false;
-  };
-
-  const pressRight = () => {
-    controls.right = true;
-  };
-  const releaseRight = () => {
-    controls.right = false;
-  };
-
-  const pressJump = () => {
-    controls.jump = true;
-  };
-  const releaseJump = () => {
-    controls.jump = false;
-  };
+  // کنترل‌ها
+  const press = (key: keyof typeof controls) => (controls[key] = true);
+  const release = (key: keyof typeof controls) => (controls[key] = false);
 
   return (
-    <div className="min-h-screen bg-zinc-950 flex flex-col">
+    <div className="min-h-screen bg-zinc-950 flex flex-col overflow-hidden">
 
-      
-      <div className="flex-1 flex items-center justify-center p-2">
-        <div className="rounded-3xl overflow-hidden border border-zinc-700 shadow-2xl w-full max-w-[900px]">
+      {/* صفحه بازی */}
+      <div className="flex-1 flex items-center justify-center p-0">
+        <div className="rounded-none overflow-hidden w-full max-w-[900px]">
           <div ref={gameRef} className="w-full aspect-[3/2]" />
         </div>
       </div>
 
-      
-      <div className="bg-zinc-900 border-t border-zinc-700 py-6">
-        <div className="flex justify-center gap-12 max-w-[900px] mx-auto">
+      {/* کنترل‌ها */}
+      <div className="bg-zinc-900 border-t border-zinc-700 py-4">
+        <div className="flex justify-center gap-10 max-w-[900px] mx-auto">
 
-          
+          {/* چپ */}
           <button
-            onTouchStart={pressLeft}
-            onTouchEnd={releaseLeft}
-            onMouseDown={pressLeft}
-            onMouseUp={releaseLeft}
-            className="w-20 h-20 md:w-24 md:h-24 rounded-3xl 
-                       bg-white/10 backdrop-blur-xl border border-white/20 
-                       text-white text-3xl md:text-4xl shadow-xl active:bg-white/20"
+            onTouchStart={() => press('left')}
+            onTouchEnd={() => release('left')}
+            onMouseDown={() => press('left')}
+            onMouseUp={() => release('left')}
+            className="w-16 h-16 rounded-full bg-white/10 backdrop-blur-xl 
+                       border border-white/20 text-white text-3xl shadow-xl active:bg-white/20"
           >
-            ←
+            ⬅️
           </button>
 
-          
+          {/* پرش */}
           <button
-            onTouchStart={pressJump}
-            onTouchEnd={releaseJump}
-            onMouseDown={pressJump}
-            onMouseUp={releaseJump}
-            className="w-24 h-24 md:w-28 md:h-28 rounded-full 
-                       bg-blue-600/80 backdrop-blur-xl border border-blue-300/30 
-                       text-white text-4xl md:text-5xl shadow-2xl active:bg-blue-700/80"
+            onTouchStart={() => press('jump')}
+            onTouchEnd={() => release('jump')}
+            onMouseDown={() => press('jump')}
+            onMouseUp={() => release('jump')}
+            className="w-20 h-20 rounded-full bg-blue-600/80 backdrop-blur-xl 
+                       border border-blue-300/30 text-white text-4xl shadow-2xl active:bg-blue-700/80"
           >
-            ↑
+            ⬆️
           </button>
 
-          
+          {/* راست */}
           <button
-            onTouchStart={pressRight}
-            onTouchEnd={releaseRight}
-            onMouseDown={pressRight}
-            onMouseUp={releaseRight}
-            className="w-20 h-20 md:w-24 md:h-24 rounded-3xl 
-                       bg-white/10 backdrop-blur-xl border border-white/20 
-                       text-white text-3xl md:text-4xl shadow-xl active:bg:white/20"
+            onTouchStart={() => press('right')}
+            onTouchEnd={() => release('right')}
+            onMouseDown={() => press('right')}
+            onMouseUp={() => release('right')}
+            className="w-16 h-16 rounded-full bg-white/10 backdrop-blur-xl 
+                       border border-white/20 text-white text-3xl shadow-xl active:bg-white/20"
           >
-            →
+            ➡️
           </button>
 
         </div>
