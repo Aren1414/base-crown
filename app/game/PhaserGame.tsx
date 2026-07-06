@@ -1,10 +1,15 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Phaser from 'phaser';
 
 export default function PhaserGame() {
   const gameRef = useRef<HTMLDivElement>(null);
+
+  // Mobile control states
+  const [moveLeft, setMoveLeft] = useState(false);
+  const [moveRight, setMoveRight] = useState(false);
+  const [jump, setJump] = useState(false);
 
   useEffect(() => {
     if (!gameRef.current) return;
@@ -68,13 +73,19 @@ export default function PhaserGame() {
 
         this.runner.setVelocityX(0);
 
+        // Keyboard movement
         if (this.cursors.left.isDown) {
           this.runner.setVelocityX(-350);
         } else if (this.cursors.right.isDown) {
           this.runner.setVelocityX(350);
         }
 
-        if (this.cursors.space.isDown && body.touching.down) {
+        // Mobile movement
+        if (moveLeft) this.runner.setVelocityX(-350);
+        if (moveRight) this.runner.setVelocityX(350);
+
+        // Jump (keyboard + mobile)
+        if ((this.cursors.space.isDown || jump) && body.touching.down) {
           this.runner.setVelocityY(-700);
         }
       }
@@ -98,10 +109,11 @@ export default function PhaserGame() {
     const game = new Phaser.Game(config);
 
     return () => game.destroy(true);
-  }, []);
+  }, [moveLeft, moveRight, jump]);
 
   return (
     <div className="min-h-screen bg-zinc-950 flex flex-col">
+
       {/* Header */}
       <div className="bg-zinc-900 border-b border-zinc-700 p-4 text-center">
         <h1 className="text-3xl font-bold text-white">Prank Squad</h1>
@@ -114,32 +126,37 @@ export default function PhaserGame() {
         </div>
       </div>
 
-      {/* Modern Bottom Controls */}
+      {/* Professional Mobile Controls */}
       <div className="bg-zinc-900 border-t border-zinc-700 p-6">
         <div className="flex justify-between max-w-[800px] mx-auto">
+
           {/* Left */}
-          <button 
-            onTouchStart={() => { /* left logic */ }}
-            className="w-20 h-20 bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 rounded-2xl flex items-center justify-center text-4xl transition-all"
+          <button
+            onTouchStart={() => setMoveLeft(true)}
+            onTouchEnd={() => setMoveLeft(false)}
+            className="w-24 h-24 bg-gradient-to-br from-zinc-800 to-zinc-700 active:from-zinc-600 active:to-zinc-500 rounded-3xl flex items-center justify-center text-4xl text-white shadow-xl"
           >
             ←
           </button>
 
           {/* Jump */}
-          <button 
-            onTouchStart={() => { /* jump logic */ }}
-            className="w-24 h-24 bg-blue-600 hover:bg-blue-500 active:bg-blue-700 rounded-3xl flex items-center justify-center text-5xl transition-all shadow-lg"
+          <button
+            onTouchStart={() => setJump(true)}
+            onTouchEnd={() => setJump(false)}
+            className="w-28 h-28 bg-gradient-to-br from-blue-600 to-blue-500 active:from-blue-700 active:to-blue-600 rounded-full flex items-center justify-center text-5xl text-white shadow-2xl"
           >
             ↑
           </button>
 
           {/* Right */}
-          <button 
-            onTouchStart={() => { /* right logic */ }}
-            className="w-20 h-20 bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 rounded-2xl flex items-center justify-center text-4xl transition-all"
+          <button
+            onTouchStart={() => setMoveRight(true)}
+            onTouchEnd={() => setMoveRight(false)}
+            className="w-24 h-24 bg-gradient-to-br from-zinc-800 to-zinc-700 active:from-zinc-600 active:to-zinc-500 rounded-3xl flex items-center justify-center text-4xl text-white shadow-xl"
           >
             →
           </button>
+
         </div>
       </div>
     </div>
