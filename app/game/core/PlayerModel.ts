@@ -11,10 +11,12 @@ export async function loadPlayerModel(scene: THREE.Scene) {
   scene.add(playerGroup);
 
   const mixer = new THREE.AnimationMixer(playerGroup);
-  const actions: Record<string, THREE.AnimationAction | undefined> = {};
+
+  // TS-safe action map
+  const actions: Record<keyof typeof animations | string, THREE.AnimationAction | undefined> = {};
   let currentAction: THREE.AnimationAction | null = null;
 
-  const playAction = (key: string) => {
+  const playAction = (key: keyof typeof animations | string) => {
     const action = actions[key];
     if (!action) return;
     if (currentAction) currentAction.fadeOut(0.1);
@@ -38,6 +40,7 @@ export async function loadPlayerModel(scene: THREE.Scene) {
   });
 
   const model = gltf.scene;
+
   model.scale.set(0.02, 0.02, 0.02);
   model.position.set(0, 0, 0);
   model.rotation.y = Math.PI;
@@ -51,13 +54,17 @@ export async function loadPlayerModel(scene: THREE.Scene) {
 
   playerGroup.add(model);
 
-  // Load animations
-  const animKeys = Object.keys(animations);
-  const clips = await Promise.all(animKeys.map((k) => loadAnim(animations[k])));
+  // Load animations (TS-safe)
+  const animKeys = Object.keys(animations) as (keyof typeof animations)[];
+
+  const clips = await Promise.all(
+    animKeys.map((k) => loadAnim(animations[k]))
+  );
 
   clips.forEach((clip, i) => {
     if (!clip) return;
-    actions[animKeys[i]] = mixer.clipAction(clip);
+    const key = animKeys[i];
+    actions[key] = mixer.clipAction(clip);
   });
 
   playAction("idle");
