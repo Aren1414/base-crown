@@ -4,21 +4,21 @@ import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { GLTFLoader } from '@/app/lib/GLTFLoader';
 
-const MODEL_URL = 'https://pixeldrain.com/l/ou6WZuKR#item=12';
+const MODEL_URL = 'https://pixeldrain.com/l/ou6WZuKR?download=1';
 
 const animations = {
-  hit_head: 'https://pixeldrain.com/l/ou6WZuKR#item=0',
-  walk: 'https://pixeldrain.com/l/ou6WZuKR#item=1',
-  idle: 'https://pixeldrain.com/l/ou6WZuKR#item=2',
-  death: 'https://pixeldrain.com/l/ou6WZuKR#item=3',
-  hit_side: 'https://pixeldrain.com/l/ou6WZuKR#item=4',
-  kick_crescent: 'https://pixeldrain.com/l/ou6WZuKR#item=5',
-  landing: 'https://pixeldrain.com/l/ou6WZuKR#item=6',
-  kick_basic: 'https://pixeldrain.com/l/ou6WZuKR#item=7',
-  kick_mma: 'https://pixeldrain.com/l/ou6WZuKR#item=8',
-  punch_bag: 'https://pixeldrain.com/l/ou6WZuKR#item=9',
-  run: 'https://pixeldrain.com/l/ou6WZuKR#item=10',
-  punch_uppercut: 'https://pixeldrain.com/l/ou6WZuKR#item=11',
+  hit_head: 'https://pixeldrain.com/l/ou6WZuKR?download=1&item=0',
+  walk: 'https://pixeldrain.com/l/ou6WZuKR?download=1&item=1',
+  idle: 'https://pixeldrain.com/l/ou6WZuKR?download=1&item=2',
+  death: 'https://pixeldrain.com/l/ou6WZuKR?download=1&item=3',
+  hit_side: 'https://pixeldrain.com/l/ou6WZuKR?download=1&item=4',
+  kick_crescent: 'https://pixeldrain.com/l/ou6WZuKR?download=1&item=5',
+  landing: 'https://pixeldrain.com/l/ou6WZuKR?download=1&item=6',
+  kick_basic: 'https://pixeldrain.com/l/ou6WZuKR?download=1&item=7',
+  kick_mma: 'https://pixeldrain.com/l/ou6WZuKR?download=1&item=8',
+  punch_bag: 'https://pixeldrain.com/l/ou6WZuKR?download=1&item=9',
+  run: 'https://pixeldrain.com/l/ou6WZuKR?download=1&item=10',
+  punch_uppercut: 'https://pixeldrain.com/l/ou6WZuKR?download=1&item=11',
 };
 
 export default function ChaosLane3D() {
@@ -46,10 +46,10 @@ export default function ChaosLane3D() {
     renderer.shadowMap.enabled = true;
     mountRef.current.appendChild(renderer.domElement);
 
-    const hemiLight = new THREE.HemisphereLight(0x4f46e5, 0x020617, 1.2);
+    const hemiLight = new THREE.HemisphereLight(0x4f46e5, 0x020617, 1.4);
     scene.add(hemiLight);
 
-    const dirLight = new THREE.DirectionalLight(0xffffff, 2);
+    const dirLight = new THREE.DirectionalLight(0xffffff, 2.2);
     dirLight.position.set(8, 18, 12);
     dirLight.castShadow = true;
     dirLight.shadow.mapSize.width = 2048;
@@ -134,7 +134,10 @@ export default function ChaosLane3D() {
             resolve(clip);
           },
           undefined,
-          () => resolve(null)
+          (err) => {
+            console.error('Error loading animation', name, err);
+            resolve(null);
+          }
         );
       });
 
@@ -149,6 +152,8 @@ export default function ChaosLane3D() {
     loader.load(
       MODEL_URL,
       (gltf: any) => {
+        console.log('MODEL LOADED', gltf);
+
         const model = gltf.scene;
 
         model.traverse((obj: any) => {
@@ -217,7 +222,7 @@ export default function ChaosLane3D() {
       },
       undefined,
       (err) => {
-        console.error('Error loading model', err);
+        console.error('Error loading MODEL', MODEL_URL, err);
       }
     );
 
@@ -379,7 +384,7 @@ export default function ChaosLane3D() {
         </button>
         <button
           onClick={() => moveLane(1)}
-          className="w-14 h-14 rounded-full bg-white/10 border border-white/20 text-xl active:bg白/20"
+          className="w-14 h-14 rounded-full bg-white/10 border border-white/20 text-xl active:bg-white/20"
         >
           ▶
         </button>
@@ -396,4 +401,4 @@ export default function ChaosLane3D() {
       )}
     </div>
   );
-            }
+      }
