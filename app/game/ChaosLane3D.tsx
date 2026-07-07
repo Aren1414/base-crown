@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { GLTFLoader } from '@/app/lib/GLTFLoader';
 
-const MODEL_URL = "https://pixeldrain.com/l/ou6WZuKR#item=12";
+const MODEL_URL = 'https://pixeldrain.com/l/ou6WZuKR#item=12';
 
 const animations = {
   hit_head: 'https://pixeldrain.com/l/ou6WZuKR#item=0',
@@ -39,19 +39,21 @@ export default function ChaosLane3D() {
       0.1,
       200
     );
-    camera.position.set(0, 6, 14);
+    camera.position.set(0, 4.5, 10);
 
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.shadowMap.enabled = true;
     mountRef.current.appendChild(renderer.domElement);
 
-    const hemiLight = new THREE.HemisphereLight(0x4f46e5, 0x020617, 1);
+    const hemiLight = new THREE.HemisphereLight(0x4f46e5, 0x020617, 1.2);
     scene.add(hemiLight);
 
-    const dirLight = new THREE.DirectionalLight(0xffffff, 1.6);
-    dirLight.position.set(10, 20, 10);
+    const dirLight = new THREE.DirectionalLight(0xffffff, 2);
+    dirLight.position.set(8, 18, 12);
     dirLight.castShadow = true;
+    dirLight.shadow.mapSize.width = 2048;
+    dirLight.shadow.mapSize.height = 2048;
     scene.add(dirLight);
 
     const groundGeo = new THREE.BoxGeometry(14, 0.6, 320);
@@ -115,7 +117,6 @@ export default function ChaosLane3D() {
     const stars = new THREE.Points(starsGeo, starsMat);
     scene.add(stars);
 
-    // PLAYER MODEL + ANIMATIONS
     const loader = new GLTFLoader();
     const playerGroup = new THREE.Group();
     scene.add(playerGroup);
@@ -145,20 +146,28 @@ export default function ChaosLane3D() {
       currentAction = action;
     };
 
-    // Load main model
     loader.load(
       MODEL_URL,
       (gltf: any) => {
         const model = gltf.scene;
+
         model.traverse((obj: any) => {
           if (obj.isMesh) {
             obj.castShadow = true;
             obj.receiveShadow = true;
           }
         });
+
+        // تضمین دیده شدن کاراکتر
+        model.scale.set(0.02, 0.02, 0.02);
+        model.position.set(0, 0, 0);
+        model.rotation.y = Math.PI;
+
         playerGroup.add(model);
 
-        // Load animations after model
+        camera.position.set(0, 3.5, 9);
+        camera.lookAt(new THREE.Vector3(0, 2, 0));
+
         Promise.all([
           loadAnim('idle'),
           loadAnim('walk'),
@@ -205,6 +214,10 @@ export default function ChaosLane3D() {
             playAction('idle');
           }
         );
+      },
+      undefined,
+      (err) => {
+        console.error('Error loading model', err);
       }
     );
 
@@ -366,7 +379,7 @@ export default function ChaosLane3D() {
         </button>
         <button
           onClick={() => moveLane(1)}
-          className="w-14 h-14 rounded-full bg-white/10 border border-white/20 text-xl active:bg-white/20"
+          className="w-14 h-14 rounded-full bg-white/10 border border-white/20 text-xl active:bg白/20"
         >
           ▶
         </button>
@@ -383,4 +396,4 @@ export default function ChaosLane3D() {
       )}
     </div>
   );
-  }
+            }
