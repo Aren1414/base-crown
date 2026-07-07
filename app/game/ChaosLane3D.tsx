@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { GLTFLoader } from '@/app/lib/GLTFLoader';
 
+const MODEL_URL = "https://pixeldrain.com/l/ou6WZuKR#item=12";
+
 const animations = {
   hit_head: 'https://pixeldrain.com/l/ou6WZuKR#item=0',
   walk: 'https://pixeldrain.com/l/ou6WZuKR#item=1',
@@ -143,8 +145,9 @@ export default function ChaosLane3D() {
       currentAction = action;
     };
 
+    // Load main model
     loader.load(
-      animations.idle,
+      MODEL_URL,
       (gltf: any) => {
         const model = gltf.scene;
         model.traverse((obj: any) => {
@@ -155,10 +158,9 @@ export default function ChaosLane3D() {
         });
         playerGroup.add(model);
 
-        const idleClip = gltf.animations?.[0];
-        actions.idle = mixer.clipAction(idleClip);
-
+        // Load animations after model
         Promise.all([
+          loadAnim('idle'),
           loadAnim('walk'),
           loadAnim('run'),
           loadAnim('landing'),
@@ -172,6 +174,7 @@ export default function ChaosLane3D() {
           loadAnim('death'),
         ]).then(
           ([
+            idleClip,
             walkClip,
             runClip,
             landingClip,
@@ -184,6 +187,7 @@ export default function ChaosLane3D() {
             punchUppercutClip,
             deathClip,
           ]) => {
+            if (idleClip) actions.idle = mixer.clipAction(idleClip);
             if (walkClip) actions.walk = mixer.clipAction(walkClip);
             if (runClip) actions.run = mixer.clipAction(runClip);
             if (landingClip) actions.landing = mixer.clipAction(landingClip);
@@ -379,4 +383,4 @@ export default function ChaosLane3D() {
       )}
     </div>
   );
-        }
+  }
