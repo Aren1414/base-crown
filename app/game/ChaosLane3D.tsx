@@ -52,6 +52,7 @@ export default function ChaosLane3D() {
 
         const { score: s, gameOver: over } = game.update(delta, playAction);
         setScore(s);
+
         if (over) {
           setGameOver(true);
           setBestScore((prev) => (s > prev ? s : prev));
@@ -62,8 +63,9 @@ export default function ChaosLane3D() {
 
       animate();
 
-      const keyHandler = (e: KeyboardEvent) =>
+      const keyHandler = (e: KeyboardEvent) => {
         game.handleKey(e, playAction);
+      };
 
       window.addEventListener("keydown", keyHandler);
 
@@ -85,6 +87,37 @@ export default function ChaosLane3D() {
           Best: {bestScore}
         </div>
       </div>
+
+      {!gameOver && (
+        <div className="absolute bottom-6 left-0 right-0 flex justify-center gap-10">
+          <button
+            onClick={() =>
+              window.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowLeft" }))
+            }
+            className="w-14 h-14 rounded-full bg-white/10 border border-white/20 text-xl active:bg-white/20"
+          >
+            ◀
+          </button>
+
+          <button
+            onClick={() =>
+              window.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowUp" }))
+            }
+            className="w-16 h-16 rounded-full bg-blue-600/80 border border-blue-300/40 text-2xl active:bg-blue-700/80"
+          >
+            ⬆
+          </button>
+
+          <button
+            onClick={() =>
+              window.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight" }))
+            }
+            className="w-14 h-14 rounded-full bg-white/10 border border-white/20 text-xl active:bg-white/20"
+          >
+            ▶
+          </button>
+        </div>
+      )}
 
       {gameOver && (
         <div className="absolute inset-0 flex items-center justify-center bg-black/70">
