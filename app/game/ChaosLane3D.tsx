@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader';
+import { GLTFLoader } from '@/app/lib/GLTFLoader';
 
 const animations = {
   hit_head: 'https://pixeldrain.com/l/ou6WZuKR#item=0',
@@ -19,7 +19,7 @@ const animations = {
   punch_uppercut: 'https://pixeldrain.com/l/ou6WZuKR#item=11',
 };
 
-export default function ChaosRunner3D() {
+export default function ChaosLane3D() {
   const mountRef = useRef<HTMLDivElement>(null);
   const [score, setScore] = useState(0);
   const [bestScore, setBestScore] = useState(0);
@@ -113,21 +113,21 @@ export default function ChaosRunner3D() {
     const stars = new THREE.Points(starsGeo, starsMat);
     scene.add(stars);
 
-    // PLAYER: animated character instead of capsule
+    // PLAYER MODEL + ANIMATIONS
     const loader = new GLTFLoader();
     const playerGroup = new THREE.Group();
     scene.add(playerGroup);
 
     const mixer = new THREE.AnimationMixer(playerGroup);
-    const actions: Record<string, THREE.AnimationAction> = {};
+    const actions: Record<string, THREE.AnimationAction | undefined> = {};
     let currentAction: THREE.AnimationAction | null = null;
 
     const loadAnim = (name: keyof typeof animations) =>
       new Promise<THREE.AnimationClip | null>((resolve) => {
         loader.load(
           animations[name],
-          (gltf) => {
-            const clip = gltf.animations[0] || null;
+          (gltf: any) => {
+            const clip = gltf.animations?.[0] ?? null;
             resolve(clip);
           },
           undefined,
@@ -138,31 +138,26 @@ export default function ChaosRunner3D() {
     const playAction = (key: string) => {
       const action = actions[key];
       if (!action) return;
-      if (currentAction) {
-        currentAction.fadeOut(0.1);
-      }
+      if (currentAction) currentAction.fadeOut(0.1);
       action.reset().fadeIn(0.1).play();
       currentAction = action;
     };
 
-    // load base model (idle) and use its mesh as player visual
     loader.load(
       animations.idle,
-      (gltf) => {
+      (gltf: any) => {
         const model = gltf.scene;
-        model.traverse((obj) => {
-          if ((obj as THREE.Mesh).isMesh) {
+        model.traverse((obj: any) => {
+          if (obj.isMesh) {
             obj.castShadow = true;
             obj.receiveShadow = true;
           }
         });
-        model.position.set(0, 0, 0);
         playerGroup.add(model);
 
-        const idleClip = gltf.animations[0];
+        const idleClip = gltf.animations?.[0];
         actions.idle = mixer.clipAction(idleClip);
 
-        // load other clips
         Promise.all([
           loadAnim('walk'),
           loadAnim('run'),
@@ -251,7 +246,6 @@ export default function ChaosRunner3D() {
 
       const delta = clock.getDelta();
 
-      // move player group instead of capsule
       playerGroup.position.z -= speed;
       playerGroup.position.x = THREE.MathUtils.lerp(
         playerGroup.position.x,
@@ -309,7 +303,7 @@ export default function ChaosRunner3D() {
       if (e.key === 'ArrowUp' && !isJumping) {
         isJumping = true;
         jumpVelocity = 14;
-        playAction('landing'); // jump/landing anim
+        playAction('landing');
       }
     };
 
@@ -385,4 +379,4 @@ export default function ChaosRunner3D() {
       )}
     </div>
   );
-  }
+        }
