@@ -30,7 +30,7 @@ export default function ChaosLane3D() {
     renderer.shadowMap.enabled = true;
 
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 0.85; // نور کمتر، طبیعی‌تر
+    renderer.toneMappingExposure = 0.65; // نور خیلی طبیعی
 
     mountRef.current.appendChild(renderer.domElement);
 
@@ -49,21 +49,21 @@ export default function ChaosLane3D() {
       }
     );
 
-    // Lights (شدت خیلی پایین)
-    const keyLight = new THREE.DirectionalLight(0xffffff, 0.9);
-    keyLight.position.set(8, 12, 8);
+    // Lights (شدت خیلی پایین + زاویه اصلاح‌شده)
+    const keyLight = new THREE.DirectionalLight(0xffffff, 0.55);
+    keyLight.position.set(6, 10, 4); // نور از بالا، نه مستقیم روی صورت
     scene.add(keyLight);
 
-    const fillLight = new THREE.DirectionalLight(0xffffff, 0.6);
-    fillLight.position.set(-8, 10, -5);
+    const fillLight = new THREE.DirectionalLight(0xffffff, 0.45);
+    fillLight.position.set(-6, 8, -3);
     scene.add(fillLight);
 
-    const rimLight = new THREE.DirectionalLight(0xffffff, 0.7);
-    rimLight.position.set(0, 10, -12);
+    const rimLight = new THREE.DirectionalLight(0xffffff, 0.5);
+    rimLight.position.set(0, 9, -10);
     scene.add(rimLight);
 
-    const faceLight = new THREE.DirectionalLight(0xffffff, 0.8);
-    faceLight.position.set(0, 5, 5);
+    const faceLight = new THREE.DirectionalLight(0xffffff, 0.55);
+    faceLight.position.set(0, 4, 3); // نور ملایم برای صورت
     scene.add(faceLight);
 
     // Orbit Controls
@@ -77,11 +77,11 @@ export default function ChaosLane3D() {
     (async () => {
       const { playerGroup, mixer } = await loadPlayerModel(scene);
 
-      // متریال کاملاً طبیعی
+      // متریال کاملاً طبیعی مخصوص مدل تو
       playerGroup.traverse((obj) => {
         if (obj instanceof THREE.Mesh && obj.material) {
-          obj.material.envMapIntensity = 0.45; // خیلی کمتر
-          obj.material.roughness = 0.65;       // طبیعی
+          obj.material.envMapIntensity = 0.35; // خیلی کم
+          obj.material.roughness = 0.72;       // طبیعی
           obj.material.metalness = 0.02;       // خیلی کم
         }
       });
@@ -111,4 +111,4 @@ export default function ChaosLane3D() {
       <div ref={mountRef} className="w-full h-full" />
     </div>
   );
-          }
+}
