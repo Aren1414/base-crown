@@ -29,13 +29,12 @@ export default function ChaosLane3D() {
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.shadowMap.enabled = true;
 
-    // Tone Mapping (کیفیت واقعی مثل Meshy)
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.35;
 
     mountRef.current.appendChild(renderer.domElement);
 
-    // HDRI Environment
+    // HDRI
     const pmrem = new THREE.PMREMGenerator(renderer);
     pmrem.compileEquirectangularShader();
 
@@ -48,7 +47,7 @@ export default function ChaosLane3D() {
       }
     );
 
-    // Studio Lights (کیفیت واقعی چهره)
+    // Lights
     const keyLight = new THREE.DirectionalLight(0xffffff, 2.2);
     keyLight.position.set(10, 15, 10);
     keyLight.castShadow = true;
@@ -62,7 +61,6 @@ export default function ChaosLane3D() {
     rimLight.position.set(0, 12, -15);
     scene.add(rimLight);
 
-    // Face Light (نور مخصوص صورت)
     const faceLight = new THREE.DirectionalLight(0xffffff, 2.0);
     faceLight.position.set(0, 6, 6);
     scene.add(faceLight);
@@ -81,9 +79,9 @@ export default function ChaosLane3D() {
     (async () => {
       const { playerGroup, mixer } = await loadPlayerModel(scene);
 
-      // تقویت متریال‌ها (برای صورت و لباس)
+      // FIXED: TypeScript-safe material enhancement
       playerGroup.traverse((obj) => {
-        if (obj.isMesh && obj.material) {
+        if (obj instanceof THREE.Mesh && obj.material) {
           obj.material.envMapIntensity = 1.6;
           obj.material.roughness = 0.35;
           obj.material.metalness = 0.15;
