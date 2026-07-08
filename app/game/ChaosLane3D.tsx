@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import * as THREE from "three";
 import { loadPlayerModel } from "./core/PlayerModel";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+import { RGBELoader } from "three/examples/jsm/loaders/RGBELoader.js";
 
 export default function ChaosLane3D() {
   const mountRef = useRef<HTMLDivElement>(null);
@@ -13,7 +14,6 @@ export default function ChaosLane3D() {
 
     // Scene
     const scene = new THREE.Scene();
-    scene.fog = new THREE.Fog("#020617", 10, 80);
 
     // Camera
     const camera = new THREE.PerspectiveCamera(
@@ -28,32 +28,67 @@ export default function ChaosLane3D() {
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.shadowMap.enabled = true;
+
+    // Tone Mapping (کیفیت واقعی مثل Meshy)
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.35;
+
     mountRef.current.appendChild(renderer.domElement);
 
-    // Lights
-    const hemiLight = new THREE.HemisphereLight(0xffffff, 0x020617, 1.4);
-    scene.add(hemiLight);
+    // HDRI Environment
+    const pmrem = new THREE.PMREMGenerator(renderer);
+    pmrem.compileEquirectangularShader();
 
-    const dirLight = new THREE.DirectionalLight(0xffffff, 2.2);
-    dirLight.position.set(8, 18, 12);
-    dirLight.castShadow = true;
-    scene.add(dirLight);
+    new RGBELoader().load(
+      "/studio_small_03_1k.hdr",
+      (hdrTexture) => {
+        const envMap = pmrem.fromEquirectangular(hdrTexture).texture;
+        scene.environment = envMap;
+        scene.background = new THREE.Color("#0a0a0a");
+      }
+    );
 
-    // Orbit Controls (برای چرخاندن مدل)
+    // Studio Lights (کیفیت واقعی چهره)
+    const keyLight = new THREE.DirectionalLight(0xffffff, 2.2);
+    keyLight.position.set(10, 15, 10);
+    keyLight.castShadow = true;
+    scene.add(keyLight);
+
+    const fillLight = new THREE.DirectionalLight(0xffffff, 1.2);
+    fillLight.position.set(-10, 10, -5);
+    scene.add(fillLight);
+
+    const rimLight = new THREE.DirectionalLight(0xffffff, 1.5);
+    rimLight.position.set(0, 12, -15);
+    scene.add(rimLight);
+
+    // Face Light (نور مخصوص صورت)
+    const faceLight = new THREE.DirectionalLight(0xffffff, 2.0);
+    faceLight.position.set(0, 6, 6);
+    scene.add(faceLight);
+
+    // Orbit Controls
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = 0.08;
     controls.rotateSpeed = 0.8;
     controls.zoomSpeed = 1.0;
     controls.panSpeed = 0.8;
-
-    // محدود کردن زوم
     controls.minDistance = 3;
     controls.maxDistance = 25;
 
-    // مدل را لود کن
+    // Load Model
     (async () => {
       const { playerGroup, mixer } = await loadPlayerModel(scene);
+
+      // تقویت متریال‌ها (برای صورت و لباس)
+      playerGroup.traverse((obj) => {
+        if (obj.isMesh && obj.material) {
+          obj.material.envMapIntensity = 1.6;
+          obj.material.roughness = 0.35;
+          obj.material.metalness = 0.15;
+        }
+      });
 
       const clock = new THREE.Clock();
 
@@ -70,7 +105,6 @@ export default function ChaosLane3D() {
       animate();
     })();
 
-    // Cleanup
     return () => {
       renderer.dispose();
     };
