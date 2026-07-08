@@ -30,11 +30,11 @@ export default function ChaosLane3D() {
     renderer.shadowMap.enabled = true;
 
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.1; // طبیعی‌تر
+    renderer.toneMappingExposure = 1.0; // بالانس نهایی
 
     mountRef.current.appendChild(renderer.domElement);
 
-    // HDRI
+    // HDRI Environment
     const pmrem = new THREE.PMREMGenerator(renderer);
     pmrem.compileEquirectangularShader();
 
@@ -47,21 +47,21 @@ export default function ChaosLane3D() {
       }
     );
 
-    // Lights (متعادل‌تر)
-    const keyLight = new THREE.DirectionalLight(0xffffff, 1.6);
+    // Balanced Studio Lights
+    const keyLight = new THREE.DirectionalLight(0xffffff, 1.4);
     keyLight.position.set(10, 15, 10);
     keyLight.castShadow = true;
     scene.add(keyLight);
 
-    const fillLight = new THREE.DirectionalLight(0xffffff, 0.9);
+    const fillLight = new THREE.DirectionalLight(0xffffff, 0.8);
     fillLight.position.set(-10, 10, -5);
     scene.add(fillLight);
 
-    const rimLight = new THREE.DirectionalLight(0xffffff, 1.1);
+    const rimLight = new THREE.DirectionalLight(0xffffff, 1.0);
     rimLight.position.set(0, 12, -15);
     scene.add(rimLight);
 
-    const faceLight = new THREE.DirectionalLight(0xffffff, 1.4);
+    const faceLight = new THREE.DirectionalLight(0xffffff, 1.2);
     faceLight.position.set(0, 6, 6);
     scene.add(faceLight);
 
@@ -79,12 +79,12 @@ export default function ChaosLane3D() {
     (async () => {
       const { playerGroup, mixer } = await loadPlayerModel(scene);
 
-      // متریال طبیعی‌تر
+      // Final balanced material settings
       playerGroup.traverse((obj) => {
         if (obj instanceof THREE.Mesh && obj.material) {
-          obj.material.envMapIntensity = 0.9;   // کمتر، طبیعی‌تر
-          obj.material.roughness = 0.55;        // پوست و لباس طبیعی
-          obj.material.metalness = 0.05;        // خیلی کم، طبیعی
+          obj.material.envMapIntensity = 0.75; // طبیعی، بدون سفیدی
+          obj.material.roughness = 0.6;        // لباس و پوست طبیعی
+          obj.material.metalness = 0.03;       // خیلی کم، طبیعی
         }
       });
 
