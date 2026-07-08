@@ -30,7 +30,7 @@ export default function ChaosLane3D() {
     renderer.shadowMap.enabled = true;
 
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.35;
+    renderer.toneMappingExposure = 1.1; // طبیعی‌تر
 
     mountRef.current.appendChild(renderer.domElement);
 
@@ -47,21 +47,21 @@ export default function ChaosLane3D() {
       }
     );
 
-    // Lights
-    const keyLight = new THREE.DirectionalLight(0xffffff, 2.2);
+    // Lights (متعادل‌تر)
+    const keyLight = new THREE.DirectionalLight(0xffffff, 1.6);
     keyLight.position.set(10, 15, 10);
     keyLight.castShadow = true;
     scene.add(keyLight);
 
-    const fillLight = new THREE.DirectionalLight(0xffffff, 1.2);
+    const fillLight = new THREE.DirectionalLight(0xffffff, 0.9);
     fillLight.position.set(-10, 10, -5);
     scene.add(fillLight);
 
-    const rimLight = new THREE.DirectionalLight(0xffffff, 1.5);
+    const rimLight = new THREE.DirectionalLight(0xffffff, 1.1);
     rimLight.position.set(0, 12, -15);
     scene.add(rimLight);
 
-    const faceLight = new THREE.DirectionalLight(0xffffff, 2.0);
+    const faceLight = new THREE.DirectionalLight(0xffffff, 1.4);
     faceLight.position.set(0, 6, 6);
     scene.add(faceLight);
 
@@ -79,12 +79,12 @@ export default function ChaosLane3D() {
     (async () => {
       const { playerGroup, mixer } = await loadPlayerModel(scene);
 
-      // FIXED: TypeScript-safe material enhancement
+      // متریال طبیعی‌تر
       playerGroup.traverse((obj) => {
         if (obj instanceof THREE.Mesh && obj.material) {
-          obj.material.envMapIntensity = 1.6;
-          obj.material.roughness = 0.35;
-          obj.material.metalness = 0.15;
+          obj.material.envMapIntensity = 0.9;   // کمتر، طبیعی‌تر
+          obj.material.roughness = 0.55;        // پوست و لباس طبیعی
+          obj.material.metalness = 0.05;        // خیلی کم، طبیعی
         }
       });
 
