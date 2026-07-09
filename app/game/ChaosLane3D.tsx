@@ -3,7 +3,6 @@
 import { useEffect, useRef } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import { RGBELoader } from "three/examples/jsm/loaders/RGBELoader.js";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 
 export default function ChaosLane3D() {
@@ -14,6 +13,7 @@ export default function ChaosLane3D() {
 
     // Scene
     const scene = new THREE.Scene();
+    scene.background = new THREE.Color("#000000"); // پس‌زمینه سیاه
 
     // Camera
     const camera = new THREE.PerspectiveCamera(
@@ -27,117 +27,57 @@ export default function ChaosLane3D() {
     // Renderer
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.shadowMap.enabled = true;
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 0.85;
 
     mountRef.current.appendChild(renderer.domElement);
 
-    // Cache برای بهینه‌سازی
-    THREE.Cache.enabled = true;
-
-    // HDRI Environment
-    const pmrem = new THREE.PMREMGenerator(renderer);
-    pmrem.compileEquirectangularShader();
-
-    new RGBELoader().load("/studio_small_03_1k.hdr", (hdrTexture) => {
-      const envMap = pmrem.fromEquirectangular(hdrTexture).texture;
-      scene.environment = envMap;
-      scene.background = new THREE.Color("#0a0a0a");
-    });
-
-    // Lights (شدت کمتر برای جزئیات بهتر)
-    const keyLight = new THREE.DirectionalLight(0xffffff, 0.35);
+    // Lights
+    const keyLight = new THREE.DirectionalLight(0xffffff, 0.5);
     keyLight.position.set(6, 10, 4);
     scene.add(keyLight);
 
-    const fillLight = new THREE.DirectionalLight(0xffffff, 0.25);
+    const fillLight = new THREE.DirectionalLight(0xffffff, 0.3);
     fillLight.position.set(-6, 8, -3);
     scene.add(fillLight);
-
-    const rimLight = new THREE.DirectionalLight(0xffffff, 0.3);
-    rimLight.position.set(0, 9, -10);
-    scene.add(rimLight);
-
-    const faceLight = new THREE.DirectionalLight(0xffffff, 0.4);
-    faceLight.position.set(0, 4, 3);
-    scene.add(faceLight);
 
     // Orbit Controls
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
-    controls.dampingFactor = 0.08;
-    controls.minDistance = 3;
-    controls.maxDistance = 25;
 
-    // Load Model + Animation
+    // Loader
     (async () => {
       const loader = new GLTFLoader();
 
-      // مدل اصلی کاراکتر
-      const glbModel = await loader.loadAsync("/models/modeling.glb");
-      const player = glbModel.scene;
-      player.scale.set(1, 1, 1);
-      scene.add(player);
+      try {
+        // مدل اصلی کاراکتر
+        const glbModel = await loader.loadAsync("/models/modeling.glb");
+        const player = glbModel.scene;
+        player.scale.set(1, 1, 1);
+        scene.add(player);
 
-      // متریال طبیعی
-      player.traverse((obj) => {
-        if (obj instanceof THREE.Mesh && obj.material) {
-          obj.material.envMapIntensity = 0.3;
-          obj.material.roughness = 0.7;
-          obj.material.metalness = 0.05;
-        }
-      });
+        // متریال طبیعی
+        player.traverse((obj) => {
+          if (obj instanceof THREE.Mesh && obj.material) {
+            obj.material.envMapIntensity = 0.3;
+            obj.material.roughness = 0.7;
+            obj.material.metalness = 0.05;
+          }
+        });
+      } catch (err) {
+        console.error("مدل لود نشد:", err);
 
-      // Mixer برای انیمیشن
-      const mixer = new THREE.AnimationMixer(player);
-
-      // لیست انیمیشن‌ها
-      const animations = [
-        "Breathing Idle.glb",
-        "Running.glb",
-        "Fast Run.glb",
-        "Jumping.glb",
-        "Combo Punch.glb",
-        "Punch To Elbow Combo.glb",
-        "Mma Kick.glb",
-        "Flip Kick.glb",
-        "Kidney Hit.glb",
-        "Standing Death Forward.glb",
-        "Standing Death Backward.glb",
-        "Standing React Small From Right.glb",
-        "Catwalk Idle To Twist R.glb",
-        "Catwalk Walk Forward Arc 90L.glb",
-        "Catwalk Walk Forward Turn 90L.glb"
-      ];
-
-      // تابع اجرای انیمیشن
-      const playAnimation = async (file: string) => {
-        const anim = await loader.loadAsync(`/models/${file}`);
-        if (anim.animations.length > 0) {
-          mixer.stopAllAction();
-          const clip = anim.animations[0];
-          const action = mixer.clipAction(clip);
-          action.reset().play();
-        }
-      };
-
-      // شروع با Idle
-      await playAnimation("Breathing Idle.glb");
-
-      // هر 8 ثانیه یک انیمیشن رندوم
-      setInterval(() => {
-        const random = animations[Math.floor(Math.random() * animations.length)];
-        playAnimation(random);
-      }, 8000);
-
-      const clock = new THREE.Clock();
+        // تست: مکعب ساده اضافه کن تا مطمئن بشی صحنه کار می‌کنه
+        const cube = new THREE.Mesh(
+          new THREE.BoxGeometry(2, 2, 2),
+          new THREE.MeshStandardMaterial({ color: "red" })
+        );
+        scene.add(cube);
+      }
 
       const animate = () => {
         requestAnimationFrame(animate);
-        const delta = clock.getDelta();
-        mixer.update(delta);
         controls.update();
         renderer.render(scene, camera);
       };
