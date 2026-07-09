@@ -128,4 +128,4 @@ export default function ChaosLane3D() {
       <div ref={mountRef} className="w-full h-full" />
     </div>
   );
-                              }
+}
