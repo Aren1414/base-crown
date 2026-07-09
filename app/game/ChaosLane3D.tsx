@@ -28,9 +28,10 @@ export default function ChaosLane3D() {
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.shadowMap.enabled = true;
+    renderer.outputEncoding = THREE.sRGBEncoding;
 
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 0.65;
+    renderer.toneMappingExposure = 0.9;
 
     mountRef.current.appendChild(renderer.domElement);
 
@@ -40,8 +41,6 @@ export default function ChaosLane3D() {
 
     new RGBELoader().load("/studio_small_03_1k.hdr", (hdrTexture) => {
       const envMap = pmrem.fromEquirectangular(hdrTexture).texture;
-      envMap.mapping = THREE.EquirectangularReflectionMapping;
-
       scene.environment = envMap;
       scene.background = new THREE.Color("#0a0a0a");
     });
@@ -74,9 +73,12 @@ export default function ChaosLane3D() {
     (async () => {
       const loader = new GLTFLoader();
 
-      // مدل اصلی
-      const glbModel = await loader.loadAsync("/models/any.glb");
+      // مدل اصلی کاراکتر
+      const glbModel = await loader.loadAsync(
+        "/models/Meshy_AI_Frosted_Aurora_biped_Character_output-optimized (1).glb"
+      );
       const player = glbModel.scene;
+      player.scale.set(1, 1, 1);
       scene.add(player);
 
       // متریال طبیعی
@@ -88,15 +90,18 @@ export default function ChaosLane3D() {
         }
       });
 
-      // Mixer
+      // Mixer برای انیمیشن
       const mixer = new THREE.AnimationMixer(player);
 
-      // انیمیشن جداگانه
-      const glbAnim = await loader.loadAsync("/models/any_Walking.glb");
-      const clip = glbAnim.animations[0];
-
-      const action = mixer.clipAction(clip);
-      action.play();
+      // انیمیشن جداگانه (Walking)
+      const glbAnim = await loader.loadAsync(
+        "/models/ImageToStl.com_Walking+(4).glb"
+      );
+      if (glbAnim.animations.length > 0) {
+        const clip = glbAnim.animations[0];
+        const action = mixer.clipAction(clip);
+        action.play();
+      }
 
       const clock = new THREE.Clock();
 
@@ -123,4 +128,4 @@ export default function ChaosLane3D() {
       <div ref={mountRef} className="w-full h-full" />
     </div>
   );
-        }
+                              }
