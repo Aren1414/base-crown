@@ -28,7 +28,9 @@ export default function ChaosLane3D() {
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.shadowMap.enabled = true;
-    renderer.outputEncoding = THREE.sRGBEncoding;
+
+    // نسخه جدید Three.js
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
 
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 0.9;
