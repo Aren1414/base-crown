@@ -31,65 +31,98 @@ export default function ChaosLane3D() {
     (async () => {
       const loader = new GLTFLoader();
 
-      // مدل اصلی
-      const glbModel = await loader.loadAsync("/models/modeling.glb");
-      const player = glbModel.scene;
-      player.scale.set(1.5, 1.5, 1.5); // بزرگ‌تر برای دیده شدن
-      player.position.set(0, 0, 0);
-      scene.add(player);
+      try {
+        // مدل اصلی
+        const glbModel = await loader.loadAsync("/models/modeling.glb");
+        const player = glbModel.scene;
+        player.scale.set(1.5, 1.5, 1.5);
+        player.position.set(0, 0, 0);
+        scene.add(player);
 
-      const mixer = new THREE.AnimationMixer(player);
+        const mixer = new THREE.AnimationMixer(player);
 
-      // Idle پیش‌فرض
-      const idleAnim = await loader.loadAsync("/models/Breathing Idle.glb");
-      const idleClip = idleAnim.animations[0];
-      const idleAction = mixer.clipAction(idleClip);
-      idleAction.play();
-
-      // تابع اجرای انیمیشن
-      const playAnimation = async (file: string) => {
-        const anim = await loader.loadAsync(`/models/${file}`);
-        if (anim.animations.length > 0) {
-          mixer.stopAllAction();
-          const clip = anim.animations[0];
-          const action = mixer.clipAction(clip);
-          action.reset().play();
-
-          // بعد از 3 ثانیه برگرد به Idle
-          setTimeout(() => {
-            mixer.stopAllAction();
-            idleAction.reset().play();
-            player.position.set(0, 0, 0);
-            player.scale.set(1.5, 1.5, 1.5);
-          }, 3000);
+        // Idle پیش‌فرض
+        let idleAction: THREE.AnimationAction | null = null;
+        try {
+          const idleAnim = await loader.loadAsync("/models/Breathing Idle.glb");
+          if (idleAnim.animations.length > 0) {
+            const idleClip = idleAnim.animations[0];
+            idleAction = mixer.clipAction(idleClip);
+            idleAction.play();
+            console.log("Idle animation loaded successfully.");
+          } else {
+            console.warn("Idle animation file has no clips.");
+          }
+        } catch (err) {
+          console.error("Failed to load Idle animation:", err);
         }
-      };
 
-      // دکمه‌ها
-      document.getElementById("btn-walk")?.addEventListener("click", () => playAnimation("Catwalk Walk Forward Arc 90L.glb"));
-      document.getElementById("btn-run")?.addEventListener("click", () => playAnimation("Running.glb"));
-      document.getElementById("btn-fast-run")?.addEventListener("click", () => playAnimation("Fast Run.glb"));
-      document.getElementById("btn-jump")?.addEventListener("click", () => playAnimation("Jumping.glb"));
-      document.getElementById("btn-punch")?.addEventListener("click", () => playAnimation("Combo Punch.glb"));
-      document.getElementById("btn-elbow")?.addEventListener("click", () => playAnimation("Punch To Elbow Combo.glb"));
-      document.getElementById("btn-kick")?.addEventListener("click", () => playAnimation("Mma Kick.glb"));
-      document.getElementById("btn-flip-kick")?.addEventListener("click", () => playAnimation("Flip Kick.glb"));
-      document.getElementById("btn-hit")?.addEventListener("click", () => playAnimation("Kidney Hit.glb"));
-      document.getElementById("btn-death-f")?.addEventListener("click", () => playAnimation("Standing Death Forward.glb"));
-      document.getElementById("btn-death-b")?.addEventListener("click", () => playAnimation("Standing Death Backward.glb"));
-      document.getElementById("btn-react")?.addEventListener("click", () => playAnimation("Standing React Small From Right.glb"));
-      document.getElementById("btn-twist")?.addEventListener("click", () => playAnimation("Catwalk Idle To Twist R.glb"));
-      document.getElementById("btn-turn")?.addEventListener("click", () => playAnimation("Catwalk Walk Forward Turn 90L.glb"));
+        // تابع اجرای انیمیشن با هندلینگ خطا
+        const playAnimation = async (file: string) => {
+          try {
+            const anim = await loader.loadAsync(`/models/${file}`);
+            if (anim.animations.length > 0) {
+              mixer.stopAllAction();
+              const clip = anim.animations[0];
+              const action = mixer.clipAction(clip);
+              action.reset().play();
+              console.log(`Playing animation: ${file}`);
 
-      const clock = new THREE.Clock();
-      const animate = () => {
-        requestAnimationFrame(animate);
-        const delta = clock.getDelta();
-        mixer.update(delta);
-        controls.update();
-        renderer.render(scene, camera);
-      };
-      animate();
+              // بعد از مدت زمان انیمیشن یا 3 ثانیه، برگشت به Idle
+              setTimeout(() => {
+                mixer.stopAllAction();
+                if (idleAction) {
+                  idleAction.reset().play();
+                  console.log("Returned to Idle.");
+                }
+                player.position.set(0, 0, 0);
+                player.scale.set(1.5, 1.5, 1.5);
+              }, Math.min(clip.duration * 1000, 3000));
+            } else {
+              console.warn(`Animation file ${file} has no clips.`);
+            }
+          } catch (err) {
+            console.error(`Failed to load animation ${file}:`, err);
+          }
+        };
+
+        // دکمه‌ها فقط یک بار bind می‌شن
+        const buttons: { id: string; file: string }[] = [
+          { id: "btn-walk", file: "Catwalk Walk Forward Arc 90L.glb" },
+          { id: "btn-run", file: "Running.glb" },
+          { id: "btn-fast-run", file: "Fast Run.glb" },
+          { id: "btn-jump", file: "Jumping.glb" },
+          { id: "btn-punch", file: "Combo Punch.glb" },
+          { id: "btn-elbow", file: "Punch To Elbow Combo.glb" },
+          { id: "btn-kick", file: "Mma Kick.glb" },
+          { id: "btn-flip-kick", file: "Flip Kick.glb" },
+          { id: "btn-hit", file: "Kidney Hit.glb" },
+          { id: "btn-death-f", file: "Standing Death Forward.glb" },
+          { id: "btn-death-b", file: "Standing Death Backward.glb" },
+          { id: "btn-react", file: "Standing React Small From Right.glb" },
+          { id: "btn-twist", file: "Catwalk Idle To Twist R.glb" },
+          { id: "btn-turn", file: "Catwalk Walk Forward Turn 90L.glb" },
+        ];
+
+        buttons.forEach(({ id, file }) => {
+          const btn = document.getElementById(id);
+          if (btn) {
+            btn.addEventListener("click", () => playAnimation(file));
+          }
+        });
+
+        const clock = new THREE.Clock();
+        const animate = () => {
+          requestAnimationFrame(animate);
+          const delta = clock.getDelta();
+          mixer.update(delta);
+          controls.update();
+          renderer.render(scene, camera);
+        };
+        animate();
+      } catch (err) {
+        console.error("Failed to load main model:", err);
+      }
     })();
 
     return () => {
@@ -118,4 +151,4 @@ export default function ChaosLane3D() {
       </div>
     </div>
   );
-}
+          }
