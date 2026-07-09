@@ -59,8 +59,16 @@ export default function ChaosLane3D() {
 
         // تابع اجرای انیمیشن با هندلینگ خطا
         const playAnimation = async (file: string) => {
+          const url = `/models/${file}`;
           try {
-            const anim = await loader.loadAsync(`/models/${file}`);
+            // اول چک کن فایل واقعاً وجود داره
+            const res = await fetch(url);
+            if (!res.ok) {
+              console.error(`File not found or server error: ${url}, status: ${res.status}`);
+              return;
+            }
+
+            const anim = await loader.loadAsync(url);
             if (anim.animations.length > 0) {
               mixer.stopAllAction();
               const clip = anim.animations[0];
@@ -151,4 +159,4 @@ export default function ChaosLane3D() {
       </div>
     </div>
   );
-          }
+              }
