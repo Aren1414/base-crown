@@ -1,12 +1,15 @@
 'use client';
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 
 export default function ChaosLane3D() {
   const mountRef = useRef<HTMLDivElement>(null);
+
+  // وضعیت Joystick
+  const [joystick, setJoystick] = useState({ x: 0, y: 0 });
 
   useEffect(() => {
     if (!mountRef.current) return;
@@ -49,7 +52,7 @@ export default function ChaosLane3D() {
         const glbModel = await loader.loadAsync("/models/modeling1.glb");
         const player = glbModel.scene;
 
-        // شارپ کردن تکسچرها — نسخه کاملاً اصلاح‌شده
+        // شارپ کردن تکسچرها
         player.traverse((obj) => {
           if (obj instanceof THREE.Mesh && obj.material && obj.material.map) {
             const map = obj.material.map;
@@ -92,8 +95,6 @@ export default function ChaosLane3D() {
               setTimeout(() => {
                 mixer.stopAllAction();
                 idleAction?.reset().play();
-                player.position.set(0, 0, 0);
-                player.scale.set(1.5, 1.5, 1.5);
               }, Math.min(clip.duration * 1000, 3000));
             }
           } catch {}
@@ -125,8 +126,16 @@ export default function ChaosLane3D() {
         const clock = new THREE.Clock();
         const animate = () => {
           requestAnimationFrame(animate);
+
           const delta = clock.getDelta();
           mixer.update(delta);
+
+          // حرکت با Joystick
+          if (joystick.x !== 0 || joystick.y !== 0) {
+            player.position.x += joystick.x * 0.05;
+            player.position.z += joystick.y * 0.05;
+          }
+
           controls.update();
           renderer.render(scene, camera);
         };
@@ -137,35 +146,46 @@ export default function ChaosLane3D() {
     return () => {
       renderer.dispose();
     };
-  }, []);
+  }, [joystick]);
+
+  // Joystick کنترل
+  const handleJoystick = (e: any) => {
+    const rect = e.target.getBoundingClientRect();
+    const x = e.touches[0].clientX - (rect.left + rect.width / 2);
+    const y = e.touches[0].clientY - (rect.top + rect.height / 2);
+
+    setJoystick({
+      x: Math.max(-1, Math.min(1, x / 40)),
+      y: Math.max(-1, Math.min(1, y / 40)),
+    });
+  };
+
+  const resetJoystick = () => {
+    setJoystick({ x: 0, y: 0 });
+  };
 
   return (
     <div className="w-full h-screen bg-black">
       <div ref={mountRef} className="w-full h-full" />
 
-      {/* دکمه‌های جهت سمت چپ */}
-      <div className="absolute bottom-6 left-6 flex flex-col gap-3">
-        <button className="w-14 h-14 bg-gray-700 text-white rounded-full">←</button>
-        <button className="w-14 h-14 bg-gray-700 text-white rounded-full">→</button>
+      {/* Joystick سمت چپ */}
+      <div
+        className="absolute bottom-10 left-10 w-32 h-32 bg-white/10 rounded-full flex items-center justify-center"
+        onTouchMove={handleJoystick}
+        onTouchEnd={resetJoystick}
+      >
+        <div className="w-16 h-16 bg-white/40 rounded-full"></div>
       </div>
 
-      {/* دکمه‌های حرکات سمت راست */}
-      <div className="absolute bottom-6 right-6 grid grid-cols-2 gap-3">
-        <button id="btn-walk" className="px-4 py-2 bg-gray-700 text-white rounded-full">Walk</button>
-        <button id="btn-run" className="px-4 py-2 bg-gray-700 text-white rounded-full">Run</button>
-        <button id="btn-fast-run" className="px-4 py-2 bg-gray-700 text-white rounded-full">Fast</button>
-        <button id="btn-jump" className="px-4 py-2 bg-gray-700 text-white rounded-full">Jump</button>
-        <button id="btn-punch" className="px-4 py-2 bg-gray-700 text-white rounded-full">Punch</button>
-        <button id="btn-elbow" className="px-4 py-2 bg-gray-700 text-white rounded-full">Elbow</button>
-        <button id="btn-kick" className="px-4 py-2 bg-gray-700 text-white rounded-full">Kick</button>
-        <button id="btn-flip-kick" className="px-4 py-2 bg-gray-700 text-white rounded-full">Flip</button>
-        <button id="btn-hit" className="px-4 py-2 bg-gray-700 text-white rounded-full">Hit</button>
-        <button id="btn-death-f" className="px-4 py-2 bg-gray-700 text-white rounded-full">Death F</button>
-        <button id="btn-death-b" className="px-4 py-2 bg-gray-700 text-white rounded-full">Death B</button>
-        <button id="btn-react" className="px-4 py-2 bg-gray-700 text-white rounded-full">React</button>
-        <button id="btn-twist" className="px-4 py-2 bg-gray-700 text-white rounded-full">Twist</button>
-        <button id="btn-turn" className="px-4 py-2 bg-gray-700 text-white rounded-full">Turn</button>
+      {/* دکمه‌های اکشن سمت راست */}
+      <div className="absolute bottom-10 right-10 grid grid-cols-2 gap-4">
+        <button id="btn-walk" className="w-20 h-20 bg-blue-600 text-white rounded-full">Walk</button>
+        <button id="btn-run" className="w-20 h-20 bg-green-600 text-white rounded-full">Run</button>
+        <button id="btn-jump" className="w-20 h-20 bg-yellow-500 text-black rounded-full">Jump</button>
+        <button id="btn-punch" className="w-20 h-20 bg-red-600 text-white rounded-full">Punch</button>
+        <button id="btn-kick" className="w-20 h-20 bg-purple-600 text-white rounded-full">Kick</button>
+        <button id="btn-hit" className="w-20 h-20 bg-orange-600 text-white rounded-full">Hit</button>
       </div>
     </div>
   );
-                  }
+              }
