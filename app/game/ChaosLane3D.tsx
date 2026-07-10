@@ -14,16 +14,30 @@ export default function ChaosLane3D() {
     const scene = new THREE.Scene();
     scene.background = new THREE.Color("#000000");
 
-    const camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 200);
+    const camera = new THREE.PerspectiveCamera(
+      65,
+      window.innerWidth / window.innerHeight,
+      0.1,
+      200
+    );
     camera.position.set(0, 2, 6);
 
     const renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.15;
+    renderer.setSize(window.innerWidth, window.innerHeight, false);
+
     mountRef.current.appendChild(renderer.domElement);
 
-    const light = new THREE.DirectionalLight(0xffffff, 1);
-    light.position.set(5, 10, 5);
-    scene.add(light);
+    // نور حرفه‌ای
+    const keyLight = new THREE.DirectionalLight(0xffffff, 1.4);
+    keyLight.position.set(3, 8, 5);
+    scene.add(keyLight);
+
+    const fillLight = new THREE.HemisphereLight(0xffffff, 0x444444, 0.8);
+    scene.add(fillLight);
 
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
@@ -32,16 +46,25 @@ export default function ChaosLane3D() {
       const loader = new GLTFLoader();
 
       try {
-        // مدل اصلی
         const glbModel = await loader.loadAsync("/models/modeling1.glb");
         const player = glbModel.scene;
+
+        // شارپ کردن تکسچرها
+        player.traverse((obj) => {
+          if (obj.isMesh && obj.material.map) {
+            obj.material.map.generateMipmaps = true;
+            obj.material.map.minFilter = THREE.LinearMipmapLinearFilter;
+            obj.material.map.magFilter = THREE.LinearFilter;
+            obj.material.map.needsUpdate = true;
+          }
+        });
+
         player.scale.set(1.5, 1.5, 1.5);
         player.position.set(0, 0, 0);
         scene.add(player);
 
         const mixer = new THREE.AnimationMixer(player);
 
-        // Idle پیش‌فرض
         let idleAction: THREE.AnimationAction | null = null;
         try {
           const idleAnim = await loader.loadAsync("/models/Breathing Idle.glb");
@@ -49,24 +72,14 @@ export default function ChaosLane3D() {
             const idleClip = idleAnim.animations[0];
             idleAction = mixer.clipAction(idleClip);
             idleAction.play();
-            console.log("Idle animation loaded successfully.");
-          } else {
-            console.warn("Idle animation file has no clips.");
           }
-        } catch (err) {
-          console.error("Failed to load Idle animation:", err);
-        }
+        } catch {}
 
-        // تابع اجرای انیمیشن با هندلینگ خطا
         const playAnimation = async (file: string) => {
           const url = `/models/${file}`;
           try {
-            // اول چک کن فایل واقعاً وجود داره
             const res = await fetch(url);
-            if (!res.ok) {
-              console.error(`File not found or server error: ${url}, status: ${res.status}`);
-              return;
-            }
+            if (!res.ok) return;
 
             const anim = await loader.loadAsync(url);
             if (anim.animations.length > 0) {
@@ -74,28 +87,18 @@ export default function ChaosLane3D() {
               const clip = anim.animations[0];
               const action = mixer.clipAction(clip);
               action.reset().play();
-              console.log(`Playing animation: ${file}`);
 
-              // بعد از مدت زمان انیمیشن یا 3 ثانیه، برگشت به Idle
               setTimeout(() => {
                 mixer.stopAllAction();
-                if (idleAction) {
-                  idleAction.reset().play();
-                  console.log("Returned to Idle.");
-                }
+                idleAction?.reset().play();
                 player.position.set(0, 0, 0);
                 player.scale.set(1.5, 1.5, 1.5);
               }, Math.min(clip.duration * 1000, 3000));
-            } else {
-              console.warn(`Animation file ${file} has no clips.`);
             }
-          } catch (err) {
-            console.error(`Failed to load animation ${file}:`, err);
-          }
+          } catch {}
         };
 
-        // دکمه‌ها فقط یک بار bind می‌شن
-        const buttons: { id: string; file: string }[] = [
+        const buttons = [
           { id: "btn-walk", file: "Catwalk Walk Forward Arc 90L.glb" },
           { id: "btn-run", file: "Running.glb" },
           { id: "btn-fast-run", file: "Fast Run.glb" },
@@ -114,9 +117,8 @@ export default function ChaosLane3D() {
 
         buttons.forEach(({ id, file }) => {
           const btn = document.getElementById(id);
-          if (btn) {
-            btn.addEventListener("click", () => playAnimation(file));
-          }
+          btn?.addEventListener("touchstart", () => playAnimation(file));
+          btn?.addEventListener("mousedown", () => playAnimation(file));
         });
 
         const clock = new THREE.Clock();
@@ -128,9 +130,7 @@ export default function ChaosLane3D() {
           renderer.render(scene, camera);
         };
         animate();
-      } catch (err) {
-        console.error("Failed to load main model:", err);
-      }
+      } catch {}
     })();
 
     return () => {
@@ -141,22 +141,30 @@ export default function ChaosLane3D() {
   return (
     <div className="w-full h-screen bg-black">
       <div ref={mountRef} className="w-full h-full" />
-      <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 flex flex-wrap gap-2">
-        <button id="btn-walk" className="px-3 py-1 bg-gray-700 text-white rounded">Walk</button>
-        <button id="btn-run" className="px-3 py-1 bg-gray-700 text-white rounded">Run</button>
-        <button id="btn-fast-run" className="px-3 py-1 bg-gray-700 text-white rounded">Fast Run</button>
-        <button id="btn-jump" className="px-3 py-1 bg-gray-700 text-white rounded">Jump</button>
-        <button id="btn-punch" className="px-3 py-1 bg-gray-700 text-white rounded">Punch</button>
-        <button id="btn-elbow" className="px-3 py-1 bg-gray-700 text-white rounded">Punch+Elbow</button>
-        <button id="btn-kick" className="px-3 py-1 bg-gray-700 text-white rounded">Kick</button>
-        <button id="btn-flip-kick" className="px-3 py-1 bg-gray-700 text-white rounded">Flip Kick</button>
-        <button id="btn-hit" className="px-3 py-1 bg-gray-700 text-white rounded">Hit</button>
-        <button id="btn-death-f" className="px-3 py-1 bg-gray-700 text-white rounded">Death F</button>
-        <button id="btn-death-b" className="px-3 py-1 bg-gray-700 text-white rounded">Death B</button>
-        <button id="btn-react" className="px-3 py-1 bg-gray-700 text-white rounded">React</button>
-        <button id="btn-twist" className="px-3 py-1 bg-gray-700 text-white rounded">Twist</button>
-        <button id="btn-turn" className="px-3 py-1 bg-gray-700 text-white rounded">Turn</button>
+
+      {/* دکمه‌های جهت سمت چپ */}
+      <div className="absolute bottom-6 left-6 flex flex-col gap-3">
+        <button className="w-14 h-14 bg-gray-700 text-white rounded-full">←</button>
+        <button className="w-14 h-14 bg-gray-700 text-white rounded-full">→</button>
+      </div>
+
+      {/* دکمه‌های حرکات سمت راست */}
+      <div className="absolute bottom-6 right-6 grid grid-cols-2 gap-3">
+        <button id="btn-walk" className="px-4 py-2 bg-gray-700 text-white rounded-full">Walk</button>
+        <button id="btn-run" className="px-4 py-2 bg-gray-700 text-white rounded-full">Run</button>
+        <button id="btn-fast-run" className="px-4 py-2 bg-gray-700 text-white rounded-full">Fast</button>
+        <button id="btn-jump" className="px-4 py-2 bg-gray-700 text-white rounded-full">Jump</button>
+        <button id="btn-punch" className="px-4 py-2 bg-gray-700 text-white rounded-full">Punch</button>
+        <button id="btn-elbow" className="px-4 py-2 bg-gray-700 text-white rounded-full">Elbow</button>
+        <button id="btn-kick" className="px-4 py-2 bg-gray-700 text-white rounded-full">Kick</button>
+        <button id="btn-flip-kick" className="px-4 py-2 bg-gray-700 text-white rounded-full">Flip</button>
+        <button id="btn-hit" className="px-4 py-2 bg-gray-700 text-white rounded-full">Hit</button>
+        <button id="btn-death-f" className="px-4 py-2 bg-gray-700 text-white rounded-full">Death F</button>
+        <button id="btn-death-b" className="px-4 py-2 bg-gray-700 text-white rounded-full">Death B</button>
+        <button id="btn-react" className="px-4 py-2 bg-gray-700 text-white rounded-full">React</button>
+        <button id="btn-twist" className="px-4 py-2 bg-gray-700 text-white rounded-full">Twist</button>
+        <button id="btn-turn" className="px-4 py-2 bg-gray-700 text-white rounded-full">Turn</button>
       </div>
     </div>
   );
-              }
+           }
