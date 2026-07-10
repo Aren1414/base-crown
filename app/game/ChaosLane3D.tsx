@@ -8,17 +8,20 @@ import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 export default function ChaosLane3D() {
   const mountRef = useRef<HTMLDivElement>(null);
 
-  // وضعیت Joystick
   const joyRef = useRef({ x: 0, y: 0 });
+  const playerRef = useRef<THREE.Object3D | null>(null);
+  const mixerRef = useRef<THREE.AnimationMixer | null>(null);
+  const idleRef = useRef<THREE.AnimationAction | null>(null);
+  const walkRef = useRef<THREE.AnimationAction | null>(null);
+  const runRef = useRef<THREE.AnimationAction | null>(null);
+  const currentActionRef = useRef<THREE.AnimationAction | null>(null);
 
   useEffect(() => {
     if (!mountRef.current) return;
 
-    // صحنه
     const scene = new THREE.Scene();
     scene.background = new THREE.Color("#000000");
 
-    // دوربین – کاراکتر دقیقاً وسط
     const camera = new THREE.PerspectiveCamera(
       65,
       window.innerWidth / window.innerHeight,
@@ -28,17 +31,14 @@ export default function ChaosLane3D() {
     camera.position.set(0, 2, 6);
     camera.lookAt(0, 1, 0);
 
-    // رندرر – کیفیت موبایل
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.15;
-    renderer.setSize(window.innerWidth, window.innerHeight, false);
-
+    renderer.setSize(window.innerWidth, window.innerHeight);
     mountRef.current.appendChild(renderer.domElement);
 
-    // نور حرفه‌ای
     const keyLight = new THREE.DirectionalLight(0xffffff, 1.4);
     keyLight.position.set(3, 8, 5);
     scene.add(keyLight);
@@ -46,7 +46,6 @@ export default function ChaosLane3D() {
     const fillLight = new THREE.HemisphereLight(0xffffff, 0x444444, 0.8);
     scene.add(fillLight);
 
-    // کنترل دوربین – فقط چرخش، نه جابه‌جایی
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enablePan = false;
     controls.enableZoom = false;
@@ -58,8 +57,6 @@ export default function ChaosLane3D() {
 
       const glbModel = await loader.loadAsync("/models/modeling1.glb");
       const player = glbModel.scene;
-
-      // شارپ کردن تکسچرها
       player.traverse((obj) => {
         if (obj instanceof THREE.Mesh && obj.material && obj.material.map) {
           const map = obj.material.map;
@@ -69,32 +66,36 @@ export default function ChaosLane3D() {
           map.needsUpdate = true;
         }
       });
-
       player.scale.set(1.5, 1.5, 1.5);
       player.position.set(0, 0, 0);
       scene.add(player);
+      playerRef.current = player;
 
       const mixer = new THREE.AnimationMixer(player);
+      mixerRef.current = mixer;
 
-      // Idle
       const idleAnim = await loader.loadAsync("/models/Breathing Idle.glb");
-      const idleAction = mixer.clipAction(idleAnim.animations[0]);
-      idleAction.play();
+      idleRef.current = mixer.clipAction(idleAnim.animations[0]);
+      idleRef.current.play();
+      currentActionRef.current = idleRef.current;
 
-      // اجرای انیمیشن
-      const playAnim = async (file: string) => {
+      const walkAnim = await loader.loadAsync("/models/Catwalk Walk Forward Arc 90L.glb");
+      walkRef.current = mixer.clipAction(walkAnim.animations[0]);
+
+      const runAnim = await loader.loadAsync("/models/Running.glb");
+      runRef.current = mixer.clipAction(runAnim.animations[0]);
+
+      const playAnimOnce = async (file: string) => {
+        if (!mixerRef.current) return;
         const anim = await loader.loadAsync(`/models/${file}`);
-        mixer.stopAllAction();
-        const action = mixer.clipAction(anim.animations[0]);
+        const action = mixerRef.current.clipAction(anim.animations[0]);
         action.reset().play();
-
         setTimeout(() => {
-          mixer.stopAllAction();
-          idleAction.reset().play();
+          action.stop();
+          if (currentActionRef.current) currentActionRef.current.play();
         }, Math.min(anim.animations[0].duration * 1000, 3000));
       };
 
-      // دکمه‌های اکشن
       const actionButtons = [
         { id: "btn-punch", file: "Combo Punch.glb" },
         { id: "btn-kick", file: "Mma Kick.glb" },
@@ -104,8 +105,7 @@ export default function ChaosLane3D() {
       actionButtons.forEach(({ id, file }) => {
         const btn = document.getElementById(id);
         if (!btn) return;
-
-        const handler = () => playAnim(file);
+        const handler = () => playAnimOnce(file);
         btn.addEventListener("touchstart", handler, { passive: true });
         btn.addEventListener("mousedown", handler);
       });
@@ -117,10 +117,26 @@ export default function ChaosLane3D() {
         const delta = clock.getDelta();
         mixer.update(delta);
 
-        // حرکت با Joystick
         const j = joyRef.current;
-        player.position.x += j.x * 0.08;
-        player.position.z += j.y * 0.08;
+        if (playerRef.current) {
+          playerRef.current.position.x += j.x * 0.08;
+          playerRef.current.position.z += j.y * 0.08;
+        }
+
+        const speed = Math.sqrt(j.x * j.x + j.y * j.y);
+        let targetAction: THREE.AnimationAction | null = null;
+        if (speed < 0.1) {
+          targetAction = idleRef.current;
+        } else if (speed < 0.6) {
+          targetAction = walkRef.current;
+        } else {
+          targetAction = runRef.current;
+        }
+        if (targetAction && targetAction !== currentActionRef.current) {
+          currentActionRef.current?.stop();
+          targetAction.reset().play();
+          currentActionRef.current = targetAction;
+        }
 
         controls.update();
         renderer.render(scene, camera);
@@ -131,14 +147,11 @@ export default function ChaosLane3D() {
     return () => renderer.dispose();
   }, []);
 
-  // کنترل Joystick
-  const handleJoy = (e: any) => {
+  const handleJoy = (e: React.TouchEvent<HTMLDivElement>) => {
     e.preventDefault();
-
-    const rect = e.target.getBoundingClientRect();
+    const rect = e.currentTarget.getBoundingClientRect();
     const x = e.touches[0].clientX - (rect.left + rect.width / 2);
     const y = e.touches[0].clientY - (rect.top + rect.height / 2);
-
     joyRef.current = {
       x: Math.max(-1, Math.min(1, x / 50)),
       y: Math.max(-1, Math.min(1, y / 50)),
@@ -150,20 +163,21 @@ export default function ChaosLane3D() {
   };
 
   return (
-    <div className="w-full h-screen bg-black relative overflow-hidden">
+    <div className="fixed inset-0 w-full h-full bg-black overflow-hidden">
       <div ref={mountRef} className="w-full h-full" />
 
-      {/* Joystick AAA – کوچکتر، حرفه‌ای */}
+      {/* Joystick – موبایل، کوچیک، حرفه‌ای */}
       <div
-        className="absolute bottom-10 left-10 w-28 h-28 rounded-full bg-black/30 border border-white/10 backdrop-blur-xl shadow-[0_0_20px_rgba(0,0,0,.45)] flex items-center justify-center"
+        className="absolute bottom-8 left-8 w-28 h-28 rounded-full bg-black/30 border border-white/10 backdrop-blur-xl shadow-[0_0_20px_rgba(0,0,0,.45)] flex items-center justify-center touch-none"
         onTouchMove={handleJoy}
         onTouchEnd={resetJoy}
+        onTouchStart={handleJoy}
       >
-        <div className="w-12 h-12 rounded-full bg-zinc-300/60 shadow-xl"></div>
+        <div className="w-12 h-12 rounded-full bg-zinc-300/60 shadow-xl" />
       </div>
 
-      {/* دکمه‌های اکشن – چیدمان مثلثی */}
-      <div className="absolute bottom-10 right-10 flex flex-col gap-4">
+      {/* دکمه‌های اکشن – مثلثی، شیشه‌ای، بدون متن */}
+      <div className="absolute bottom-8 right-8 flex flex-col gap-4">
         <div className="flex gap-4">
           <button
             id="btn-punch"
@@ -173,7 +187,6 @@ export default function ChaosLane3D() {
               <path d="M4 14l6 6 12-12-2-2-10 10-4-4z" />
             </svg>
           </button>
-
           <button
             id="btn-kick"
             className="w-14 h-14 rounded-full bg-black/30 border border-white/15 backdrop-blur-xl shadow-xl flex items-center justify-center active:scale-90 transition-all"
@@ -183,7 +196,6 @@ export default function ChaosLane3D() {
             </svg>
           </button>
         </div>
-
         <button
           id="btn-jump"
           className="w-14 h-14 rounded-full bg-black/30 border border-white/15 backdrop-blur-xl shadow-xl flex items-center justify-center active:scale-90 transition-all mx-auto"
@@ -195,4 +207,4 @@ export default function ChaosLane3D() {
       </div>
     </div>
   );
-     }
+      }
