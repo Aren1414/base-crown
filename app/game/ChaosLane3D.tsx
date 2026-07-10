@@ -49,13 +49,14 @@ export default function ChaosLane3D() {
         const glbModel = await loader.loadAsync("/models/modeling1.glb");
         const player = glbModel.scene;
 
-        // شارپ کردن تکسچرها
+        // شارپ کردن تکسچرها — نسخه کاملاً اصلاح‌شده
         player.traverse((obj) => {
-          if (obj.isMesh && obj.material.map) {
-            obj.material.map.generateMipmaps = true;
-            obj.material.map.minFilter = THREE.LinearMipmapLinearFilter;
-            obj.material.map.magFilter = THREE.LinearFilter;
-            obj.material.map.needsUpdate = true;
+          if (obj instanceof THREE.Mesh && obj.material && obj.material.map) {
+            const map = obj.material.map;
+            map.generateMipmaps = true;
+            map.minFilter = THREE.LinearMipmapLinearFilter;
+            map.magFilter = THREE.LinearFilter;
+            map.needsUpdate = true;
           }
         });
 
@@ -167,4 +168,4 @@ export default function ChaosLane3D() {
       </div>
     </div>
   );
-           }
+                  }
