@@ -33,7 +33,7 @@ export default function ChaosLane3D() {
 
       try {
         // مدل اصلی
-        const glbModel = await loader.loadAsync("/models/modeling.glb");
+        const glbModel = await loader.loadAsync("/models/modeling1.glb");
         const player = glbModel.scene;
         player.scale.set(1.5, 1.5, 1.5);
         player.position.set(0, 0, 0);
