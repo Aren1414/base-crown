@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
@@ -8,15 +8,14 @@ import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 export default function ChaosLane3D() {
   const mountRef = useRef<HTMLDivElement>(null);
 
-  // وضعیت Joystick
-  const [joystick, setJoystick] = useState({ x: 0, y: 0 });
-
   useEffect(() => {
     if (!mountRef.current) return;
 
+    // صحنه
     const scene = new THREE.Scene();
     scene.background = new THREE.Color("#000000");
 
+    // دوربین – کاراکتر دقیقاً وسط
     const camera = new THREE.PerspectiveCamera(
       65,
       window.innerWidth / window.innerHeight,
@@ -24,14 +23,15 @@ export default function ChaosLane3D() {
       200
     );
     camera.position.set(0, 2, 6);
+    camera.lookAt(0, 1, 0);
 
+    // رندرر – کیفیت موبایل درست
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.15;
     renderer.setSize(window.innerWidth, window.innerHeight, false);
-
     mountRef.current.appendChild(renderer.domElement);
 
     // نور حرفه‌ای
@@ -42,17 +42,20 @@ export default function ChaosLane3D() {
     const fillLight = new THREE.HemisphereLight(0xffffff, 0x444444, 0.8);
     scene.add(fillLight);
 
+    // کنترل دوربین
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
+    controls.target.set(0, 1, 0);
 
     (async () => {
       const loader = new GLTFLoader();
 
       try {
+        // مدل اصلی
         const glbModel = await loader.loadAsync("/models/modeling1.glb");
         const player = glbModel.scene;
 
-        // شارپ کردن تکسچرها
+        // شارپ کردن تکسچرها – بدون ارور TS
         player.traverse((obj) => {
           if (obj instanceof THREE.Mesh && obj.material && obj.material.map) {
             const map = obj.material.map;
@@ -69,6 +72,7 @@ export default function ChaosLane3D() {
 
         const mixer = new THREE.AnimationMixer(player);
 
+        // Idle
         let idleAction: THREE.AnimationAction | null = null;
         try {
           const idleAnim = await loader.loadAsync("/models/Breathing Idle.glb");
@@ -79,6 +83,7 @@ export default function ChaosLane3D() {
           }
         } catch {}
 
+        // اجرای انیمیشن
         const playAnimation = async (file: string) => {
           const url = `/models/${file}`;
           try {
@@ -95,20 +100,21 @@ export default function ChaosLane3D() {
               setTimeout(() => {
                 mixer.stopAllAction();
                 idleAction?.reset().play();
+                player.position.set(0, 0, 0);
+                player.scale.set(1.5, 1.5, 1.5);
               }, Math.min(clip.duration * 1000, 3000));
             }
           } catch {}
         };
 
+        // دکمه‌ها – فقط آیکون، کوچک، شفاف، حرفه‌ای
         const buttons = [
           { id: "btn-walk", file: "Catwalk Walk Forward Arc 90L.glb" },
           { id: "btn-run", file: "Running.glb" },
           { id: "btn-fast-run", file: "Fast Run.glb" },
           { id: "btn-jump", file: "Jumping.glb" },
           { id: "btn-punch", file: "Combo Punch.glb" },
-          { id: "btn-elbow", file: "Punch To Elbow Combo.glb" },
           { id: "btn-kick", file: "Mma Kick.glb" },
-          { id: "btn-flip-kick", file: "Flip Kick.glb" },
           { id: "btn-hit", file: "Kidney Hit.glb" },
           { id: "btn-death-f", file: "Standing Death Forward.glb" },
           { id: "btn-death-b", file: "Standing Death Backward.glb" },
@@ -119,23 +125,19 @@ export default function ChaosLane3D() {
 
         buttons.forEach(({ id, file }) => {
           const btn = document.getElementById(id);
-          btn?.addEventListener("touchstart", () => playAnimation(file));
-          btn?.addEventListener("mousedown", () => playAnimation(file));
+          if (!btn) return;
+
+          // لمس و کلیک – بدون فریز صفحه
+          const handler = () => playAnimation(file);
+          btn.addEventListener("touchstart", handler, { passive: true });
+          btn.addEventListener("mousedown", handler);
         });
 
         const clock = new THREE.Clock();
         const animate = () => {
           requestAnimationFrame(animate);
-
           const delta = clock.getDelta();
           mixer.update(delta);
-
-          // حرکت با Joystick
-          if (joystick.x !== 0 || joystick.y !== 0) {
-            player.position.x += joystick.x * 0.05;
-            player.position.z += joystick.y * 0.05;
-          }
-
           controls.update();
           renderer.render(scene, camera);
         };
@@ -146,46 +148,99 @@ export default function ChaosLane3D() {
     return () => {
       renderer.dispose();
     };
-  }, [joystick]);
-
-  // Joystick کنترل
-  const handleJoystick = (e: any) => {
-    const rect = e.target.getBoundingClientRect();
-    const x = e.touches[0].clientX - (rect.left + rect.width / 2);
-    const y = e.touches[0].clientY - (rect.top + rect.height / 2);
-
-    setJoystick({
-      x: Math.max(-1, Math.min(1, x / 40)),
-      y: Math.max(-1, Math.min(1, y / 40)),
-    });
-  };
-
-  const resetJoystick = () => {
-    setJoystick({ x: 0, y: 0 });
-  };
+  }, []);
 
   return (
-    <div className="w-full h-screen bg-black">
+    <div className="w-full h-screen bg-black relative overflow-hidden">
       <div ref={mountRef} className="w-full h-full" />
 
-      {/* Joystick سمت چپ */}
-      <div
-        className="absolute bottom-10 left-10 w-32 h-32 bg-white/10 rounded-full flex items-center justify-center"
-        onTouchMove={handleJoystick}
-        onTouchEnd={resetJoystick}
-      >
-        <div className="w-16 h-16 bg-white/40 rounded-full"></div>
-      </div>
-
-      {/* دکمه‌های اکشن سمت راست */}
-      <div className="absolute bottom-10 right-10 grid grid-cols-2 gap-4">
-        <button id="btn-walk" className="w-20 h-20 bg-blue-600 text-white rounded-full">Walk</button>
-        <button id="btn-run" className="w-20 h-20 bg-green-600 text-white rounded-full">Run</button>
-        <button id="btn-jump" className="w-20 h-20 bg-yellow-500 text-black rounded-full">Jump</button>
-        <button id="btn-punch" className="w-20 h-20 bg-red-600 text-white rounded-full">Punch</button>
-        <button id="btn-kick" className="w-20 h-20 bg-purple-600 text-white rounded-full">Kick</button>
-        <button id="btn-hit" className="w-20 h-20 bg-orange-600 text-white rounded-full">Hit</button>
+      {/* دکمه‌های اکشن سمت راست – استایل بازی حرفه‌ای */}
+      <div className="absolute bottom-8 right-8 grid grid-cols-3 gap-3">
+        {/* Walk */}
+        <button
+          id="btn-walk"
+          className="w-12 h-12 rounded-full bg-white/15 border border-white/40 flex items-center justify-center active:bg-white/30"
+        >
+          <span className="text-white text-xs">🚶</span>
+        </button>
+        {/* Run */}
+        <button
+          id="btn-run"
+          className="w-12 h-12 rounded-full bg-white/15 border border-white/40 flex items-center justify-center active:bg-white/30"
+        >
+          <span className="text-white text-xs">🏃</span>
+        </button>
+        {/* Fast */}
+        <button
+          id="btn-fast-run"
+          className="w-12 h-12 rounded-full bg-white/15 border border-white/40 flex items-center justify-center active:bg-white/30"
+        >
+          <span className="text-white text-xs">⚡</span>
+        </button>
+        {/* Jump */}
+        <button
+          id="btn-jump"
+          className="w-12 h-12 rounded-full bg-white/15 border border-white/40 flex items-center justify-center active:bg-white/30"
+        >
+          <span className="text-white text-xs">⬆️</span>
+        </button>
+        {/* Punch */}
+        <button
+          id="btn-punch"
+          className="w-12 h-12 rounded-full bg-white/15 border border-white/40 flex items-center justify-center active:bg-white/30"
+        >
+          <span className="text-white text-xs">✊</span>
+        </button>
+        {/* Kick */}
+        <button
+          id="btn-kick"
+          className="w-12 h-12 rounded-full bg-white/15 border border-white/40 flex items-center justify-center active:bg-white/30"
+        >
+          <span className="text-white text-xs">🦵</span>
+        </button>
+        {/* Hit */}
+        <button
+          id="btn-hit"
+          className="w-12 h-12 rounded-full bg-white/15 border border-white/40 flex items-center justify-center active:bg-white/30"
+        >
+          <span className="text-white text-xs">💥</span>
+        </button>
+        {/* Death F */}
+        <button
+          id="btn-death-f"
+          className="w-12 h-12 rounded-full bg-white/15 border border-white/40 flex items-center justify-center active:bg-white/30"
+        >
+          <span className="text-white text-xs">☠️</span>
+        </button>
+        {/* Death B */}
+        <button
+          id="btn-death-b"
+          className="w-12 h-12 rounded-full bg-white/15 border border-white/40 flex items-center justify-center active:bg-white/30"
+        >
+          <span className="text-white text-xs">↩️</span>
+        </button>
+        {/* React */}
+        <button
+          id="btn-react"
+          className="w-12 h-12 rounded-full bg-white/15 border border-white/40 flex items-center justify-center active:bg-white/30"
+        >
+          <span className="text-white text-xs">❗</span>
+        </button>
+        {/* Twist */}
+        <button
+          id="btn-twist"
+          className="w-12 h-12 rounded-full bg-white/15 border border-white/40 flex items-center justify-center active:bg-white/30"
+        >
+          <span className="text-white text-xs">🔄</span>
+        </button>
+        {/* Turn */}
+        <button
+          id="btn-turn"
+          className="w-12 h-12 rounded-full bg-white/15 border border-white/40 flex items-center justify-center active:bg-white/30"
+        >
+          <span className="text-white text-xs">↪️</span>
+        </button>
       </div>
     </div>
   );
-              }
+                         }
