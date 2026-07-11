@@ -21,13 +21,7 @@ export default function ChaosLane3D() {
     const scene = new THREE.Scene();
     scene.background = new THREE.Color("#000000");
 
-    const camera = new THREE.PerspectiveCamera(
-      65,
-      window.innerWidth / window.innerHeight,
-      0.1,
-      200
-    );
-
+    const camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 200);
     camera.position.set(0, 2.2, 8);
     camera.lookAt(0, 1.6, 0);
 
@@ -47,8 +41,7 @@ export default function ChaosLane3D() {
     scene.add(fillLight);
 
     (async () => {
-      const { playerGroup, mixer, playAction, setMoveBySpeed } =
-        await loadPlayerModel(scene);
+      const { playerGroup, mixer, playAction, setMoveBySpeed } = await loadPlayerModel(scene);
       mixerRef.current = mixer;
       playActionRef.current = playAction;
       setMoveBySpeedRef.current = setMoveBySpeed;
@@ -97,7 +90,7 @@ export default function ChaosLane3D() {
             const tt = (t - 0.35) / 0.4;
             const radius = 2.0;
             const height = 2.4;
-            const angle = 0 + tt * Math.PI;
+            const angle = tt * Math.PI;
             const x = Math.sin(angle) * radius;
             const z = Math.cos(angle) * radius;
             camera.position.set(x, height, z);
@@ -116,9 +109,7 @@ export default function ChaosLane3D() {
               playerGroupRef.current.position.y = -0.4;
             }
 
-            if (tt >= 1.0) {
-              introDone = true;
-            }
+            if (tt >= 1.0) introDone = true;
           }
 
           camera.lookAt(0, 1.8, 0);
@@ -207,4 +198,4 @@ export default function ChaosLane3D() {
       </div>
     </div>
   );
-}
+                                               }
