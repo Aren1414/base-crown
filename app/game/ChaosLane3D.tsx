@@ -73,18 +73,22 @@ export default function ChaosLane3D() {
       const idleAnim = await loader.loadAsync("/models/Breathing Idle.glb");
       idleRef.current = mixer.clipAction(idleAnim.animations[0]);
       idleRef.current.play();
+      idleRef.current.setLoop(THREE.LoopRepeat, Infinity);
       currentActionRef.current = idleRef.current;
 
       const walkAnim = await loader.loadAsync("/models/Catwalk Walk Forward Arc 90L.glb");
       walkRef.current = mixer.clipAction(walkAnim.animations[0]);
+      walkRef.current.setLoop(THREE.LoopRepeat, Infinity);
 
       const runAnim = await loader.loadAsync("/models/Running.glb");
       runRef.current = mixer.clipAction(runAnim.animations[0]);
+      runRef.current.setLoop(THREE.LoopRepeat, Infinity);
 
       const playAnimOnce = async (file: string) => {
         if (!mixerRef.current || !currentActionRef.current) return;
         const anim = await loader.loadAsync(`/models/${file}`);
         const temp = mixerRef.current.clipAction(anim.animations[0]);
+        temp.reset();
         temp.setLoop(THREE.LoopOnce, 1);
         temp.clampWhenFinished = true;
         currentActionRef.current.crossFadeTo(temp, 0.15, false);
@@ -113,6 +117,7 @@ export default function ChaosLane3D() {
 
       let introTime = 0;
       const introDuration = 4.0;
+      let introDone = false;
 
       const animate = () => {
         requestAnimationFrame(animate);
@@ -121,12 +126,19 @@ export default function ChaosLane3D() {
         mixer.update(delta);
 
         const j = joyRef.current;
-        if (playerRef.current) {
-          playerRef.current.position.x += j.x * 0.08;
-          playerRef.current.position.z += j.y * 0.08;
 
-          const angle = Math.atan2(j.x, j.y);
+        if (playerRef.current) {
+          const forward = new THREE.Vector3(0, 0, -1);
+          forward.applyAxisAngle(new THREE.Vector3(0, 1, 0), playerRef.current.rotation.y);
+          const right = new THREE.Vector3(1, 0, 0);
+          right.applyAxisAngle(new THREE.Vector3(0, 1, 0), playerRef.current.rotation.y);
+
+          const moveSpeed = 0.08;
+          playerRef.current.position.addScaledVector(forward, j.y * moveSpeed);
+          playerRef.current.position.addScaledVector(right, j.x * moveSpeed);
+
           if (Math.abs(j.x) > 0.05 || Math.abs(j.y) > 0.05) {
+            const angle = Math.atan2(j.x, j.y);
             playerRef.current.rotation.y = angle;
           }
         }
@@ -149,60 +161,62 @@ export default function ChaosLane3D() {
           currentActionRef.current = targetAction;
         }
 
-        introTime += delta;
-        const t = Math.min(introTime / introDuration, 1);
+        if (!introDone) {
+          introTime += delta;
+          const t = Math.min(introTime / introDuration, 1);
 
-        if (t <= 0.35) {
-          const tt = t / 0.35;
-          const farPos = new THREE.Vector3(0, 2.2, 8);
-          const closePos = new THREE.Vector3(0, 2.4, 2.0);
-          const currentPos = new THREE.Vector3().lerpVectors(farPos, closePos, tt);
-          camera.position.copy(currentPos);
-        } else if (t <= 0.75) {
-          const tt = (t - 0.35) / 0.4;
-          const radius = 2.0;
-          const height = 2.4;
-          const angle = 0 + tt * Math.PI;
-          const x = Math.sin(angle) * radius;
-          const z = Math.cos(angle) * radius;
-          camera.position.set(x, height, z);
-        } else {
-          const tt = (t - 0.75) / 0.25;
-          const startPos = new THREE.Vector3(0, 2.4, -2.0);
-          const endPos = new THREE.Vector3(0, 2.6, -6.0);
-          const currentPos = new THREE.Vector3().lerpVectors(startPos, endPos, tt);
-          camera.position.copy(currentPos);
+          if (t <= 0.35) {
+            const tt = t / 0.35;
+            const farPos = new THREE.Vector3(0, 2.2, 8);
+            const closePos = new THREE.Vector3(0, 2.4, 2.0);
+            const currentPos = new THREE.Vector3().lerpVectors(farPos, closePos, tt);
+            camera.position.copy(currentPos);
+          } else if (t <= 0.75) {
+            const tt = (t - 0.35) / 0.4;
+            const radius = 2.0;
+            const height = 2.4;
+            const angle = 0 + tt * Math.PI;
+            const x = Math.sin(angle) * radius;
+            const z = Math.cos(angle) * radius;
+            camera.position.set(x, height, z);
+          } else {
+            const tt = (t - 0.75) / 0.25;
+            const startPos = new THREE.Vector3(0, 2.4, -2.0);
+            const endPos = new THREE.Vector3(0, 2.6, -6.0);
+            const currentPos = new THREE.Vector3().lerpVectors(startPos, endPos, tt);
+            camera.position.copy(currentPos);
 
-          if (playerRef.current) {
-            const startScale = 1.6;
-            const endScale = 1.2;
-            const s = startScale + (endScale - startScale) * tt;
-            playerRef.current.scale.set(s, s, s);
-            playerRef.current.position.y = -0.4;
+            if (playerRef.current) {
+              const startScale = 1.6;
+              const endScale = 1.2;
+              const s = startScale + (endScale - startScale) * tt;
+              playerRef.current.scale.set(s, s, s);
+              playerRef.current.position.y = -0.4;
+            }
           }
 
           if (playerRef.current) {
-            const target = new THREE.Vector3(
+            const lookTarget = new THREE.Vector3(
               playerRef.current.position.x,
               playerRef.current.position.y + 1.8,
               playerRef.current.position.z
             );
-            const desired = new THREE.Vector3(
-              target.x,
-              target.y + 0.8,
-              target.z - 4
-            );
-            camera.position.lerp(desired, 0.08);
+            camera.lookAt(lookTarget);
           }
-        }
 
-        if (playerRef.current) {
-          const lookTarget = new THREE.Vector3(
-            playerRef.current.position.x,
-            playerRef.current.position.y + 1.8,
-            playerRef.current.position.z
-          );
-          camera.lookAt(lookTarget);
+          if (t >= 1) introDone = true;
+        } else {
+          if (playerRef.current) {
+            const target = new THREE.Vector3(
+              playerRef.current.position.x,
+              playerRef.current.position.y + 1.6,
+              playerRef.current.position.z
+            );
+            const offset = new THREE.Vector3(0, 1.0, -4.0);
+            const desired = target.clone().add(offset);
+            camera.position.lerp(desired, 0.12);
+            camera.lookAt(target);
+          }
         }
 
         renderer.render(scene, camera);
@@ -213,7 +227,7 @@ export default function ChaosLane3D() {
     return () => renderer.dispose();
   }, []);
 
-  const handleJoy = (e: any) => {
+  const handleJoy = (e: React.TouchEvent<HTMLDivElement>) => {
     e.preventDefault();
     const rect = e.currentTarget.getBoundingClientRect();
     const x = e.touches[0].clientX - (rect.left + rect.width / 2);
@@ -271,4 +285,4 @@ export default function ChaosLane3D() {
       </div>
     </div>
   );
-          }
+      }
