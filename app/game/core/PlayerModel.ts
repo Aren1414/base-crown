@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { GLTFLoader } from "@/app/lib/GLTFLoader";
 
-export const MODEL_URL = "/models/org_models.glb";
+export const MODEL_URL = "/models/modeling1.glb";
 
 type ActionsMap = {
   [key: string]: THREE.AnimationAction;
@@ -20,8 +20,9 @@ export async function loadPlayerModel(scene: THREE.Scene) {
   });
 
   const model = gltf.scene;
-  model.scale.set(0.02, 0.02, 0.02);
-  model.position.set(0, 0, 0);
+
+  model.scale.set(1.6, 1.6, 1.6);
+  model.position.set(0, -0.3, 0);
   model.rotation.y = Math.PI;
 
   model.traverse((obj: any) => {
@@ -33,24 +34,25 @@ export async function loadPlayerModel(scene: THREE.Scene) {
 
   playerGroup.add(model);
 
-  const loadAnim = async (file: string, name: string) => {
+  const loadAnim = async (file: string, name: string, loopOnce = false) => {
     const animGltf = await new Promise<any>((resolve, reject) => {
       loader.load(`/models/${file}`, resolve, undefined, reject);
     });
     const clip = animGltf.animations[0];
     const action = mixer.clipAction(clip);
-    action.setLoop(THREE.LoopRepeat, Infinity);
+    action.setLoop(loopOnce ? THREE.LoopOnce : THREE.LoopRepeat, loopOnce ? 1 : Infinity);
+    action.clampWhenFinished = loopOnce;
     actions[name] = action;
   };
 
   await loadAnim("Breathing Idle.glb", "idle");
   await loadAnim("Catwalk Walk Forward Arc 90L.glb", "walk");
   await loadAnim("Running.glb", "run");
-  await loadAnim("Combo Punch.glb", "punch");
-  await loadAnim("Mma Kick.glb", "kick");
-  await loadAnim("Jumping.glb", "jump");
-  await loadAnim("Death.glb", "death");
-  await loadAnim("Landing.glb", "landing");
+  await loadAnim("Combo Punch.glb", "punch", true);
+  await loadAnim("Mma Kick.glb", "kick", true);
+  await loadAnim("Jumping.glb", "jump", true);
+  await loadAnim("Death.glb", "death", true);
+  await loadAnim("Landing.glb", "landing", true);
 
   let current: THREE.AnimationAction | null = actions["idle"];
   if (current) current.play();
@@ -62,9 +64,19 @@ export async function loadPlayerModel(scene: THREE.Scene) {
     if (current) {
       current.crossFadeTo(next, 0.2, false);
     }
-    next.play();
+    next.reset().play();
     current = next;
   };
 
-  return { playerGroup, mixer, playAction };
+  const setMoveBySpeed = (speed: number) => {
+    let target = actions["idle"];
+    if (speed > 0.1 && speed < 0.6) target = actions["walk"];
+    else if (speed >= 0.6) target = actions["run"];
+    if (!target || current === target) return;
+    current?.crossFadeTo(target, 0.2, false);
+    target.play();
+    current = target;
+  };
+
+  return { playerGroup, mixer, playAction, setMoveBySpeed };
 }
