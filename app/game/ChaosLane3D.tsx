@@ -30,7 +30,7 @@ export default function ChaosLane3D() {
 
     // شروع: دور، روبه‌روی کاراکتر
     camera.position.set(0, 2.2, 8);
-    camera.lookAt(0, 1.2, 0);
+    camera.lookAt(0, 1.6, 0);
 
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -65,7 +65,8 @@ export default function ChaosLane3D() {
 
       // اندازه اولیه برای ورود
       player.scale.set(1.6, 1.6, 1.6);
-      player.position.set(0, 0, 0);
+      // کمی پایین‌تر تا بعد از چرخش، کاراکتر جلو نباشد
+      player.position.set(0, -0.3, 0);
       scene.add(player);
       playerRef.current = player;
 
@@ -111,7 +112,7 @@ export default function ChaosLane3D() {
       const clock = new THREE.Clock();
 
       let introTime = 0;
-      const introDuration = 4.0; // کل زمان ورود
+      const introDuration = 4.0;
 
       const animate = () => {
         requestAnimationFrame(animate);
@@ -146,20 +147,20 @@ export default function ChaosLane3D() {
         introTime += delta;
         const t = Math.min(introTime / introDuration, 1); // 0 → 1
 
-        // فاز ۱: از دور → نزدیک نیم‌تنه (0 تا 0.35)
+        // فاز ۱: از دور → نزدیک نیم‌تنه بالا (0 تا 0.35)
         if (t <= 0.35) {
           const tt = t / 0.35;
           const farPos = new THREE.Vector3(0, 2.2, 8);
-          const closePos = new THREE.Vector3(0, 1.8, 2.2); // خیلی نزدیک، فقط نیم‌تنه
+          // ارتفاع بیشتر تا سر کامل داخل فریم باشد، پاها خارج شوند
+          const closePos = new THREE.Vector3(0, 2.4, 2.0);
           const currentPos = new THREE.Vector3().lerpVectors(farPos, closePos, tt);
           camera.position.copy(currentPos);
         } else if (t <= 0.75) {
           // فاز ۲: چرخش نزدیک دور کاراکتر (0.35 تا 0.75)
-          const tt = (t - 0.35) / 0.4; // 0 → 1
-          const radius = 2.2; // نزدیک بدن
-          const height = 1.8;
+          const tt = (t - 0.35) / 0.4;
+          const radius = 2.0;
+          const height = 2.4;
 
-          // از جلو (0) → پهلو → پشت (π)
           const angle = 0 + tt * Math.PI;
 
           const x = Math.sin(angle) * radius;
@@ -167,24 +168,26 @@ export default function ChaosLane3D() {
 
           camera.position.set(x, height, z);
         } else {
-          // فاز ۳: عقب رفتن برای نمایش کامل صحنه و کوچک‌تر شدن کاراکتر (0.75 تا 1)
-          const tt = (t - 0.75) / 0.25; // 0 → 1
-          const startPos = new THREE.Vector3(0, 1.8, -2.2); // پشت نزدیک
-          const endPos = new THREE.Vector3(0, 2.4, -6);     // پشت دورتر، صحنه بیشتر
+          // فاز ۳: عقب رفتن برای نمایش صحنه و کوچک‌تر شدن کاراکتر (0.75 تا 1)
+          const tt = (t - 0.75) / 0.25;
+          const startPos = new THREE.Vector3(0, 2.4, -2.0);
+          const endPos = new THREE.Vector3(0, 2.6, -6.0);
 
           const currentPos = new THREE.Vector3().lerpVectors(startPos, endPos, tt);
           camera.position.copy(currentPos);
 
-          // کوچک شدن کاراکتر برای دیدن صحنه
           if (playerRef.current) {
             const startScale = 1.6;
             const endScale = 1.2;
             const s = startScale + (endScale - startScale) * tt;
             playerRef.current.scale.set(s, s, s);
+            // کمی پایین‌تر نگه داشتن کاراکتر تا جلو نباشد
+            playerRef.current.position.y = -0.4;
           }
         }
 
-        camera.lookAt(0, 1.2, 0);
+        // نگاه به بالاتنه و سر
+        camera.lookAt(0, 1.8, 0);
 
         renderer.render(scene, camera);
       };
@@ -254,4 +257,4 @@ export default function ChaosLane3D() {
       </div>
     </div>
   );
-    }
+     }
