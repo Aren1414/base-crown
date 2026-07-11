@@ -1,74 +1,76 @@
 import * as THREE from "three";
-import { GLTFLoader } from "@/app/lib/GLTFLoader";
+import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 
 export const MODEL_URL = "/models/modeling1.glb";
 
 export async function loadPlayerModel(scene: THREE.Scene) {
   const loader = new GLTFLoader();
-  const playerGroup = new THREE.Group();
-  scene.add(playerGroup);
 
-  const mixer = new THREE.AnimationMixer(playerGroup);
-  const actions: Record<string, THREE.AnimationAction> = {};
+  const glbModel = await loader.loadAsync(MODEL_URL);
+  const player = glbModel.scene;
 
-  const gltf = await new Promise<any>((resolve, reject) => {
-    loader.load(MODEL_URL, resolve, undefined, reject);
-  });
-
-  const model = gltf.scene;
-  model.scale.set(1.6, 1.6, 1.6);
-  model.position.set(0, -0.3, 0);
-  model.rotation.y = Math.PI;
-
-  model.traverse((obj: any) => {
-    if (obj.isMesh) {
-      obj.castShadow = true;
-      obj.receiveShadow = true;
+  player.traverse((obj) => {
+    if (obj instanceof THREE.Mesh && (obj.material as any)?.map) {
+      const mat = obj.material as any;
+      const map = mat.map as THREE.Texture;
+      map.generateMipmaps = true;
+      map.minFilter = THREE.LinearMipmapLinearFilter;
+      map.magFilter = THREE.LinearFilter;
+      map.needsUpdate = true;
     }
   });
 
-  playerGroup.add(model);
+  player.scale.set(1.6, 1.6, 1.6);
+  player.position.set(0, -0.3, 0);
+  player.rotation.y = Math.PI;
+  scene.add(player);
 
-  const loadAnim = async (file: string, name: string, once = false) => {
-    const animGltf = await new Promise<any>((resolve, reject) => {
-      loader.load(`/models/${file}`, resolve, undefined, reject);
-    });
-    const clip = animGltf.animations[0];
-    const action = mixer.clipAction(clip);
-    action.setLoop(once ? THREE.LoopOnce : THREE.LoopRepeat, once ? 1 : Infinity);
-    action.clampWhenFinished = once;
-    actions[name] = action;
+  const mixer = new THREE.AnimationMixer(player);
+
+  const idleAnim = await loader.loadAsync("/models/Breathing Idle.glb");
+  const idleAction = mixer.clipAction(idleAnim.animations[0]);
+  idleAction.setLoop(THREE.LoopRepeat, Infinity);
+  idleAction.play();
+
+  const walkAnim = await loader.loadAsync("/models/Catwalk Walk Forward Arc 90L.glb");
+  const walkAction = mixer.clipAction(walkAnim.animations[0]);
+  walkAction.setLoop(THREE.LoopRepeat, Infinity);
+
+  const runAnim = await loader.loadAsync("/models/Running.glb");
+  const runAction = mixer.clipAction(runAnim.animations[0]);
+  runAction.setLoop(THREE.LoopRepeat, Infinity);
+
+  let currentAction: THREE.AnimationAction | null = idleAction;
+
+  const setMoveBySpeed = (movementSpeed: number) => {
+    let targetAction: THREE.AnimationAction | null = idleAction;
+    if (movementSpeed > 0.1 && movementSpeed < 0.6) {
+      targetAction = walkAction;
+    } else if (movementSpeed >= 0.6) {
+      targetAction = runAction;
+    }
+
+    if (targetAction && targetAction !== currentAction) {
+      currentAction?.crossFadeTo(targetAction, 0.2, false);
+      targetAction.play();
+      currentAction = targetAction;
+    }
   };
 
-  await loadAnim("Breathing Idle.glb", "idle");
-  await loadAnim("Catwalk Walk Forward Arc 90L.glb", "walk");
-  await loadAnim("Running.glb", "run");
-  await loadAnim("Combo Punch.glb", "punch", true);
-  await loadAnim("Mma Kick.glb", "kick", true);
-  await loadAnim("Jumping.glb", "jump", true);
-  await loadAnim("Death.glb", "death", true);
-  await loadAnim("Landing.glb", "landing", true);
-
-  let current = actions["idle"];
-  current.play();
-
-  const playAction = (key: string) => {
-    const next = actions[key] || actions["idle"];
-    if (current === next) return;
-    current.crossFadeTo(next, 0.2, false);
-    next.reset().play();
-    current = next;
+  const playAnimOnce = async (file: string) => {
+    if (!mixer || !currentAction) return;
+    const anim = await loader.loadAsync(`/models/${file}`);
+    const temp = mixer.clipAction(anim.animations[0]);
+    temp.setLoop(THREE.LoopOnce, 1);
+    temp.clampWhenFinished = true;
+    currentAction.crossFadeTo(temp, 0.15, false);
+    temp.play();
+    const duration = anim.animations[0].duration * 1000;
+    setTimeout(() => {
+      temp.crossFadeTo(currentAction!, 0.15, false);
+      currentAction!.play();
+    }, Math.min(duration, 2500));
   };
 
-  const setMoveBySpeed = (speed: number) => {
-    let target = actions["idle"];
-    if (speed > 0.1 && speed < 0.6) target = actions["walk"];
-    else if (speed >= 0.6) target = actions["run"];
-    if (current === target) return;
-    current.crossFadeTo(target, 0.2, false);
-    target.play();
-    current = target;
-  };
-
-  return { playerGroup, mixer, playAction, setMoveBySpeed };
+  return { player, mixer, setMoveBySpeed, playAnimOnce };
 }
