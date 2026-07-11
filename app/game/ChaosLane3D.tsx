@@ -2,18 +2,17 @@
 
 import { useEffect, useRef } from "react";
 import * as THREE from "three";
-import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import { loadPlayerModel } from "@/app/game/core/PlayerModel";
+import { createGameLogic } from "@/app/game/core/GameLogic";
 
 export default function ChaosLane3D() {
   const mountRef = useRef<HTMLDivElement | null>(null);
 
   const joyRef = useRef({ x: 0, y: 0 });
-  const playerRef = useRef<THREE.Object3D | null>(null);
   const mixerRef = useRef<THREE.AnimationMixer | null>(null);
-  const idleRef = useRef<THREE.AnimationAction | null>(null);
-  const walkRef = useRef<THREE.AnimationAction | null>(null);
-  const runRef = useRef<THREE.AnimationAction | null>(null);
-  const currentActionRef = useRef<THREE.AnimationAction | null>(null);
+  const playActionRef = useRef<(key: string) => void>(() => {});
+  const playerGroupRef = useRef<THREE.Group | null>(null);
+  const gameLogicRef = useRef<ReturnType<typeof createGameLogic> | null>(null);
 
   useEffect(() => {
     if (!mountRef.current) return;
@@ -47,72 +46,17 @@ export default function ChaosLane3D() {
     scene.add(fillLight);
 
     (async () => {
-      const loader = new GLTFLoader();
-
-      const glbModel = await loader.loadAsync("/models/modeling1.glb");
-      const player = glbModel.scene;
-
-      player.traverse((obj) => {
-        if (obj instanceof THREE.Mesh && (obj.material as any)?.map) {
-          const mat = obj.material as any;
-          const map = mat.map as THREE.Texture;
-          map.generateMipmaps = true;
-          map.minFilter = THREE.LinearMipmapLinearFilter;
-          map.magFilter = THREE.LinearFilter;
-          map.needsUpdate = true;
-        }
-      });
-
-      player.scale.set(1.6, 1.6, 1.6);
-      player.position.set(0, -0.3, 0);
-      player.rotation.y = Math.PI;
-      scene.add(player);
-      playerRef.current = player;
-
-      const mixer = new THREE.AnimationMixer(player);
+      const { playerGroup, mixer, playAction } = await loadPlayerModel(scene);
       mixerRef.current = mixer;
+      playActionRef.current = playAction;
+      playerGroupRef.current = playerGroup;
 
-      const idleAnim = await loader.loadAsync("/models/Breathing Idle.glb");
-      idleRef.current = mixer.clipAction(idleAnim.animations[0]);
-      idleRef.current.setLoop(THREE.LoopRepeat, Infinity);
-      idleRef.current.play();
-      currentActionRef.current = idleRef.current;
+      const gameLogic = createGameLogic(scene, playerGroup);
+      gameLogicRef.current = gameLogic;
 
-      const walkAnim = await loader.loadAsync("/models/Catwalk Walk Forward Arc 90L.glb");
-      walkRef.current = mixer.clipAction(walkAnim.animations[0]);
-      walkRef.current.setLoop(THREE.LoopRepeat, Infinity);
-
-      const runAnim = await loader.loadAsync("/models/Running.glb");
-      runRef.current = mixer.clipAction(runAnim.animations[0]);
-      runRef.current.setLoop(THREE.LoopRepeat, Infinity);
-
-      const playAnimOnce = async (file: string) => {
-        if (!mixerRef.current || !currentActionRef.current) return;
-        const anim = await loader.loadAsync(`/models/${file}`);
-        const temp = mixerRef.current.clipAction(anim.animations[0]);
-        temp.setLoop(THREE.LoopOnce, 1);
-        temp.clampWhenFinished = true;
-        currentActionRef.current.crossFadeTo(temp, 0.15, false);
-        temp.play();
-        const duration = anim.animations[0].duration * 1000;
-        setTimeout(() => {
-          temp.crossFadeTo(currentActionRef.current!, 0.15, false);
-          currentActionRef.current!.play();
-        }, Math.min(duration, 2500));
-      };
-
-      const actionButtons = [
-        { id: "btn-punch", file: "Combo Punch.glb" },
-        { id: "btn-kick", file: "Mma Kick.glb" },
-        { id: "btn-jump", file: "Jumping.glb" },
-      ];
-
-      actionButtons.forEach(({ id, file }) => {
-        const btn = document.getElementById(id);
-        if (!btn) return;
-        const handler = () => playAnimOnce(file);
-        btn.addEventListener("touchstart", handler, { passive: true });
-        btn.addEventListener("mousedown", handler);
+      window.addEventListener("keydown", (e) => {
+        if (!gameLogicRef.current) return;
+        gameLogicRef.current.handleKey(e, playActionRef.current);
       });
 
       const clock = new THREE.Clock();
@@ -125,32 +69,15 @@ export default function ChaosLane3D() {
         requestAnimationFrame(animate);
 
         const delta = clock.getDelta();
-        mixer.update(delta);
+        if (mixerRef.current) mixerRef.current.update(delta);
+
+        if (gameLogicRef.current) {
+          gameLogicRef.current.update(delta, playActionRef.current);
+        }
 
         const j = joyRef.current;
-
-        if (playerRef.current) {
-          const forward = new THREE.Vector3(0, 0, -1);
-          const right = new THREE.Vector3(1, 0, 0);
-          const speed = 0.08;
-
-          playerRef.current.position.addScaledVector(forward, j.y * speed);
-          playerRef.current.position.addScaledVector(right, j.x * speed);
-        }
-
-        const movementSpeed = Math.sqrt(j.x * j.x + j.y * j.y);
-
-        let targetAction: THREE.AnimationAction | null = idleRef.current;
-        if (movementSpeed > 0.1 && movementSpeed < 0.6) {
-          targetAction = walkRef.current;
-        } else if (movementSpeed >= 0.6) {
-          targetAction = runRef.current;
-        }
-
-        if (targetAction && targetAction !== currentActionRef.current) {
-          currentActionRef.current?.crossFadeTo(targetAction, 0.2, false);
-          targetAction.play();
-          currentActionRef.current = targetAction;
+        if (gameLogicRef.current) {
+          gameLogicRef.current.handleJoy(j.x, j.y, playActionRef.current);
         }
 
         introTime += delta;
@@ -178,12 +105,12 @@ export default function ChaosLane3D() {
             const currentPos = new THREE.Vector3().lerpVectors(startPos, endPos, tt);
             camera.position.copy(currentPos);
 
-            if (playerRef.current) {
+            if (playerGroupRef.current) {
               const startScale = 1.6;
               const endScale = 1.2;
               const s = startScale + (endScale - startScale) * tt;
-              playerRef.current.scale.set(s, s, s);
-              playerRef.current.position.y = -0.4;
+              playerGroupRef.current.scale.set(s, s, s);
+              playerGroupRef.current.position.y = -0.4;
             }
 
             if (tt >= 1.0) {
@@ -193,11 +120,11 @@ export default function ChaosLane3D() {
 
           camera.lookAt(0, 1.8, 0);
         } else {
-          if (playerRef.current) {
+          if (playerGroupRef.current) {
             const target = new THREE.Vector3(
-              playerRef.current.position.x,
-              playerRef.current.position.y + 1.6,
-              playerRef.current.position.z
+              playerGroupRef.current.position.x,
+              playerGroupRef.current.position.y + 1.6,
+              playerGroupRef.current.position.z
             );
 
             const offset = new THREE.Vector3(0, 1.0, -4.0);
@@ -277,4 +204,4 @@ export default function ChaosLane3D() {
       </div>
     </div>
   );
-                }
+              }
