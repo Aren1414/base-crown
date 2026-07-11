@@ -3,7 +3,6 @@
 import { useEffect, useRef } from "react";
 import * as THREE from "three";
 import { loadPlayerModel } from "@/app/game/core/PlayerModel";
-import { createGameLogic } from "@/app/game/core/GameLogic";
 
 export default function ChaosLane3D() {
   const mountRef = useRef<HTMLDivElement | null>(null);
@@ -13,7 +12,6 @@ export default function ChaosLane3D() {
   const mixerRef = useRef<THREE.AnimationMixer | null>(null);
   const setMoveBySpeedRef = useRef<(speed: number) => void>(() => {});
   const playAnimOnceRef = useRef<(file: string) => void>(() => {});
-  const gameLogicRef = useRef<ReturnType<typeof createGameLogic> | null>(null);
 
   useEffect(() => {
     if (!mountRef.current) return;
@@ -54,9 +52,6 @@ export default function ChaosLane3D() {
       setMoveBySpeedRef.current = setMoveBySpeed;
       playAnimOnceRef.current = playAnimOnce;
 
-      const gameLogic = createGameLogic(player);
-      gameLogicRef.current = gameLogic;
-
       const actionButtons = [
         { id: "btn-punch", file: "Combo Punch.glb" },
         { id: "btn-kick", file: "Mma Kick.glb" },
@@ -85,8 +80,13 @@ export default function ChaosLane3D() {
 
         const j = joyRef.current;
 
-        if (playerRef.current && gameLogicRef.current) {
-          gameLogicRef.current.update(delta, j);
+        if (playerRef.current) {
+          const forward = new THREE.Vector3(0, 0, -1);
+          const right = new THREE.Vector3(1, 0, 0);
+          const speed = 0.08;
+
+          playerRef.current.position.addScaledVector(forward, j.y * speed);
+          playerRef.current.position.addScaledVector(right, j.x * speed);
         }
 
         const movementSpeed = Math.sqrt(j.x * j.x + j.y * j.y);
@@ -216,4 +216,4 @@ export default function ChaosLane3D() {
       </div>
     </div>
   );
-        }
+     }
