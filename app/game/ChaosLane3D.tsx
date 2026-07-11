@@ -6,14 +6,14 @@ import { loadPlayerModel } from "@/app/game/core/PlayerModel";
 import { createGameLogic } from "@/app/game/core/GameLogic";
 
 export default function ChaosLane3D() {
-  const mountRef = useRef(null);
+  const mountRef = useRef<HTMLDivElement>(null);
 
   const joyRef = useRef({ x: 0, y: 0 });
-  const mixerRef = useRef(null);
-  const playActionRef = useRef(() => {});
-  const setMoveBySpeedRef = useRef(() => {});
-  const playerGroupRef = useRef(null);
-  const gameLogicRef = useRef(null);
+  const mixerRef = useRef<THREE.AnimationMixer | null>(null);
+  const playActionRef = useRef<(key: string) => void>(() => {});
+  const setMoveBySpeedRef = useRef<(speed: number) => void>(() => {});
+  const playerGroupRef = useRef<THREE.Group | null>(null);
+  const gameLogicRef = useRef<ReturnType<typeof createGameLogic> | null>(null);
 
   useEffect(() => {
     if (!mountRef.current) return;
@@ -21,7 +21,12 @@ export default function ChaosLane3D() {
     const scene = new THREE.Scene();
     scene.background = new THREE.Color("#000000");
 
-    const camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 200);
+    const camera = new THREE.PerspectiveCamera(
+      65,
+      window.innerWidth / window.innerHeight,
+      0.1,
+      200
+    );
     camera.position.set(0, 2.2, 8);
     camera.lookAt(0, 1.6, 0);
 
@@ -31,7 +36,8 @@ export default function ChaosLane3D() {
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.15;
     renderer.setSize(window.innerWidth, window.innerHeight);
-    mountRef.current.appendChild(renderer.domElement);
+
+    mountRef.current!.appendChild(renderer.domElement);
 
     const keyLight = new THREE.DirectionalLight(0xffffff, 1.4);
     keyLight.position.set(3, 8, 5);
@@ -41,9 +47,10 @@ export default function ChaosLane3D() {
     scene.add(fillLight);
 
     (async () => {
-      const { playerGroup, mixer, playAction, setMoveBySpeed } = await loadPlayerModel(scene);
+      const { playerGroup, mixer, playAction, setMoveBySpeed } =
+        await loadPlayerModel(scene);
 
-      scene.add(playerGroup); 
+      scene.add(playerGroup);
 
       mixerRef.current = mixer;
       playActionRef.current = playAction;
@@ -143,7 +150,7 @@ export default function ChaosLane3D() {
     };
   }, []);
 
-  const handleJoy = (e) => {
+  const handleJoy = (e: any) => {
     e.preventDefault();
     const rect = e.currentTarget.getBoundingClientRect();
     const x = e.touches[0].clientX - (rect.left + rect.width / 2);
@@ -186,4 +193,4 @@ export default function ChaosLane3D() {
       </div>
     </div>
   );
-      }
+                                    }
