@@ -33,11 +33,7 @@ export function createGameLogic(scene: THREE.Scene, playerGroup: THREE.Group) {
     if (gameOver) return { score, gameOver };
 
     playerGroup.position.z -= speed;
-    playerGroup.position.x = THREE.MathUtils.lerp(
-      playerGroup.position.x,
-      lane * 2,
-      0.18
-    );
+    playerGroup.position.x = THREE.MathUtils.lerp(playerGroup.position.x, lane * 2, 0.18);
 
     if (isJumping) {
       jumpVelocity -= 22 * delta;
