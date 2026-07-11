@@ -28,8 +28,8 @@ export default function ChaosLane3D() {
       200
     );
 
-    // شروع: روبه‌روی کاراکتر، کمی دورتر
-    camera.position.set(0, 1.8, 4.5);
+    // شروع: دورتر، روبه‌روی کاراکتر (کل بدن دیده شود)
+    camera.position.set(0, 2.2, 8);
     camera.lookAt(0, 1.2, 0);
 
     const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -109,9 +109,9 @@ export default function ChaosLane3D() {
 
       const clock = new THREE.Clock();
 
-      // انیمیشن ورود دوربین: از جلو → چرخش به پشت کاراکتر
+      // انیمیشن ورود دوربین: جلو دور → نزدیک نیم‌تنه → چرخش از پهلو به پشت
       let introTime = 0;
-      const introDuration = 2.5; // ثانیه
+      const introDuration = 3.5; // ثانیه
 
       const animate = () => {
         requestAnimationFrame(animate);
@@ -142,16 +142,31 @@ export default function ChaosLane3D() {
           currentActionRef.current = targetAction;
         }
 
-        // انیمیشن دوربین ورود
+        // انیمیشن دوربین
         introTime += delta;
         const t = Math.min(introTime / introDuration, 1); // 0 → 1
 
-        // مسیر دوربین: از جلو (0,1.8,4.5) به پشت (0,1.8,-4.5) با چرخش نرم
-        const startPos = new THREE.Vector3(0, 1.8, 4.5);
-        const endPos = new THREE.Vector3(0, 1.8, -4.5);
+        // فاز ۱: از دور، کل بدن → نزدیک نیم‌تنه (0 تا 0.4)
+        if (t <= 0.4) {
+          const tt = t / 0.4; // 0 → 1
+          const farPos = new THREE.Vector3(0, 2.2, 8);   // دور، کل بدن
+          const midPos = new THREE.Vector3(0, 1.8, 3.5); // نزدیک‌تر، نیم‌تنه
+          const currentPos = new THREE.Vector3().lerpVectors(farPos, midPos, tt);
+          camera.position.copy(currentPos);
+        } else {
+          // فاز ۲: چرخش از پهلو به پشت (0.4 تا 1)
+          const tt = (t - 0.4) / 0.6; // 0 → 1
+          const radius = 3.5;
+          const height = 1.8;
 
-        const currentPos = new THREE.Vector3().lerpVectors(startPos, endPos, t);
-        camera.position.copy(currentPos);
+          // شروع از جلو (زاویه 0) → پهلو راست (π/2) → پشت (π)
+          const angle = 0 + tt * Math.PI; // 0 → π
+
+          const x = Math.sin(angle) * radius;
+          const z = Math.cos(angle) * radius;
+
+          camera.position.set(x, height, z);
+        }
 
         // همیشه به مرکز کاراکتر نگاه کن
         camera.lookAt(0, 1.2, 0);
@@ -183,7 +198,7 @@ export default function ChaosLane3D() {
     <div className="fixed inset-0 w-full h-full bg-black overflow-hidden">
       <div ref={mountRef} className="w-full h-full" />
 
-      {/* Joystick – فقط جهت، بدون حرکت با لمس روی کاراکتر */}
+      {/* Joystick */}
       <div
         className="absolute bottom-8 left-8 w-28 h-28 rounded-full bg-black/30 border border-white/10 backdrop-blur-xl shadow-[0_0_20px_rgba(0,0,0,.45)] flex items-center justify-center touch-none"
         onTouchMove={handleJoy}
@@ -193,7 +208,7 @@ export default function ChaosLane3D() {
         <div className="w-12 h-12 rounded-full bg-zinc-300/60 shadow-xl" />
       </div>
 
-      {/* دکمه‌های اکشن – مثلثی، شیشه‌ای، بدون متن */}
+      {/* دکمه‌های اکشن */}
       <div className="absolute bottom-8 right-8 flex flex-col gap-4">
         <div className="flex gap-4">
           <button
@@ -224,4 +239,4 @@ export default function ChaosLane3D() {
       </div>
     </div>
   );
-     }
+                                         }
