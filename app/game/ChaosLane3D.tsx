@@ -28,7 +28,7 @@ export default function ChaosLane3D() {
       200
     );
 
-    camera.position.set(0, 2.2, -8);
+    camera.position.set(0, 2.2, 8);   // از جلو شروع می‌کند
     camera.lookAt(0, 1.6, 0);
 
     const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -40,7 +40,7 @@ export default function ChaosLane3D() {
     mountRef.current.appendChild(renderer.domElement);
 
     const keyLight = new THREE.DirectionalLight(0xffffff, 1.4);
-    keyLight.position.set(3, 8, -5);
+    keyLight.position.set(3, 8, 5);
     scene.add(keyLight);
 
     const fillLight = new THREE.HemisphereLight(0xffffff, 0x444444, 0.8);
@@ -95,25 +95,39 @@ export default function ChaosLane3D() {
         introTime += delta;
         const t = Math.min(introTime / introDuration, 1);
 
+        // -------------------------
+        // 🔥 اصلاح کامل زاویه ورود
+        // -------------------------
         if (!introDone) {
           if (t <= 0.35) {
             const tt = t / 0.35;
-            const farPos = new THREE.Vector3(0, 2.2, -8);
-            const closePos = new THREE.Vector3(0, 2.4, -2.0);
+
+            const farPos = new THREE.Vector3(0, 2.2, 8);   // جلو
+            const closePos = new THREE.Vector3(0, 2.4, 2.0);
+
             const currentPos = new THREE.Vector3().lerpVectors(farPos, closePos, tt);
             camera.position.copy(currentPos);
-          } else if (t <= 0.75) {
+          }
+
+          else if (t <= 0.75) {
             const tt = (t - 0.35) / 0.4;
+
             const radius = 2.0;
             const height = 2.4;
-            const angle = Math.PI + tt * Math.PI;
+
+            const angle = Math.PI + tt * Math.PI; // چرخش از جلو → پشت
             const x = Math.sin(angle) * radius;
             const z = Math.cos(angle) * radius;
+
             camera.position.set(x, height, z);
-          } else {
+          }
+
+          else {
             const tt = (t - 0.75) / 0.25;
-            const startPos = new THREE.Vector3(0, 2.4, 2.0);
-            const endPos = new THREE.Vector3(0, 2.6, 6.0);
+
+            const startPos = new THREE.Vector3(0, 2.4, -2.0); // پشت
+            const endPos = new THREE.Vector3(0, 2.6, -6.0);
+
             const currentPos = new THREE.Vector3().lerpVectors(startPos, endPos, tt);
             camera.position.copy(currentPos);
 
@@ -125,13 +139,16 @@ export default function ChaosLane3D() {
               playerRef.current.position.y = -0.4;
             }
 
-            if (tt >= 1.0) {
-              introDone = true;
-            }
+            if (tt >= 1.0) introDone = true;
           }
 
           camera.lookAt(0, 1.8, 0);
-        } else {
+        }
+
+        // -------------------------
+        // 🔥 بعد از ورود → دوربین پشت کاراکتر می‌ماند
+        // -------------------------
+        else {
           if (playerRef.current) {
             const target = new THREE.Vector3(
               playerRef.current.position.x,
@@ -139,7 +156,7 @@ export default function ChaosLane3D() {
               playerRef.current.position.z
             );
 
-            const offset = new THREE.Vector3(0, 1.0, -4.0);
+            const offset = new THREE.Vector3(0, 1.0, -4.0); // پشت کاراکتر
             const desired = target.clone().add(offset);
 
             camera.position.lerp(desired, 0.12);
@@ -188,32 +205,17 @@ export default function ChaosLane3D() {
 
       <div className="absolute bottom-8 right-8 flex flex-col gap-4">
         <div className="flex gap-4">
-          <button
-            id="btn-punch"
-            className="w-14 h-14 rounded-full bg-black/30 border border-white/15 backdrop-blur-xl shadow-xl flex items-center justify-center active:scale-90 transition-all"
-          >
-            <svg width="26" height="26" fill="white">
-              <path d="M4 14l6 6 12-12-2-2-10 10-4-4z" />
-            </svg>
+          <button id="btn-punch" className="w-14 h-14 rounded-full bg-black/30 border border-white/15 backdrop-blur-xl shadow-xl flex items-center justify-center active:scale-90 transition-all">
+            <svg width="26" height="26" fill="white"><path d="M4 14l6 6 12-12-2-2-10 10-4-4z" /></svg>
           </button>
-          <button
-            id="btn-kick"
-            className="w-14 h-14 rounded-full bg-black/30 border border-white/15 backdrop-blur-xl shadow-xl flex items-center justify-center active:scale-90 transition-all"
-          >
-            <svg width="26" height="26" fill="white">
-              <path d="M3 20l8-8-2-2-8 8zM14 4l8 8-2 2-8-8z" />
-            </svg>
+          <button id="btn-kick" className="w-14 h-14 rounded-full bg-black/30 border border-white/15 backdrop-blur-xl shadow-xl flex items-center justify-center active:scale-90 transition-all">
+            <svg width="26" height="26" fill="white"><path d="M3 20l8-8-2-2-8 8zM14 4l8 8-2 2-8-8z" /></svg>
           </button>
         </div>
-        <button
-          id="btn-jump"
-          className="w-14 h-14 rounded-full bg-black/30 border border-white/15 backdrop-blur-xl shadow-xl flex items-center justify-center active:scale-90 transition-all mx-auto"
-        >
-          <svg width="26" height="26" fill="white">
-            <path d="M12 2l6 10h-4v10h-4V12H6z" />
-          </svg>
+        <button id="btn-jump" className="w-14 h-14 rounded-full bg-black/30 border border-white/15 backdrop-blur-xl shadow-xl flex items-center justify-center active:scale-90 transition-all mx-auto">
+          <svg width="26" height="26" fill="white"><path d="M12 2l6 10h-4v10h-4V12H6z" /></svg>
         </button>
       </div>
     </div>
   );
-        }
+                             }
