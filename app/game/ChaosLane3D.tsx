@@ -6,14 +6,14 @@ import { loadPlayerModel } from "@/app/game/core/PlayerModel";
 import { createGameLogic } from "@/app/game/core/GameLogic";
 
 export default function ChaosLane3D() {
-  const mountRef = useRef<HTMLDivElement | null>(null);
+  const mountRef = useRef(null);
 
   const joyRef = useRef({ x: 0, y: 0 });
-  const mixerRef = useRef<THREE.AnimationMixer | null>(null);
-  const playActionRef = useRef<(key: string) => void>(() => {});
-  const setMoveBySpeedRef = useRef<(speed: number) => void>(() => {});
-  const playerGroupRef = useRef<THREE.Group | null>(null);
-  const gameLogicRef = useRef<ReturnType<typeof createGameLogic> | null>(null);
+  const mixerRef = useRef(null);
+  const playActionRef = useRef(() => {});
+  const setMoveBySpeedRef = useRef(() => {});
+  const playerGroupRef = useRef(null);
+  const gameLogicRef = useRef(null);
 
   useEffect(() => {
     if (!mountRef.current) return;
@@ -42,6 +42,9 @@ export default function ChaosLane3D() {
 
     (async () => {
       const { playerGroup, mixer, playAction, setMoveBySpeed } = await loadPlayerModel(scene);
+
+      scene.add(playerGroup); 
+
       mixerRef.current = mixer;
       playActionRef.current = playAction;
       setMoveBySpeedRef.current = setMoveBySpeed;
@@ -140,7 +143,7 @@ export default function ChaosLane3D() {
     };
   }, []);
 
-  const handleJoy = (e: React.TouchEvent<HTMLDivElement>) => {
+  const handleJoy = (e) => {
     e.preventDefault();
     const rect = e.currentTarget.getBoundingClientRect();
     const x = e.touches[0].clientX - (rect.left + rect.width / 2);
@@ -170,32 +173,17 @@ export default function ChaosLane3D() {
 
       <div className="absolute bottom-8 right-8 flex flex-col gap-4">
         <div className="flex gap-4">
-          <button
-            id="btn-punch"
-            className="w-14 h-14 rounded-full bg-black/30 border border-white/15 backdrop-blur-xl shadow-xl flex items-center justify-center active:scale-90 transition-all"
-          >
-            <svg width="26" height="26" fill="white">
-              <path d="M4 14l6 6 12-12-2-2-10 10-4-4z" />
-            </svg>
+          <button id="btn-punch" className="w-14 h-14 rounded-full bg-black/30 border border-white/15 backdrop-blur-xl shadow-xl flex items-center justify-center active:scale-90 transition-all">
+            <svg width="26" height="26" fill="white"><path d="M4 14l6 6 12-12-2-2-10 10-4-4z" /></svg>
           </button>
-          <button
-            id="btn-kick"
-            className="w-14 h-14 rounded-full bg-black/30 border border-white/15 backdrop-blur-xl shadow-xl flex items-center justify-center active:scale-90 transition-all"
-          >
-            <svg width="26" height="26" fill="white">
-              <path d="M3 20l8-8-2-2-8 8zM14 4l8 8-2 2-8-8z" />
-            </svg>
+          <button id="btn-kick" className="w-14 h-14 rounded-full bg-black/30 border border-white/15 backdrop-blur-xl shadow-xl flex items-center justify-center active:scale-90 transition-all">
+            <svg width="26" height="26" fill="white"><path d="M3 20l8-8-2-2-8 8zM14 4l8 8-2 2-8-8z" /></svg>
           </button>
         </div>
-        <button
-          id="btn-jump"
-          className="w-14 h-14 rounded-full bg-black/30 border border-white/15 backdrop-blur-xl shadow-xl flex items-center justify-center active:scale-90 transition-all mx-auto"
-        >
-          <svg width="26" height="26" fill="white">
-            <path d="M12 2l6 10h-4v10h-4V12H6z" />
-          </svg>
+        <button id="btn-jump" className="w-14 h-14 rounded-full bg-black/30 border border-white/15 backdrop-blur-xl shadow-xl flex items-center justify-center active:scale-90 transition-all mx-auto">
+          <svg width="26" height="26" fill="white"><path d="M12 2l6 10h-4v10h-4V12H6z" /></svg>
         </button>
       </div>
     </div>
   );
-                                               }
+      }
