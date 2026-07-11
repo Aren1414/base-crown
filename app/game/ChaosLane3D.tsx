@@ -28,7 +28,7 @@ export default function ChaosLane3D() {
       200
     );
 
-    camera.position.set(0, 2.2, 8);   // از جلو شروع می‌کند
+    camera.position.set(0, 2.2, 8);
     camera.lookAt(0, 1.6, 0);
 
     const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -81,7 +81,7 @@ export default function ChaosLane3D() {
         requestAnimationFrame(animate);
 
         const delta = clock.getDelta();
-        if (mixerRef.current) mixerRef.current.update(delta);
+        mixerRef.current?.update(delta);
 
         const j = joyRef.current;
 
@@ -95,46 +95,27 @@ export default function ChaosLane3D() {
         introTime += delta;
         const t = Math.min(introTime / introDuration, 1);
 
-        // -------------------------
-        // 🔥 اصلاح کامل زاویه ورود
-        // -------------------------
+        // ورود دوربین (دست‌نخورده)
         if (!introDone) {
           if (t <= 0.35) {
             const tt = t / 0.35;
-
-            const farPos = new THREE.Vector3(0, 2.2, 8);   // جلو
+            const farPos = new THREE.Vector3(0, 2.2, 8);
             const closePos = new THREE.Vector3(0, 2.4, 2.0);
-
-            const currentPos = new THREE.Vector3().lerpVectors(farPos, closePos, tt);
-            camera.position.copy(currentPos);
-          }
-
-          else if (t <= 0.75) {
+            camera.position.copy(new THREE.Vector3().lerpVectors(farPos, closePos, tt));
+          } else if (t <= 0.75) {
             const tt = (t - 0.35) / 0.4;
-
             const radius = 2.0;
             const height = 2.4;
-
-            const angle = Math.PI + tt * Math.PI; // چرخش از جلو → پشت
-            const x = Math.sin(angle) * radius;
-            const z = Math.cos(angle) * radius;
-
-            camera.position.set(x, height, z);
-          }
-
-          else {
+            const angle = Math.PI + tt * Math.PI;
+            camera.position.set(Math.sin(angle) * radius, height, Math.cos(angle) * radius);
+          } else {
             const tt = (t - 0.75) / 0.25;
-
-            const startPos = new THREE.Vector3(0, 2.4, -2.0); // پشت
+            const startPos = new THREE.Vector3(0, 2.4, -2.0);
             const endPos = new THREE.Vector3(0, 2.6, -6.0);
-
-            const currentPos = new THREE.Vector3().lerpVectors(startPos, endPos, tt);
-            camera.position.copy(currentPos);
+            camera.position.copy(new THREE.Vector3().lerpVectors(startPos, endPos, tt));
 
             if (playerRef.current) {
-              const startScale = 1.6;
-              const endScale = 1.2;
-              const s = startScale + (endScale - startScale) * tt;
+              const s = 1.6 + (1.2 - 1.6) * tt;
               playerRef.current.scale.set(s, s, s);
               playerRef.current.position.y = -0.4;
             }
@@ -145,9 +126,7 @@ export default function ChaosLane3D() {
           camera.lookAt(0, 1.8, 0);
         }
 
-        // -------------------------
-        // 🔥 بعد از ورود → دوربین پشت کاراکتر می‌ماند
-        // -------------------------
+        // 🔥 FOLLOW CAMERA — اصلاح نهایی
         else {
           if (playerRef.current) {
             const target = new THREE.Vector3(
@@ -156,10 +135,11 @@ export default function ChaosLane3D() {
               playerRef.current.position.z
             );
 
-            const offset = new THREE.Vector3(0, 1.0, -4.0); // پشت کاراکتر
+            const offset = new THREE.Vector3(0, 1.0, -4.0);
+
             const desired = target.clone().add(offset);
 
-            camera.position.lerp(desired, 0.12);
+            camera.position.lerp(desired, 0.18);   // نرم‌تر و دقیق‌تر
             camera.lookAt(target);
           }
         }
@@ -218,4 +198,4 @@ export default function ChaosLane3D() {
       </div>
     </div>
   );
-                             }
+      }
