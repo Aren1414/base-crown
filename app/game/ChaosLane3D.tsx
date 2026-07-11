@@ -11,6 +11,7 @@ export default function ChaosLane3D() {
   const joyRef = useRef({ x: 0, y: 0 });
   const mixerRef = useRef<THREE.AnimationMixer | null>(null);
   const playActionRef = useRef<(key: string) => void>(() => {});
+  const setMoveBySpeedRef = useRef<(speed: number) => void>(() => {});
   const playerGroupRef = useRef<THREE.Group | null>(null);
   const gameLogicRef = useRef<ReturnType<typeof createGameLogic> | null>(null);
 
@@ -46,9 +47,11 @@ export default function ChaosLane3D() {
     scene.add(fillLight);
 
     (async () => {
-      const { playerGroup, mixer, playAction } = await loadPlayerModel(scene);
+      const { playerGroup, mixer, playAction, setMoveBySpeed } =
+        await loadPlayerModel(scene);
       mixerRef.current = mixer;
       playActionRef.current = playAction;
+      setMoveBySpeedRef.current = setMoveBySpeed;
       playerGroupRef.current = playerGroup;
 
       const gameLogic = createGameLogic(scene, playerGroup);
@@ -71,12 +74,12 @@ export default function ChaosLane3D() {
         const delta = clock.getDelta();
         if (mixerRef.current) mixerRef.current.update(delta);
 
+        const j = joyRef.current;
+        const speed = Math.sqrt(j.x * j.x + j.y * j.y);
+        setMoveBySpeedRef.current(speed);
+
         if (gameLogicRef.current) {
           gameLogicRef.current.update(delta, playActionRef.current);
-        }
-
-        const j = joyRef.current;
-        if (gameLogicRef.current) {
           gameLogicRef.current.handleJoy(j.x, j.y, playActionRef.current);
         }
 
@@ -204,4 +207,4 @@ export default function ChaosLane3D() {
       </div>
     </div>
   );
-              }
+}
