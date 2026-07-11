@@ -84,5 +84,18 @@ export function createGameLogic(scene: THREE.Scene, playerGroup: THREE.Group) {
     }
   };
 
-  return { update, handleKey };
+  const handleJoy = (x: number, y: number, playAction: (key: string) => void) => {
+    if (gameOver) return;
+    if (x < -0.2 && lane > -1) lane = -1;
+    else if (x > 0.2 && lane < 1) lane = 1;
+    else if (Math.abs(x) <= 0.2) lane = 0;
+
+    if (y > 0.6 && !isJumping) {
+      isJumping = true;
+      jumpVelocity = 14;
+      playAction("landing");
+    }
+  };
+
+  return { update, handleKey, handleJoy };
 }
