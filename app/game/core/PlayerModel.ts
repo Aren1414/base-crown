@@ -3,24 +3,19 @@ import { GLTFLoader } from "@/app/lib/GLTFLoader";
 
 export const MODEL_URL = "/models/modeling1.glb";
 
-type ActionsMap = {
-  [key: string]: THREE.AnimationAction;
-};
-
 export async function loadPlayerModel(scene: THREE.Scene) {
   const loader = new GLTFLoader();
   const playerGroup = new THREE.Group();
   scene.add(playerGroup);
 
   const mixer = new THREE.AnimationMixer(playerGroup);
-  const actions: ActionsMap = {};
+  const actions: Record<string, THREE.AnimationAction> = {};
 
   const gltf = await new Promise<any>((resolve, reject) => {
     loader.load(MODEL_URL, resolve, undefined, reject);
   });
 
   const model = gltf.scene;
-
   model.scale.set(1.6, 1.6, 1.6);
   model.position.set(0, -0.3, 0);
   model.rotation.y = Math.PI;
@@ -34,14 +29,14 @@ export async function loadPlayerModel(scene: THREE.Scene) {
 
   playerGroup.add(model);
 
-  const loadAnim = async (file: string, name: string, loopOnce = false) => {
+  const loadAnim = async (file: string, name: string, once = false) => {
     const animGltf = await new Promise<any>((resolve, reject) => {
       loader.load(`/models/${file}`, resolve, undefined, reject);
     });
     const clip = animGltf.animations[0];
     const action = mixer.clipAction(clip);
-    action.setLoop(loopOnce ? THREE.LoopOnce : THREE.LoopRepeat, loopOnce ? 1 : Infinity);
-    action.clampWhenFinished = loopOnce;
+    action.setLoop(once ? THREE.LoopOnce : THREE.LoopRepeat, once ? 1 : Infinity);
+    action.clampWhenFinished = once;
     actions[name] = action;
   };
 
@@ -54,16 +49,13 @@ export async function loadPlayerModel(scene: THREE.Scene) {
   await loadAnim("Death.glb", "death", true);
   await loadAnim("Landing.glb", "landing", true);
 
-  let current: THREE.AnimationAction | null = actions["idle"];
-  if (current) current.play();
+  let current = actions["idle"];
+  current.play();
 
   const playAction = (key: string) => {
     const next = actions[key] || actions["idle"];
-    if (!next) return;
     if (current === next) return;
-    if (current) {
-      current.crossFadeTo(next, 0.2, false);
-    }
+    current.crossFadeTo(next, 0.2, false);
     next.reset().play();
     current = next;
   };
@@ -72,8 +64,8 @@ export async function loadPlayerModel(scene: THREE.Scene) {
     let target = actions["idle"];
     if (speed > 0.1 && speed < 0.6) target = actions["walk"];
     else if (speed >= 0.6) target = actions["run"];
-    if (!target || current === target) return;
-    current?.crossFadeTo(target, 0.2, false);
+    if (current === target) return;
+    current.crossFadeTo(target, 0.2, false);
     target.play();
     current = target;
   };
