@@ -28,7 +28,7 @@ export default function ChaosLane3D() {
       200
     );
 
-    camera.position.set(0, 2.2, 8);
+    camera.position.set(0, 2.2, -8);
     camera.lookAt(0, 1.6, 0);
 
     const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -40,14 +40,15 @@ export default function ChaosLane3D() {
     mountRef.current.appendChild(renderer.domElement);
 
     const keyLight = new THREE.DirectionalLight(0xffffff, 1.4);
-    keyLight.position.set(3, 8, 5);
+    keyLight.position.set(3, 8, -5);
     scene.add(keyLight);
 
     const fillLight = new THREE.HemisphereLight(0xffffff, 0x444444, 0.8);
     scene.add(fillLight);
 
     (async () => {
-      const { player, mixer, setMoveBySpeed, playAnimOnce } = await loadPlayerModel(scene);
+      const { player, mixer, setMoveBySpeed, playAnimOnce } =
+        await loadPlayerModel(scene);
       playerRef.current = player;
       mixerRef.current = mixer;
       setMoveBySpeedRef.current = setMoveBySpeed;
@@ -97,22 +98,22 @@ export default function ChaosLane3D() {
         if (!introDone) {
           if (t <= 0.35) {
             const tt = t / 0.35;
-            const farPos = new THREE.Vector3(0, 2.2, 8);
-            const closePos = new THREE.Vector3(0, 2.4, 2.0);
+            const farPos = new THREE.Vector3(0, 2.2, -8);
+            const closePos = new THREE.Vector3(0, 2.4, -2.0);
             const currentPos = new THREE.Vector3().lerpVectors(farPos, closePos, tt);
             camera.position.copy(currentPos);
           } else if (t <= 0.75) {
             const tt = (t - 0.35) / 0.4;
             const radius = 2.0;
             const height = 2.4;
-            const angle = 0 + tt * Math.PI;
+            const angle = Math.PI + tt * Math.PI;
             const x = Math.sin(angle) * radius;
             const z = Math.cos(angle) * radius;
             camera.position.set(x, height, z);
           } else {
             const tt = (t - 0.75) / 0.25;
-            const startPos = new THREE.Vector3(0, 2.4, -2.0);
-            const endPos = new THREE.Vector3(0, 2.6, -6.0);
+            const startPos = new THREE.Vector3(0, 2.4, 2.0);
+            const endPos = new THREE.Vector3(0, 2.6, 6.0);
             const currentPos = new THREE.Vector3().lerpVectors(startPos, endPos, tt);
             camera.position.copy(currentPos);
 
@@ -138,7 +139,7 @@ export default function ChaosLane3D() {
               playerRef.current.position.z
             );
 
-            const offset = new THREE.Vector3(0, 1.0, -4.0);
+            const offset = new THREE.Vector3(0, 1.0, 4.0);
             const desired = target.clone().add(offset);
 
             camera.position.lerp(desired, 0.12);
@@ -215,4 +216,4 @@ export default function ChaosLane3D() {
       </div>
     </div>
   );
-        }
+                             }
