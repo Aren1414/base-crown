@@ -22,7 +22,7 @@ export async function loadPlayerModel(scene: THREE.Scene) {
 
   player.scale.set(1.6, 1.6, 1.6);
   player.position.set(0, -0.3, 0);
-  player.rotation.y = Math.PI;
+  player.rotation.y = 0;
   scene.add(player);
 
   const mixer = new THREE.AnimationMixer(player);
@@ -32,7 +32,9 @@ export async function loadPlayerModel(scene: THREE.Scene) {
   idleAction.setLoop(THREE.LoopRepeat, Infinity);
   idleAction.play();
 
-  const walkAnim = await loader.loadAsync("/models/Catwalk Walk Forward Arc 90L.glb");
+  const walkAnim = await loader.loadAsync(
+    "/models/Catwalk Walk Forward Arc 90L.glb"
+  );
   const walkAction = mixer.clipAction(walkAnim.animations[0]);
   walkAction.setLoop(THREE.LoopRepeat, Infinity);
 
