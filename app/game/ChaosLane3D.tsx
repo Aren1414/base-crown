@@ -27,7 +27,9 @@ export default function ChaosLane3D() {
       0.1,
       200
     );
-    camera.position.set(0, 2.0, -5);
+
+    camera.position.set(0, 2.2, 8);
+    camera.lookAt(0, 1.6, 0);
 
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -51,7 +53,7 @@ export default function ChaosLane3D() {
       const player = glbModel.scene;
 
       player.traverse((obj) => {
-        if (obj instanceof THREE.Mesh && obj.material && (obj.material as any).map) {
+        if (obj instanceof THREE.Mesh && (obj.material as any)?.map) {
           const mat = obj.material as any;
           const map = mat.map as THREE.Texture;
           map.generateMipmaps = true;
@@ -61,8 +63,8 @@ export default function ChaosLane3D() {
         }
       });
 
-      player.scale.set(1.4, 1.4, 1.4);
-      player.position.set(0, -0.4, 0);
+      player.scale.set(1.6, 1.6, 1.6);
+      player.position.set(0, -0.3, 0);
       player.rotation.y = Math.PI;
       scene.add(player);
       playerRef.current = player;
@@ -115,6 +117,10 @@ export default function ChaosLane3D() {
 
       const clock = new THREE.Clock();
 
+      let introTime = 0;
+      const introDuration = 4.0;
+      let introDone = false;
+
       const animate = () => {
         requestAnimationFrame(animate);
 
@@ -147,18 +153,59 @@ export default function ChaosLane3D() {
           currentActionRef.current = targetAction;
         }
 
-        if (playerRef.current) {
-          const target = new THREE.Vector3(
-            playerRef.current.position.x,
-            playerRef.current.position.y + 1.6,
-            playerRef.current.position.z
-          );
+        introTime += delta;
+        const t = Math.min(introTime / introDuration, 1);
 
-          const offset = new THREE.Vector3(0, 1.0, -4.0);
-          const desired = target.clone().add(offset);
+        if (!introDone) {
+          if (t <= 0.35) {
+            const tt = t / 0.35;
+            const farPos = new THREE.Vector3(0, 2.2, 8);
+            const closePos = new THREE.Vector3(0, 2.4, 2.0);
+            const currentPos = new THREE.Vector3().lerpVectors(farPos, closePos, tt);
+            camera.position.copy(currentPos);
+          } else if (t <= 0.75) {
+            const tt = (t - 0.35) / 0.4;
+            const radius = 2.0;
+            const height = 2.4;
+            const angle = 0 + tt * Math.PI;
+            const x = Math.sin(angle) * radius;
+            const z = Math.cos(angle) * radius;
+            camera.position.set(x, height, z);
+          } else {
+            const tt = (t - 0.75) / 0.25;
+            const startPos = new THREE.Vector3(0, 2.4, -2.0);
+            const endPos = new THREE.Vector3(0, 2.6, -6.0);
+            const currentPos = new THREE.Vector3().lerpVectors(startPos, endPos, tt);
+            camera.position.copy(currentPos);
 
-          camera.position.lerp(desired, 0.12);
-          camera.lookAt(target);
+            if (playerRef.current) {
+              const startScale = 1.6;
+              const endScale = 1.2;
+              const s = startScale + (endScale - startScale) * tt;
+              playerRef.current.scale.set(s, s, s);
+              playerRef.current.position.y = -0.4;
+            }
+
+            if (tt >= 1.0) {
+              introDone = true;
+            }
+          }
+
+          camera.lookAt(0, 1.8, 0);
+        } else {
+          if (playerRef.current) {
+            const target = new THREE.Vector3(
+              playerRef.current.position.x,
+              playerRef.current.position.y + 1.6,
+              playerRef.current.position.z
+            );
+
+            const offset = new THREE.Vector3(0, 1.0, -4.0);
+            const desired = target.clone().add(offset);
+
+            camera.position.lerp(desired, 0.12);
+            camera.lookAt(target);
+          }
         }
 
         renderer.render(scene, camera);
@@ -230,4 +277,4 @@ export default function ChaosLane3D() {
       </div>
     </div>
   );
-            }
+                }
