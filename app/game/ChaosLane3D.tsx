@@ -5,7 +5,7 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 
 export default function ChaosLane3D() {
-  const mountRef = useRef<HTMLDivElement>(null);
+  const mountRef = useRef<HTMLDivElement | null>(null);
 
   const joyRef = useRef({ x: 0, y: 0 });
   const playerRef = useRef<THREE.Object3D | null>(null);
@@ -27,8 +27,7 @@ export default function ChaosLane3D() {
       0.1,
       200
     );
-    camera.position.set(0, 2.2, 8);
-    camera.lookAt(0, 1.6, 0);
+    camera.position.set(0, 2.0, -5);
 
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -52,8 +51,9 @@ export default function ChaosLane3D() {
       const player = glbModel.scene;
 
       player.traverse((obj) => {
-        if (obj instanceof THREE.Mesh && obj.material && obj.material.map) {
-          const map = obj.material.map;
+        if (obj instanceof THREE.Mesh && obj.material && (obj.material as any).map) {
+          const mat = obj.material as any;
+          const map = mat.map as THREE.Texture;
           map.generateMipmaps = true;
           map.minFilter = THREE.LinearMipmapLinearFilter;
           map.magFilter = THREE.LinearFilter;
@@ -61,8 +61,9 @@ export default function ChaosLane3D() {
         }
       });
 
-      player.scale.set(1.6, 1.6, 1.6);
-      player.position.set(0, -0.3, 0);
+      player.scale.set(1.4, 1.4, 1.4);
+      player.position.set(0, -0.4, 0);
+      player.rotation.y = Math.PI;
       scene.add(player);
       playerRef.current = player;
 
@@ -87,15 +88,15 @@ export default function ChaosLane3D() {
         if (!mixerRef.current || !currentActionRef.current) return;
         const anim = await loader.loadAsync(`/models/${file}`);
         const temp = mixerRef.current.clipAction(anim.animations[0]);
-        temp.reset();
         temp.setLoop(THREE.LoopOnce, 1);
         temp.clampWhenFinished = true;
         currentActionRef.current.crossFadeTo(temp, 0.15, false);
         temp.play();
+        const duration = anim.animations[0].duration * 1000;
         setTimeout(() => {
           temp.crossFadeTo(currentActionRef.current!, 0.15, false);
           currentActionRef.current!.play();
-        }, Math.min(anim.animations[0].duration * 1000, 3000));
+        }, Math.min(duration, 2500));
       };
 
       const actionButtons = [
@@ -114,10 +115,6 @@ export default function ChaosLane3D() {
 
       const clock = new THREE.Clock();
 
-      let introTime = 0;
-      const introDuration = 4.0;
-      let introDone = false;
-
       const animate = () => {
         requestAnimationFrame(animate);
 
@@ -126,29 +123,23 @@ export default function ChaosLane3D() {
 
         const j = joyRef.current;
 
-        // حرکت کاراکتر + جهت‌گیری
         if (playerRef.current) {
           const forward = new THREE.Vector3(0, 0, -1);
-          forward.applyAxisAngle(new THREE.Vector3(0, 1, 0), playerRef.current.rotation.y);
-
           const right = new THREE.Vector3(1, 0, 0);
-          right.applyAxisAngle(new THREE.Vector3(0, 1, 0), playerRef.current.rotation.y);
+          const speed = 0.08;
 
-          const moveSpeed = 0.08;
-          playerRef.current.position.addScaledVector(forward, j.y * moveSpeed);
-          playerRef.current.position.addScaledVector(right, j.x * moveSpeed);
-
-          if (Math.abs(j.x) > 0.05 || Math.abs(j.y) > 0.05) {
-            const angle = Math.atan2(j.x, j.y);
-            playerRef.current.rotation.y = angle;
-          }
+          playerRef.current.position.addScaledVector(forward, j.y * speed);
+          playerRef.current.position.addScaledVector(right, j.x * speed);
         }
 
-        // انتخاب انیمیشن بر اساس سرعت
-        const speed = Math.sqrt(j.x * j.x + j.y * j.y);
+        const movementSpeed = Math.sqrt(j.x * j.x + j.y * j.y);
+
         let targetAction: THREE.AnimationAction | null = idleRef.current;
-        if (speed > 0.1 && speed < 0.6) targetAction = walkRef.current;
-        if (speed >= 0.6) targetAction = runRef.current;
+        if (movementSpeed > 0.1 && movementSpeed < 0.6) {
+          targetAction = walkRef.current;
+        } else if (movementSpeed >= 0.6) {
+          targetAction = runRef.current;
+        }
 
         if (targetAction && targetAction !== currentActionRef.current) {
           currentActionRef.current?.crossFadeTo(targetAction, 0.2, false);
@@ -156,72 +147,29 @@ export default function ChaosLane3D() {
           currentActionRef.current = targetAction;
         }
 
-        // انیمیشن ورود دوربین
-        if (!introDone) {
-          introTime += delta;
-          const t = Math.min(introTime / introDuration, 1);
+        if (playerRef.current) {
+          const target = new THREE.Vector3(
+            playerRef.current.position.x,
+            playerRef.current.position.y + 1.6,
+            playerRef.current.position.z
+          );
 
-          if (t <= 0.35) {
-            const tt = t / 0.35;
-            const farPos = new THREE.Vector3(0, 2.2, 8);
-            const closePos = new THREE.Vector3(0, 2.4, 2.0);
-            const currentPos = new THREE.Vector3().lerpVectors(farPos, closePos, tt);
-            camera.position.copy(currentPos);
-          } else if (t <= 0.75) {
-            const tt = (t - 0.35) / 0.4;
-            const radius = 2.0;
-            const height = 2.4;
-            const angle = tt * Math.PI;
-            const x = Math.sin(angle) * radius;
-            const z = Math.cos(angle) * radius;
-            camera.position.set(x, height, z);
-          } else {
-            const tt = (t - 0.75) / 0.25;
-            const startPos = new THREE.Vector3(0, 2.4, -2.0);
-            const endPos = new THREE.Vector3(0, 2.6, -6.0);
-            const currentPos = new THREE.Vector3().lerpVectors(startPos, endPos, tt);
-            camera.position.copy(currentPos);
+          const offset = new THREE.Vector3(0, 1.0, -4.0);
+          const desired = target.clone().add(offset);
 
-            if (playerRef.current) {
-              const startScale = 1.6;
-              const endScale = 1.2;
-              const s = startScale + (endScale - startScale) * tt;
-              playerRef.current.scale.set(s, s, s);
-              playerRef.current.position.y = -0.4;
-            }
-          }
-
-          if (playerRef.current) {
-            const lookTarget = new THREE.Vector3(
-              playerRef.current.position.x,
-              playerRef.current.position.y + 1.8,
-              playerRef.current.position.z
-            );
-            camera.lookAt(lookTarget);
-          }
-
-          if (t >= 1) introDone = true;
-        } else {
-          // دوربین دنبال کاراکتر (سبک PUBG / GTA)
-          if (playerRef.current) {
-            const target = new THREE.Vector3(
-              playerRef.current.position.x,
-              playerRef.current.position.y + 1.6,
-              playerRef.current.position.z
-            );
-            const offset = new THREE.Vector3(0, 1.0, -4.0);
-            const desired = target.clone().add(offset);
-            camera.position.lerp(desired, 0.12);
-            camera.lookAt(target);
-          }
+          camera.position.lerp(desired, 0.12);
+          camera.lookAt(target);
         }
 
         renderer.render(scene, camera);
       };
+
       animate();
     })();
 
-    return () => renderer.dispose();
+    return () => {
+      renderer.dispose();
+    };
   }, []);
 
   const handleJoy = (e: React.TouchEvent<HTMLDivElement>) => {
@@ -243,9 +191,8 @@ export default function ChaosLane3D() {
     <div className="fixed inset-0 w-full h-full bg-black overflow-hidden">
       <div ref={mountRef} className="w-full h-full" />
 
-      {/* Joystick */}
       <div
-        className="absolute bottom-8 left-8 w-28 h-28 rounded-full bg-black/30 border border-white/10 backdrop-blur-xl shadow-[0_0_20px_rgba(0,0,0,.45)] flex items-center justify-center"
+        className="absolute bottom-8 left-8 w-28 h-28 rounded-full bg-black/30 border border-white/10 backdrop-blur-xl shadow-[0_0_20px_rgba(0,0,0,.45)] flex items-center justify-center touch-none"
         onTouchMove={handleJoy}
         onTouchEnd={resetJoy}
         onTouchStart={handleJoy}
@@ -253,7 +200,6 @@ export default function ChaosLane3D() {
         <div className="w-12 h-12 rounded-full bg-zinc-300/60 shadow-xl" />
       </div>
 
-      {/* دکمه‌های اکشن */}
       <div className="absolute bottom-8 right-8 flex flex-col gap-4">
         <div className="flex gap-4">
           <button
