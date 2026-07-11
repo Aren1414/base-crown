@@ -2,7 +2,6 @@
 
 import { useEffect, useRef } from "react";
 import * as THREE from "three";
-import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 
 export default function ChaosLane3D() {
@@ -28,8 +27,10 @@ export default function ChaosLane3D() {
       0.1,
       200
     );
-    camera.position.set(0, 2, 6);
-    camera.lookAt(0, 1, 0);
+
+    // شروع: روبه‌روی کاراکتر، کمی دورتر
+    camera.position.set(0, 1.8, 4.5);
+    camera.lookAt(0, 1.2, 0);
 
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -46,17 +47,12 @@ export default function ChaosLane3D() {
     const fillLight = new THREE.HemisphereLight(0xffffff, 0x444444, 0.8);
     scene.add(fillLight);
 
-    const controls = new OrbitControls(camera, renderer.domElement);
-    controls.enablePan = false;
-    controls.enableZoom = false;
-    controls.enableRotate = true;
-    controls.target.set(0, 1, 0);
-
     (async () => {
       const loader = new GLTFLoader();
 
       const glbModel = await loader.loadAsync("/models/modeling1.glb");
       const player = glbModel.scene;
+
       player.traverse((obj) => {
         if (obj instanceof THREE.Mesh && obj.material && obj.material.map) {
           const map = obj.material.map;
@@ -66,6 +62,7 @@ export default function ChaosLane3D() {
           map.needsUpdate = true;
         }
       });
+
       player.scale.set(1.5, 1.5, 1.5);
       player.position.set(0, 0, 0);
       scene.add(player);
@@ -111,18 +108,25 @@ export default function ChaosLane3D() {
       });
 
       const clock = new THREE.Clock();
+
+      // انیمیشن ورود دوربین: از جلو → چرخش به پشت کاراکتر
+      let introTime = 0;
+      const introDuration = 2.5; // ثانیه
+
       const animate = () => {
         requestAnimationFrame(animate);
 
         const delta = clock.getDelta();
         mixer.update(delta);
 
+        // حرکت کاراکتر با Joystick
         const j = joyRef.current;
         if (playerRef.current) {
           playerRef.current.position.x += j.x * 0.08;
           playerRef.current.position.z += j.y * 0.08;
         }
 
+        // انتخاب انیمیشن بر اساس سرعت
         const speed = Math.sqrt(j.x * j.x + j.y * j.y);
         let targetAction: THREE.AnimationAction | null = null;
         if (speed < 0.1) {
@@ -138,7 +142,20 @@ export default function ChaosLane3D() {
           currentActionRef.current = targetAction;
         }
 
-        controls.update();
+        // انیمیشن دوربین ورود
+        introTime += delta;
+        const t = Math.min(introTime / introDuration, 1); // 0 → 1
+
+        // مسیر دوربین: از جلو (0,1.8,4.5) به پشت (0,1.8,-4.5) با چرخش نرم
+        const startPos = new THREE.Vector3(0, 1.8, 4.5);
+        const endPos = new THREE.Vector3(0, 1.8, -4.5);
+
+        const currentPos = new THREE.Vector3().lerpVectors(startPos, endPos, t);
+        camera.position.copy(currentPos);
+
+        // همیشه به مرکز کاراکتر نگاه کن
+        camera.lookAt(0, 1.2, 0);
+
         renderer.render(scene, camera);
       };
       animate();
@@ -166,7 +183,7 @@ export default function ChaosLane3D() {
     <div className="fixed inset-0 w-full h-full bg-black overflow-hidden">
       <div ref={mountRef} className="w-full h-full" />
 
-      {/* Joystick – موبایل، کوچیک، حرفه‌ای */}
+      {/* Joystick – فقط جهت، بدون حرکت با لمس روی کاراکتر */}
       <div
         className="absolute bottom-8 left-8 w-28 h-28 rounded-full bg-black/30 border border-white/10 backdrop-blur-xl shadow-[0_0_20px_rgba(0,0,0,.45)] flex items-center justify-center touch-none"
         onTouchMove={handleJoy}
@@ -207,4 +224,4 @@ export default function ChaosLane3D() {
       </div>
     </div>
   );
-      }
+     }
