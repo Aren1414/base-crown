@@ -28,7 +28,6 @@ export default function ChaosLane3D() {
       200
     );
 
-    // شروع: دور، روبه‌روی کاراکتر
     camera.position.set(0, 2.2, 8);
     camera.lookAt(0, 1.6, 0);
 
@@ -63,9 +62,7 @@ export default function ChaosLane3D() {
         }
       });
 
-      // اندازه اولیه برای ورود
       player.scale.set(1.6, 1.6, 1.6);
-      // کمی پایین‌تر تا بعد از چرخش، کاراکتر جلو نباشد
       player.position.set(0, -0.3, 0);
       scene.add(player);
       playerRef.current = player;
@@ -85,13 +82,16 @@ export default function ChaosLane3D() {
       runRef.current = mixer.clipAction(runAnim.animations[0]);
 
       const playAnimOnce = async (file: string) => {
-        if (!mixerRef.current) return;
+        if (!mixerRef.current || !currentActionRef.current) return;
         const anim = await loader.loadAsync(`/models/${file}`);
-        const action = mixerRef.current.clipAction(anim.animations[0]);
-        action.reset().play();
+        const temp = mixerRef.current.clipAction(anim.animations[0]);
+        temp.setLoop(THREE.LoopOnce, 1);
+        temp.clampWhenFinished = true;
+        currentActionRef.current.crossFadeTo(temp, 0.15, false);
+        temp.play();
         setTimeout(() => {
-          action.stop();
-          if (currentActionRef.current) currentActionRef.current.play();
+          temp.crossFadeTo(currentActionRef.current!, 0.15, false);
+          currentActionRef.current!.play();
         }, Math.min(anim.animations[0].duration * 1000, 3000));
       };
 
@@ -120,14 +120,17 @@ export default function ChaosLane3D() {
         const delta = clock.getDelta();
         mixer.update(delta);
 
-        // حرکت با Joystick
         const j = joyRef.current;
         if (playerRef.current) {
           playerRef.current.position.x += j.x * 0.08;
           playerRef.current.position.z += j.y * 0.08;
+
+          const angle = Math.atan2(j.x, j.y);
+          if (Math.abs(j.x) > 0.05 || Math.abs(j.y) > 0.05) {
+            playerRef.current.rotation.y = angle;
+          }
         }
 
-        // انتخاب انیمیشن بر اساس سرعت
         const speed = Math.sqrt(j.x * j.x + j.y * j.y);
         let targetAction: THREE.AnimationAction | null = null;
         if (speed < 0.1) {
@@ -138,41 +141,35 @@ export default function ChaosLane3D() {
           targetAction = runRef.current;
         }
         if (targetAction && targetAction !== currentActionRef.current) {
-          currentActionRef.current?.stop();
-          targetAction.reset().play();
+          if (currentActionRef.current) {
+            currentActionRef.current.crossFadeTo(targetAction, 0.2, false);
+          } else {
+            targetAction.play();
+          }
           currentActionRef.current = targetAction;
         }
 
-        // انیمیشن دوربین + کوچک شدن کاراکتر بعد از چرخش
         introTime += delta;
-        const t = Math.min(introTime / introDuration, 1); // 0 → 1
+        const t = Math.min(introTime / introDuration, 1);
 
-        // فاز ۱: از دور → نزدیک نیم‌تنه بالا (0 تا 0.35)
         if (t <= 0.35) {
           const tt = t / 0.35;
           const farPos = new THREE.Vector3(0, 2.2, 8);
-          // ارتفاع بیشتر تا سر کامل داخل فریم باشد، پاها خارج شوند
           const closePos = new THREE.Vector3(0, 2.4, 2.0);
           const currentPos = new THREE.Vector3().lerpVectors(farPos, closePos, tt);
           camera.position.copy(currentPos);
         } else if (t <= 0.75) {
-          // فاز ۲: چرخش نزدیک دور کاراکتر (0.35 تا 0.75)
           const tt = (t - 0.35) / 0.4;
           const radius = 2.0;
           const height = 2.4;
-
           const angle = 0 + tt * Math.PI;
-
           const x = Math.sin(angle) * radius;
           const z = Math.cos(angle) * radius;
-
           camera.position.set(x, height, z);
         } else {
-          // فاز ۳: عقب رفتن برای نمایش صحنه و کوچک‌تر شدن کاراکتر (0.75 تا 1)
           const tt = (t - 0.75) / 0.25;
           const startPos = new THREE.Vector3(0, 2.4, -2.0);
           const endPos = new THREE.Vector3(0, 2.6, -6.0);
-
           const currentPos = new THREE.Vector3().lerpVectors(startPos, endPos, tt);
           camera.position.copy(currentPos);
 
@@ -181,13 +178,32 @@ export default function ChaosLane3D() {
             const endScale = 1.2;
             const s = startScale + (endScale - startScale) * tt;
             playerRef.current.scale.set(s, s, s);
-            // کمی پایین‌تر نگه داشتن کاراکتر تا جلو نباشد
             playerRef.current.position.y = -0.4;
+          }
+
+          if (playerRef.current) {
+            const target = new THREE.Vector3(
+              playerRef.current.position.x,
+              playerRef.current.position.y + 1.8,
+              playerRef.current.position.z
+            );
+            const desired = new THREE.Vector3(
+              target.x,
+              target.y + 0.8,
+              target.z - 4
+            );
+            camera.position.lerp(desired, 0.08);
           }
         }
 
-        // نگاه به بالاتنه و سر
-        camera.lookAt(0, 1.8, 0);
+        if (playerRef.current) {
+          const lookTarget = new THREE.Vector3(
+            playerRef.current.position.x,
+            playerRef.current.position.y + 1.8,
+            playerRef.current.position.z
+          );
+          camera.lookAt(lookTarget);
+        }
 
         renderer.render(scene, camera);
       };
@@ -197,7 +213,7 @@ export default function ChaosLane3D() {
     return () => renderer.dispose();
   }, []);
 
-  const handleJoy = (e: React.TouchEvent<HTMLDivElement>) => {
+  const handleJoy = (e: any) => {
     e.preventDefault();
     const rect = e.currentTarget.getBoundingClientRect();
     const x = e.touches[0].clientX - (rect.left + rect.width / 2);
@@ -216,7 +232,6 @@ export default function ChaosLane3D() {
     <div className="fixed inset-0 w-full h-full bg-black overflow-hidden">
       <div ref={mountRef} className="w-full h-full" />
 
-      {/* Joystick */}
       <div
         className="absolute bottom-8 left-8 w-28 h-28 rounded-full bg-black/30 border border-white/10 backdrop-blur-xl shadow-[0_0_20px_rgba(0,0,0,.45)] flex items-center justify-center touch-none"
         onTouchMove={handleJoy}
@@ -226,7 +241,6 @@ export default function ChaosLane3D() {
         <div className="w-12 h-12 rounded-full bg-zinc-300/60 shadow-xl" />
       </div>
 
-      {/* دکمه‌های اکشن */}
       <div className="absolute bottom-8 right-8 flex flex-col gap-4">
         <div className="flex gap-4">
           <button
@@ -257,4 +271,4 @@ export default function ChaosLane3D() {
       </div>
     </div>
   );
-     }
+          }
