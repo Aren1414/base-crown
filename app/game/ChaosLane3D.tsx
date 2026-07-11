@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import * as THREE from "three";
 import { loadPlayerModel } from "@/app/game/core/PlayerModel";
+import { createGameLogic } from "@/app/game/core/GameLogic";
 
 export default function ChaosLane3D() {
   const mountRef = useRef<HTMLDivElement | null>(null);
@@ -12,6 +13,7 @@ export default function ChaosLane3D() {
   const mixerRef = useRef<THREE.AnimationMixer | null>(null);
   const setMoveBySpeedRef = useRef<(speed: number) => void>(() => {});
   const playAnimOnceRef = useRef<(file: string) => void>(() => {});
+  const gameLogicRef = useRef<ReturnType<typeof createGameLogic> | null>(null);
 
   useEffect(() => {
     if (!mountRef.current) return;
@@ -47,25 +49,29 @@ export default function ChaosLane3D() {
     (async () => {
       const { player, mixer, setMoveBySpeed, playAnimOnce } =
         await loadPlayerModel(scene);
-
       playerRef.current = player;
       mixerRef.current = mixer;
       setMoveBySpeedRef.current = setMoveBySpeed;
       playAnimOnceRef.current = playAnimOnce;
 
+      const gameLogic = createGameLogic(player);
+      gameLogicRef.current = gameLogic;
+
+      const actionButtons = [
+        { id: "btn-punch", file: "Combo Punch.glb" },
+        { id: "btn-kick", file: "Mma Kick.glb" },
+        { id: "btn-jump", file: "Jumping.glb" },
+      ];
+
+      actionButtons.forEach(({ id, file }) => {
+        const btn = document.getElementById(id);
+        if (!btn) return;
+        const handler = () => playAnimOnceRef.current(file);
+        btn.addEventListener("touchstart", handler, { passive: true });
+        btn.addEventListener("mousedown", handler);
+      });
+
       const clock = new THREE.Clock();
-
-      window.addEventListener("keydown", (e) => {
-        if (!playerRef.current) return;
-        if (e.key === "ArrowUp") joyRef.current.y = 1;
-        if (e.key === "ArrowDown") joyRef.current.y = -1;
-        if (e.key === "ArrowLeft") joyRef.current.x = -1;
-        if (e.key === "ArrowRight") joyRef.current.x = 1;
-      });
-
-      window.addEventListener("keyup", () => {
-        joyRef.current = { x: 0, y: 0 };
-      });
 
       let introTime = 0;
       const introDuration = 4.0;
@@ -75,17 +81,12 @@ export default function ChaosLane3D() {
         requestAnimationFrame(animate);
 
         const delta = clock.getDelta();
-        mixerRef.current?.update(delta);
+        if (mixerRef.current) mixerRef.current.update(delta);
 
         const j = joyRef.current;
 
-        if (playerRef.current) {
-          const forward = new THREE.Vector3(0, 0, -1);
-          const right = new THREE.Vector3(1, 0, 0);
-          const speed = 0.08;
-
-          playerRef.current.position.addScaledVector(forward, j.y * speed);
-          playerRef.current.position.addScaledVector(right, j.x * speed);
+        if (playerRef.current && gameLogicRef.current) {
+          gameLogicRef.current.update(delta, j);
         }
 
         const movementSpeed = Math.sqrt(j.x * j.x + j.y * j.y);
@@ -124,7 +125,9 @@ export default function ChaosLane3D() {
               playerRef.current.position.y = -0.4;
             }
 
-            if (tt >= 1.0) introDone = true;
+            if (tt >= 1.0) {
+              introDone = true;
+            }
           }
 
           camera.lookAt(0, 1.8, 0);
@@ -136,7 +139,7 @@ export default function ChaosLane3D() {
               playerRef.current.position.z
             );
 
-            const offset = new THREE.Vector3(0, 1.0, 4.0);
+            const offset = new THREE.Vector3(0, 1.0, -4.0);
             const desired = target.clone().add(offset);
 
             camera.position.lerp(desired, 0.12);
@@ -185,17 +188,32 @@ export default function ChaosLane3D() {
 
       <div className="absolute bottom-8 right-8 flex flex-col gap-4">
         <div className="flex gap-4">
-          <button id="btn-punch" className="w-14 h-14 rounded-full bg-black/30 border border-white/15 backdrop-blur-xl shadow-xl flex items-center justify-center active:scale-90 transition-all">
-            <svg width="26" height="26" fill="white"><path d="M4 14l6 6 12-12-2-2-10 10-4-4z" /></svg>
+          <button
+            id="btn-punch"
+            className="w-14 h-14 rounded-full bg-black/30 border border-white/15 backdrop-blur-xl shadow-xl flex items-center justify-center active:scale-90 transition-all"
+          >
+            <svg width="26" height="26" fill="white">
+              <path d="M4 14l6 6 12-12-2-2-10 10-4-4z" />
+            </svg>
           </button>
-          <button id="btn-kick" className="w-14 h-14 rounded-full bg-black/30 border border-white/15 backdrop-blur-xl shadow-xl flex items-center justify-center active:scale-90 transition-all">
-            <svg width="26" height="26" fill="white"><path d="M3 20l8-8-2-2-8 8zM14 4l8 8-2 2-8-8z" /></svg>
+          <button
+            id="btn-kick"
+            className="w-14 h-14 rounded-full bg-black/30 border border-white/15 backdrop-blur-xl shadow-xl flex items-center justify-center active:scale-90 transition-all"
+          >
+            <svg width="26" height="26" fill="white">
+              <path d="M3 20l8-8-2-2-8 8zM14 4l8 8-2 2-8-8z" />
+            </svg>
           </button>
         </div>
-        <button id="btn-jump" className="w-14 h-14 rounded-full bg-black/30 border border-white/15 backdrop-blur-xl shadow-xl flex items-center justify-center active:scale-90 transition-all mx-auto">
-          <svg width="26" height="26" fill="white"><path d="M12 2l6 10h-4v10h-4V12H6z" /></svg>
+        <button
+          id="btn-jump"
+          className="w-14 h-14 rounded-full bg-black/30 border border-white/15 backdrop-blur-xl shadow-xl flex items-center justify-center active:scale-90 transition-all mx-auto"
+        >
+          <svg width="26" height="26" fill="white">
+            <path d="M12 2l6 10h-4v10h-4V12H6z" />
+          </svg>
         </button>
       </div>
     </div>
   );
-                                               }
+        }
