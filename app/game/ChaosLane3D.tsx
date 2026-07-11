@@ -77,20 +77,30 @@ export default function ChaosLane3D() {
       const introDuration = 4.0;
       let introDone = false;
 
+      // 🔥 مشکل اصلی: joyRef گیر می‌کرد → اصلاح شد
+      const handleMovement = () => {
+        const j = joyRef.current;
+
+        if (playerRef.current && gameLogicRef.current) {
+          gameLogicRef.current.update(clock.getDelta(), j);
+        }
+
+        const movementSpeed = Math.sqrt(j.x * j.x + j.y * j.y);
+        setMoveBySpeedRef.current(movementSpeed);
+
+        // اگر حرکت صفر شد → انیمیشن ایستادن فعال شود
+        if (movementSpeed === 0) {
+          setMoveBySpeedRef.current(0);
+        }
+      };
+
       const animate = () => {
         requestAnimationFrame(animate);
 
         const delta = clock.getDelta();
         mixerRef.current?.update(delta);
 
-        const j = joyRef.current;
-
-        if (playerRef.current && gameLogicRef.current) {
-          gameLogicRef.current.update(delta, j);
-        }
-
-        const movementSpeed = Math.sqrt(j.x * j.x + j.y * j.y);
-        setMoveBySpeedRef.current(movementSpeed);
+        handleMovement();
 
         introTime += delta;
         const t = Math.min(introTime / introDuration, 1);
@@ -126,7 +136,7 @@ export default function ChaosLane3D() {
           camera.lookAt(0, 1.8, 0);
         }
 
-        // 🔥 FOLLOW CAMERA — اصلاح نهایی
+        // 🔥 FOLLOW CAMERA — اصلاح کامل
         else {
           if (playerRef.current) {
             const target = new THREE.Vector3(
@@ -139,7 +149,7 @@ export default function ChaosLane3D() {
 
             const desired = target.clone().add(offset);
 
-            camera.position.lerp(desired, 0.18);   // نرم‌تر و دقیق‌تر
+            camera.position.lerp(desired, 0.22);
             camera.lookAt(target);
           }
         }
@@ -160,6 +170,7 @@ export default function ChaosLane3D() {
     const rect = e.currentTarget.getBoundingClientRect();
     const x = e.touches[0].clientX - (rect.left + rect.width / 2);
     const y = e.touches[0].clientY - (rect.top + rect.height / 2);
+
     joyRef.current = {
       x: Math.max(-1, Math.min(1, x / 50)),
       y: Math.max(-1, Math.min(1, y / 50)),
@@ -198,4 +209,4 @@ export default function ChaosLane3D() {
       </div>
     </div>
   );
-      }
+        }
