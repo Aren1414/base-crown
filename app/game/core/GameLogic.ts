@@ -15,7 +15,7 @@ export function createGameLogic(player: THREE.Object3D) {
 
     // 🔥 جهت واقعی مدل (نه جهت فرضی)
     const forward = new THREE.Vector3();
-    player.getWorldDirection(forward);   // جهت واقعی مدل
+    player.getWorldDirection(forward);
     forward.y = 0;
     forward.normalize();
 
