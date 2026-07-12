@@ -86,8 +86,16 @@ export default function ChaosLane3D() {
 
         const j = joyRef.current;
 
+        // حرکت + انیمیشن راه رفتن/دویدن/ایستادن
         if (playerRef.current && gameLogicRef.current) {
           gameLogicRef.current.update(delta, j);
+
+          // اگر GameLogic هندل مخصوص جوی‌استیک دارد، صدا بزن
+          // @ts-ignore
+          if ("handleJoy" in gameLogicRef.current) {
+            // @ts-ignore
+            gameLogicRef.current.handleJoy(j.x, j.y);
+          }
         }
 
         const movementSpeed = Math.sqrt(j.x * j.x + j.y * j.y);
@@ -96,7 +104,7 @@ export default function ChaosLane3D() {
         introTime += delta;
         const t = Math.min(introTime / introDuration, 1);
 
-        // ورود دوربین از جلو و چرخش به پشت
+        // ورود دوربین از جلو و چرخش به پشت (دست‌نخورده)
         if (!introDone) {
           if (t <= 0.35) {
             const tt = t / 0.35;
@@ -217,4 +225,4 @@ export default function ChaosLane3D() {
       </div>
     </div>
   );
-          }
+     }
