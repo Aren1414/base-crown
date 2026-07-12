@@ -164,8 +164,8 @@ export default function ChaosLane3D() {
     const x = e.touches[0].clientX - (rect.left + rect.width / 2);
     const y = e.touches[0].clientY - (rect.top + rect.height / 2);
     joyRef.current = {
-      x: Math.max(-1, Math.min(1, x / 50)),
-      y: Math.max(-1, Math.min(1, y / 50)),
+  x: Math.max(-1, Math.min(1, x / 50)),
+  y: Math.max(-1, Math.min(1, -(y / 50))), 
     };
   };
 
