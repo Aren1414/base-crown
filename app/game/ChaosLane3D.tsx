@@ -1,4 +1,4 @@
-'use client';
+"use client";
 
 import { useEffect, useRef } from "react";
 import * as THREE from "three";
@@ -98,7 +98,7 @@ export default function ChaosLane3D() {
         introTime += delta;
         const t = Math.min(introTime / introDuration, 1);
 
-        // ورود دوربین از جلو و چرخش به پشت (دست‌نخورده)
+        // ورود دوربین از جلو و چرخش به پشت
         if (!introDone) {
           if (t <= 0.35) {
             const tt = t / 0.35;
@@ -219,4 +219,4 @@ export default function ChaosLane3D() {
       </div>
     </div>
   );
-    }
+          }
