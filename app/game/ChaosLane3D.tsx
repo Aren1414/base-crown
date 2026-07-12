@@ -9,10 +9,10 @@ export default function ChaosLane3D() {
   const mountRef = useRef<HTMLDivElement | null>(null);
 
   const joyRef = useRef({ x: 0, y: 0 });
-  const playerRef = useRef<THREE.Object3D | null>(null);
   const mixerRef = useRef<THREE.AnimationMixer | null>(null);
+  const playActionRef = useRef<(key: string) => void>(() => {});
   const setMoveBySpeedRef = useRef<(speed: number) => void>(() => {});
-  const playAnimOnceRef = useRef<(file: string) => void>(() => {});
+  const playerGroupRef = useRef<THREE.Group | null>(null);
   const gameLogicRef = useRef<ReturnType<typeof createGameLogic> | null>(null);
 
   useEffect(() => {
@@ -27,7 +27,6 @@ export default function ChaosLane3D() {
       0.1,
       200
     );
-
     camera.position.set(0, 2.2, 8);
     camera.lookAt(0, 1.6, 0);
 
@@ -37,6 +36,7 @@ export default function ChaosLane3D() {
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.15;
     renderer.setSize(window.innerWidth, window.innerHeight);
+
     mountRef.current.appendChild(renderer.domElement);
 
     const keyLight = new THREE.DirectionalLight(0xffffff, 1.4);
@@ -47,28 +47,22 @@ export default function ChaosLane3D() {
     scene.add(fillLight);
 
     (async () => {
-      const { player, mixer, setMoveBySpeed, playAnimOnce } =
+      const { playerGroup, mixer, playAction, setMoveBySpeed } =
         await loadPlayerModel(scene);
-      playerRef.current = player;
-      mixerRef.current = mixer;
-      setMoveBySpeedRef.current = setMoveBySpeed;
-      playAnimOnceRef.current = playAnimOnce;
 
-      const gameLogic = createGameLogic(player);
+      scene.add(playerGroup);
+
+      mixerRef.current = mixer;
+      playActionRef.current = playAction;
+      setMoveBySpeedRef.current = setMoveBySpeed;
+      playerGroupRef.current = playerGroup;
+
+      const gameLogic = createGameLogic(scene, playerGroup);
       gameLogicRef.current = gameLogic;
 
-      const actionButtons = [
-        { id: "btn-punch", file: "Combo Punch.glb" },
-        { id: "btn-kick", file: "Mma Kick.glb" },
-        { id: "btn-jump", file: "Jumping.glb" },
-      ];
-
-      actionButtons.forEach(({ id, file }) => {
-        const btn = document.getElementById(id);
-        if (!btn) return;
-        const handler = () => playAnimOnceRef.current(file);
-        btn.addEventListener("touchstart", handler, { passive: true });
-        btn.addEventListener("mousedown", handler);
+      window.addEventListener("keydown", (e) => {
+        if (!gameLogicRef.current) return;
+        gameLogicRef.current.handleKey(e, playActionRef.current);
       });
 
       const clock = new THREE.Clock();
@@ -77,79 +71,75 @@ export default function ChaosLane3D() {
       const introDuration = 4.0;
       let introDone = false;
 
-      // 🔥 مشکل اصلی: joyRef گیر می‌کرد → اصلاح شد
-      const handleMovement = () => {
-        const j = joyRef.current;
-
-        if (playerRef.current && gameLogicRef.current) {
-          gameLogicRef.current.update(clock.getDelta(), j);
-        }
-
-        const movementSpeed = Math.sqrt(j.x * j.x + j.y * j.y);
-        setMoveBySpeedRef.current(movementSpeed);
-
-        // اگر حرکت صفر شد → انیمیشن ایستادن فعال شود
-        if (movementSpeed === 0) {
-          setMoveBySpeedRef.current(0);
-        }
-      };
-
       const animate = () => {
         requestAnimationFrame(animate);
 
         const delta = clock.getDelta();
-        mixerRef.current?.update(delta);
+        if (mixerRef.current) mixerRef.current.update(delta);
 
-        handleMovement();
+        const j = joyRef.current;
+        const speed = Math.sqrt(j.x * j.x + j.y * j.y);
+        setMoveBySpeedRef.current(speed);
+
+        if (gameLogicRef.current) {
+          gameLogicRef.current.handleJoy(j.x, j.y, playActionRef.current);
+          gameLogicRef.current.update(delta, playActionRef.current);
+        }
+
+        // وقتی جهت‌ها رها می‌شوند → همیشه انیمیشن ایستادن
+        if (speed < 0.05) {
+          playActionRef.current("idle");
+        }
 
         introTime += delta;
         const t = Math.min(introTime / introDuration, 1);
 
-        // ورود دوربین (دست‌نخورده)
         if (!introDone) {
           if (t <= 0.35) {
             const tt = t / 0.35;
             const farPos = new THREE.Vector3(0, 2.2, 8);
             const closePos = new THREE.Vector3(0, 2.4, 2.0);
-            camera.position.copy(new THREE.Vector3().lerpVectors(farPos, closePos, tt));
+            const currentPos = new THREE.Vector3().lerpVectors(farPos, closePos, tt);
+            camera.position.copy(currentPos);
           } else if (t <= 0.75) {
             const tt = (t - 0.35) / 0.4;
             const radius = 2.0;
             const height = 2.4;
-            const angle = Math.PI + tt * Math.PI;
-            camera.position.set(Math.sin(angle) * radius, height, Math.cos(angle) * radius);
+            const angle = tt * Math.PI;
+            const x = Math.sin(angle) * radius;
+            const z = Math.cos(angle) * radius;
+            camera.position.set(x, height, z);
           } else {
             const tt = (t - 0.75) / 0.25;
             const startPos = new THREE.Vector3(0, 2.4, -2.0);
             const endPos = new THREE.Vector3(0, 2.6, -6.0);
-            camera.position.copy(new THREE.Vector3().lerpVectors(startPos, endPos, tt));
+            const currentPos = new THREE.Vector3().lerpVectors(startPos, endPos, tt);
+            camera.position.copy(currentPos);
 
-            if (playerRef.current) {
-              const s = 1.6 + (1.2 - 1.6) * tt;
-              playerRef.current.scale.set(s, s, s);
-              playerRef.current.position.y = -0.4;
+            if (playerGroupRef.current) {
+              const startScale = 1.6;
+              const endScale = 1.2;
+              const s = startScale + (endScale - startScale) * tt;
+              playerGroupRef.current.scale.set(s, s, s);
+              playerGroupRef.current.position.y = -0.4;
             }
 
             if (tt >= 1.0) introDone = true;
           }
 
           camera.lookAt(0, 1.8, 0);
-        }
-
-        // 🔥 FOLLOW CAMERA — اصلاح کامل
-        else {
-          if (playerRef.current) {
+        } else {
+          if (playerGroupRef.current) {
             const target = new THREE.Vector3(
-              playerRef.current.position.x,
-              playerRef.current.position.y + 1.6,
-              playerRef.current.position.z
+              playerGroupRef.current.position.x,
+              playerGroupRef.current.position.y + 1.6,
+              playerGroupRef.current.position.z
             );
 
             const offset = new THREE.Vector3(0, 1.0, -4.0);
-
             const desired = target.clone().add(offset);
 
-            camera.position.lerp(desired, 0.22);
+            camera.position.lerp(desired, 0.12);
             camera.lookAt(target);
           }
         }
@@ -170,7 +160,6 @@ export default function ChaosLane3D() {
     const rect = e.currentTarget.getBoundingClientRect();
     const x = e.touches[0].clientX - (rect.left + rect.width / 2);
     const y = e.touches[0].clientY - (rect.top + rect.height / 2);
-
     joyRef.current = {
       x: Math.max(-1, Math.min(1, x / 50)),
       y: Math.max(-1, Math.min(1, y / 50)),
@@ -179,6 +168,11 @@ export default function ChaosLane3D() {
 
   const resetJoy = () => {
     joyRef.current = { x: 0, y: 0 };
+    // وقتی جوی‌استیک رها می‌شود → فوراً انیمیشن ایستادن
+    playActionRef.current("idle");
+    if (gameLogicRef.current) {
+      gameLogicRef.current.handleJoy(0, 0, playActionRef.current);
+    }
   };
 
   return (
@@ -196,17 +190,32 @@ export default function ChaosLane3D() {
 
       <div className="absolute bottom-8 right-8 flex flex-col gap-4">
         <div className="flex gap-4">
-          <button id="btn-punch" className="w-14 h-14 rounded-full bg-black/30 border border-white/15 backdrop-blur-xl shadow-xl flex items-center justify-center active:scale-90 transition-all">
-            <svg width="26" height="26" fill="white"><path d="M4 14l6 6 12-12-2-2-10 10-4-4z" /></svg>
+          <button
+            id="btn-punch"
+            className="w-14 h-14 rounded-full bg-black/30 border border-white/15 backdrop-blur-xl shadow-xl flex items-center justify-center active:scale-90 transition-all"
+          >
+            <svg width="26" height="26" fill="white">
+              <path d="M4 14l6 6 12-12-2-2-10 10-4-4z" />
+            </svg>
           </button>
-          <button id="btn-kick" className="w-14 h-14 rounded-full bg-black/30 border border-white/15 backdrop-blur-xl shadow-xl flex items-center justify-center active:scale-90 transition-all">
-            <svg width="26" height="26" fill="white"><path d="M3 20l8-8-2-2-8 8zM14 4l8 8-2 2-8-8z" /></svg>
+          <button
+            id="btn-kick"
+            className="w-14 h-14 rounded-full bg-black/30 border border-white/15 backdrop-blur-xl shadow-xl flex items-center justify-center active:scale-90 transition-all"
+          >
+            <svg width="26" height="26" fill="white">
+              <path d="M3 20l8-8-2-2-8 8zM14 4l8 8-2 2-8-8z" />
+            </svg>
           </button>
         </div>
-        <button id="btn-jump" className="w-14 h-14 rounded-full bg-black/30 border border-white/15 backdrop-blur-xl shadow-xl flex items-center justify-center active:scale-90 transition-all mx-auto">
-          <svg width="26" height="26" fill="white"><path d="M12 2l6 10h-4v10h-4V12H6z" /></svg>
+        <button
+          id="btn-jump"
+          className="w-14 h-14 rounded-full bg-black/30 border border-white/15 backdrop-blur-xl shadow-xl flex items-center justify-center active:scale-90 transition-all mx-auto"
+        >
+          <svg width="26" height="26" fill="white">
+            <path d="M12 2l6 10h-4v10h-4V12H6z" />
+          </svg>
         </button>
       </div>
     </div>
   );
-        }
+                              }
