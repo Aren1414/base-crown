@@ -13,21 +13,12 @@ export function createGameLogic(player: THREE.Object3D) {
     const intensity = Math.sqrt(x * x + y * y);
     const speed = intensity < 0.6 ? walkSpeed : runSpeed;
 
-    // 🔥 جهت واقعی مدل (نه جهت فرضی)
-    const forward = new THREE.Vector3();
-    player.getWorldDirection(forward);
-    forward.y = 0;
-    forward.normalize();
+    // 🔥 جهت حرکت کاملاً بر اساس جوی‌استیک
+    const moveDir = new THREE.Vector3(x, 0, -y);
+    moveDir.normalize();
 
-    // 🔥 جهت راست واقعی مدل
-    const right = new THREE.Vector3();
-    right.crossVectors(forward, new THREE.Vector3(0, 1, 0)).normalize();
-
-    // حرکت جلو/عقب
-    player.position.addScaledVector(forward, -y * speed);
-
-    // حرکت چپ/راست
-    player.position.addScaledVector(right, x * speed);
+    // 🔥 حرکت واقعی
+    player.position.addScaledVector(moveDir, speed);
 
     // 🔥 کاراکتر همیشه پشتش به دوربین باشد
     player.rotation.y = 0;
