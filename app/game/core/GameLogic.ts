@@ -9,10 +9,10 @@ export function createGameLogic(player: THREE.Object3D) {
 
     if (x === 0 && y === 0) return;
 
-    // 🔥 اصلاح جهت چپ/راست (معکوس کردن محور X)
+    // 🔥 اصلاح جهت چپ/راست
     x = -x;
 
-    // شدت جوی‌استیک برای انتخاب سرعت
+    // شدت جوی‌استیک
     const intensity = Math.sqrt(x * x + y * y);
     const speed = intensity < 0.6 ? walkSpeed : runSpeed;
 
@@ -28,8 +28,8 @@ export function createGameLogic(player: THREE.Object3D) {
     }
 
     // 🔥 اگر عقب می‌ریم → کاراکتر نباید بچرخه
-    // یعنی y > 0 → فقط عقب‌عقب بره
-    // هیچ چرخشی انجام نمی‌دیم
+    // فقط عقب‌عقب بره
+    // یعنی y > 0 → چرخش حذف میشه
 
     // 🔥 حرکت واقعی
     moveDir.normalize();
