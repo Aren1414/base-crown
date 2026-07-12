@@ -16,33 +16,34 @@ export async function loadPlayerModel(scene: THREE.Scene) {
 
   const mixer = new THREE.AnimationMixer(player);
 
+  // Idle
   const idleAnim = await loader.loadAsync("/models/Breathing Idle.glb");
   const idleAction = mixer.clipAction(idleAnim.animations[0]);
   idleAction.setLoop(THREE.LoopRepeat, Infinity);
   idleAction.enabled = true;
   idleAction.play();
 
-  const walkAnim = await loader.loadAsync("/models/Catwalk Walk Forward Arc 90L.glb");
-  const walkAction = mixer.clipAction(walkAnim.animations[0]);
-  walkAction.setLoop(THREE.LoopRepeat, Infinity);
-  walkAction.enabled = true;
+  // Slow Run (جایگزین Walk)
+  const slowRunAnim = await loader.loadAsync("/models/Running.glb");
+  const slowRunAction = mixer.clipAction(slowRunAnim.animations[0]);
+  slowRunAction.setLoop(THREE.LoopRepeat, Infinity);
+  slowRunAction.enabled = true;
 
-  const runAnim = await loader.loadAsync("/models/Running.glb");
-  const runAction = mixer.clipAction(runAnim.animations[0]);
-  runAction.setLoop(THREE.LoopRepeat, Infinity);
-  runAction.enabled = true;
+  // Fast Run
+  const fastRunAnim = await loader.loadAsync("/models/Fast Run.glb");
+  const fastRunAction = mixer.clipAction(fastRunAnim.animations[0]);
+  fastRunAction.setLoop(THREE.LoopRepeat, Infinity);
+  fastRunAction.enabled = true;
 
   let currentAction: THREE.AnimationAction = idleAction;
 
   const setMoveBySpeed = (movementSpeed: number) => {
     let targetAction = idleAction;
 
-    if (movementSpeed <= 0.1) {
-      targetAction = idleAction;
-    } else if (movementSpeed > 0.1 && movementSpeed < 0.6) {
-      targetAction = walkAction;
+    if (movementSpeed > 0.1 && movementSpeed < 0.6) {
+      targetAction = slowRunAction; // دویدن آرام
     } else if (movementSpeed >= 0.6) {
-      targetAction = runAction;
+      targetAction = fastRunAction; // دویدن سریع
     }
 
     if (targetAction !== currentAction) {
