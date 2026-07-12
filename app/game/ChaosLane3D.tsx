@@ -86,19 +86,17 @@ export default function ChaosLane3D() {
 
         const j = joyRef.current;
 
-        // حرکت کاراکتر بر اساس جوی‌استیک
+        // 🔥 اول سرعت برای انتخاب انیمیشن، بعد حرکت
+        const movementSpeed = Math.sqrt(j.x * j.x + j.y * j.y);
+        setMoveBySpeedRef.current(movementSpeed);
+
         if (playerRef.current && gameLogicRef.current) {
           gameLogicRef.current.update(delta, j);
         }
 
-        // سرعت برای انتخاب انیمیشن Idle / Walk / Run
-        const movementSpeed = Math.sqrt(j.x * j.x + j.y * j.y);
-        setMoveBySpeedRef.current(movementSpeed);
-
         introTime += delta;
         const t = Math.min(introTime / introDuration, 1);
 
-        // ورود دوربین از جلو و چرخش به پشت
         if (!introDone) {
           if (t <= 0.35) {
             const tt = t / 0.35;
@@ -134,7 +132,6 @@ export default function ChaosLane3D() {
 
           camera.lookAt(0, 1.8, 0);
         } else {
-          // دوربین دنبال کاراکتر از پشت
           if (playerRef.current) {
             const target = new THREE.Vector3(
               playerRef.current.position.x,
@@ -219,4 +216,4 @@ export default function ChaosLane3D() {
       </div>
     </div>
   );
-            }
+                             }
