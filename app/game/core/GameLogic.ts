@@ -19,9 +19,9 @@ export function createGameLogic(player: THREE.Object3D) {
     // جهت حرکت
     const moveDir = new THREE.Vector3(x, 0, -y);
 
-    // 🔥 اگر عقب می‌ریم → جهت را کاملاً معکوس کن
+    // 🔥 اگر عقب می‌ریم → جهت برعکس جلو (دنده عقب)
     if (y > 0) {
-      moveDir.set(0, 0, 1);   // دقیقاً عقب‌عقب
+      moveDir.set(0, 0, -1);   // اینجا قبلاً 1 بود، باید -1 باشه
     }
 
     // 🔥 اگر جلو/چپ/راست می‌ریم → همان رفتار قبلی
@@ -32,7 +32,6 @@ export function createGameLogic(player: THREE.Object3D) {
       }
     }
 
-    // حرکت واقعی
     moveDir.normalize();
     player.position.addScaledVector(moveDir, speed);
   };
