@@ -5,9 +5,12 @@ export function createGameLogic(player: THREE.Object3D) {
   const runSpeed = 0.12;
 
   const update = (delta: number, joy: { x: number; y: number }) => {
-    const { x, y } = joy;
+    let { x, y } = joy;
 
     if (x === 0 && y === 0) return;
+
+    // 🔥 اصلاح جهت چپ/راست (معکوس کردن محور X)
+    x = -x;
 
     // شدت جوی‌استیک برای انتخاب سرعت
     const intensity = Math.sqrt(x * x + y * y);
@@ -16,17 +19,22 @@ export function createGameLogic(player: THREE.Object3D) {
     // جهت حرکت
     const moveDir = new THREE.Vector3(x, 0, -y);
 
-    // اگر جهت صفر نیست → بچرخ
-    if (moveDir.lengthSq() > 0) {
-      moveDir.normalize();
-
-      // 🔥 چرخش کاراکتر به سمت جهت حرکت
-      const targetAngle = Math.atan2(moveDir.x, moveDir.z);
-      player.rotation.y = targetAngle;
+    // 🔥 چرخش فقط وقتی جلو/چپ/راست می‌ریم
+    if (y <= 0) {
+      // یعنی جلو یا چپ یا راست
+      if (moveDir.lengthSq() > 0) {
+        moveDir.normalize();
+        const targetAngle = Math.atan2(moveDir.x, moveDir.z);
+        player.rotation.y = targetAngle;
+      }
     }
 
+    // 🔥 وقتی عقب می‌ریم → کارکتر نباید بچرخه
+    // یعنی y > 0 → فقط عقب‌عقب بره
+    // هیچ چرخشی انجام نمی‌دیم
+
     // 🔥 حرکت واقعی
-    player.position.addScaledVector(moveDir, speed);
+    player.position.addScaledVector(moveDir.normalize(), speed);
   };
 
   return { update };
