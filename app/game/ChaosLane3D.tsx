@@ -1,4 +1,4 @@
-"use client";
+'use client';
 
 import { useEffect, useRef } from "react";
 import * as THREE from "three";
@@ -219,4 +219,4 @@ export default function ChaosLane3D() {
       </div>
     </div>
   );
-          }
+            }
