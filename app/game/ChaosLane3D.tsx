@@ -3,17 +3,17 @@
 import { useEffect, useRef } from "react";
 import * as THREE from "three";
 import { loadPlayerModel } from "@/app/game/core/PlayerModel";
-import { createGameLogic } from "@/app/game/core/GameLogic";
 
 export default function ChaosLane3D() {
   const mountRef = useRef<HTMLDivElement | null>(null);
 
   const joyRef = useRef({ x: 0, y: 0 });
   const mixerRef = useRef<THREE.AnimationMixer | null>(null);
-  const playActionRef = useRef<(key: string) => void>(() => {});
   const setMoveBySpeedRef = useRef<(speed: number) => void>(() => {});
-  const playerGroupRef = useRef<THREE.Group | null>(null);
-  const gameLogicRef = useRef<ReturnType<typeof createGameLogic> | null>(null);
+  const playAnimOnceRef = useRef<(file: string) => Promise<void>>(
+    async () => {}
+  );
+  const playerRef = useRef<THREE.Group | null>(null);
 
   useEffect(() => {
     if (!mountRef.current) return;
@@ -36,7 +36,6 @@ export default function ChaosLane3D() {
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.15;
     renderer.setSize(window.innerWidth, window.innerHeight);
-
     mountRef.current.appendChild(renderer.domElement);
 
     const keyLight = new THREE.DirectionalLight(0xffffff, 1.4);
@@ -47,23 +46,15 @@ export default function ChaosLane3D() {
     scene.add(fillLight);
 
     (async () => {
-      const { playerGroup, mixer, playAction, setMoveBySpeed } =
+      const { player, mixer, setMoveBySpeed, playAnimOnce } =
         await loadPlayerModel(scene);
 
-      scene.add(playerGroup);
+      scene.add(player);
 
+      playerRef.current = player;
       mixerRef.current = mixer;
-      playActionRef.current = playAction;
       setMoveBySpeedRef.current = setMoveBySpeed;
-      playerGroupRef.current = playerGroup;
-
-      const gameLogic = createGameLogic(scene, playerGroup);
-      gameLogicRef.current = gameLogic;
-
-      window.addEventListener("keydown", (e) => {
-        if (!gameLogicRef.current) return;
-        gameLogicRef.current.handleKey(e, playActionRef.current);
-      });
+      playAnimOnceRef.current = playAnimOnce;
 
       const clock = new THREE.Clock();
 
@@ -75,25 +66,28 @@ export default function ChaosLane3D() {
         requestAnimationFrame(animate);
 
         const delta = clock.getDelta();
-        if (mixerRef.current) mixerRef.current.update(delta);
+        mixerRef.current?.update(delta);
 
         const j = joyRef.current;
-        const speed = Math.sqrt(j.x * j.x + j.y * j.y);
-        setMoveBySpeedRef.current(speed);
+        const movementSpeed = Math.sqrt(j.x * j.x + j.y * j.y);
 
-        if (gameLogicRef.current) {
-          gameLogicRef.current.handleJoy(j.x, j.y, playActionRef.current);
-          gameLogicRef.current.update(delta, playActionRef.current);
-        }
+        // کنترل انیمیشن راه رفتن / دویدن / ایستادن
+        setMoveBySpeedRef.current(movementSpeed);
 
-        // وقتی جهت‌ها رها می‌شوند → همیشه انیمیشن ایستادن
-        if (speed < 0.05) {
-          playActionRef.current("idle");
+        // حرکت کاراکتر با جوی‌استیک
+        if (playerRef.current) {
+          const forward = new THREE.Vector3(0, 0, -1);
+          const right = new THREE.Vector3(1, 0, 0);
+          const speed = 0.08;
+
+          playerRef.current.position.addScaledVector(forward, j.y * speed);
+          playerRef.current.position.addScaledVector(right, j.x * speed);
         }
 
         introTime += delta;
         const t = Math.min(introTime / introDuration, 1);
 
+        // ورود دوربین از جلو → چرخش → پشت کاراکتر
         if (!introDone) {
           if (t <= 0.35) {
             const tt = t / 0.35;
@@ -105,7 +99,7 @@ export default function ChaosLane3D() {
             const tt = (t - 0.35) / 0.4;
             const radius = 2.0;
             const height = 2.4;
-            const angle = tt * Math.PI;
+            const angle = Math.PI + tt * Math.PI;
             const x = Math.sin(angle) * radius;
             const z = Math.cos(angle) * radius;
             camera.position.set(x, height, z);
@@ -116,12 +110,12 @@ export default function ChaosLane3D() {
             const currentPos = new THREE.Vector3().lerpVectors(startPos, endPos, tt);
             camera.position.copy(currentPos);
 
-            if (playerGroupRef.current) {
+            if (playerRef.current) {
               const startScale = 1.6;
               const endScale = 1.2;
               const s = startScale + (endScale - startScale) * tt;
-              playerGroupRef.current.scale.set(s, s, s);
-              playerGroupRef.current.position.y = -0.4;
+              playerRef.current.scale.set(s, s, s);
+              playerRef.current.position.y = -0.4;
             }
 
             if (tt >= 1.0) introDone = true;
@@ -129,11 +123,12 @@ export default function ChaosLane3D() {
 
           camera.lookAt(0, 1.8, 0);
         } else {
-          if (playerGroupRef.current) {
+          // دوربین همیشه پشت کاراکتر و دنبالش
+          if (playerRef.current) {
             const target = new THREE.Vector3(
-              playerGroupRef.current.position.x,
-              playerGroupRef.current.position.y + 1.6,
-              playerGroupRef.current.position.z
+              playerRef.current.position.x,
+              playerRef.current.position.y + 1.6,
+              playerRef.current.position.z
             );
 
             const offset = new THREE.Vector3(0, 1.0, -4.0);
@@ -168,11 +163,8 @@ export default function ChaosLane3D() {
 
   const resetJoy = () => {
     joyRef.current = { x: 0, y: 0 };
-    // وقتی جوی‌استیک رها می‌شود → فوراً انیمیشن ایستادن
-    playActionRef.current("idle");
-    if (gameLogicRef.current) {
-      gameLogicRef.current.handleJoy(0, 0, playActionRef.current);
-    }
+    // با رها شدن جوی‌استیک، سرعت صفر می‌شود → setMoveBySpeed خودکار انیمیشن ایستادن را نگه می‌دارد
+    setMoveBySpeedRef.current(0);
   };
 
   return (
@@ -218,4 +210,4 @@ export default function ChaosLane3D() {
       </div>
     </div>
   );
-                              }
+                           }
