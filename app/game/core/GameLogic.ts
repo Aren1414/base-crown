@@ -13,9 +13,12 @@ export function createGameLogic(player: THREE.Object3D) {
     const intensity = Math.sqrt(x * x + y * y);
     const speed = intensity < 0.6 ? walkSpeed : runSpeed;
 
-    // 🔥 جهت حرکت کاملاً بر اساس جوی‌استیک
-    const moveDir = new THREE.Vector3(x, 0, -y);
-    moveDir.normalize();
+    // 🔥 جهت حرکت با شدت واقعی (بدون normalize)
+    const moveDir = new THREE.Vector3(
+      x * intensity,   // چپ/راست با زاویه زیاد
+      0,
+      -y * intensity   // عقب‌عقب کاملاً درست
+    );
 
     // 🔥 حرکت واقعی
     player.position.addScaledVector(moveDir, speed);
