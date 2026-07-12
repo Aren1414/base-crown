@@ -9,47 +9,30 @@ export function createGameLogic(player: THREE.Object3D) {
 
     if (x === 0 && y === 0) return;
 
-    // 🔥 اصلاح جهت چپ/راست
+    // اصلاح جهت چپ/راست
     x = -x;
 
     // شدت جوی‌استیک
     const intensity = Math.sqrt(x * x + y * y);
     const speed = intensity < 0.6 ? walkSpeed : runSpeed;
 
-    // 🔥 جهت جلو واقعی مدل
-    const forward = new THREE.Vector3(0, 0, 1);
+    // جهت حرکت
+    const moveDir = new THREE.Vector3(x, 0, -y);
 
-    // 🔥 جهت عقب واقعی مدل
-    const backward = new THREE.Vector3(0, 0, -1);
-
-    // 🔥 جهت راست واقعی مدل
-    const right = new THREE.Vector3(1, 0, 0);
-
-    // 🔥 جهت چپ واقعی مدل
-    const left = new THREE.Vector3(-1, 0, 0);
-
-    // 🔥 ساخت جهت حرکت
-    let moveDir = new THREE.Vector3();
-
-    // جلو
-    if (y < 0) moveDir.add(forward);
-
-    // عقب
-    if (y > 0) moveDir.add(backward);
-
-    // راست
-    if (x > 0) moveDir.add(right);
-
-    // چپ
-    if (x < 0) moveDir.add(left);
-
-    // 🔥 چرخش فقط برای جلو/چپ/راست
-    if (y <= 0) {
-      const targetAngle = Math.atan2(moveDir.x, moveDir.z);
-      player.rotation.y = targetAngle;
+    // 🔥 اگر عقب می‌ریم → جهت را کاملاً معکوس کن
+    if (y > 0) {
+      moveDir.set(0, 0, 1);   // دقیقاً عقب‌عقب
     }
 
-    // 🔥 حرکت واقعی
+    // 🔥 اگر جلو/چپ/راست می‌ریم → همان رفتار قبلی
+    if (y <= 0) {
+      if (moveDir.lengthSq() > 0) {
+        const targetAngle = Math.atan2(moveDir.x, moveDir.z);
+        player.rotation.y = targetAngle;
+      }
+    }
+
+    // حرکت واقعی
     moveDir.normalize();
     player.position.addScaledVector(moveDir, speed);
   };
