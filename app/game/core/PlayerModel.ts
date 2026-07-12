@@ -23,17 +23,17 @@ export async function loadPlayerModel(scene: THREE.Scene) {
   idleAction.enabled = true;
   idleAction.play();
 
-  // Slow Run (جایگزین Walk)
-  const slowRunAnim = await loader.loadAsync("/models/Running.glb");
-  const slowRunAction = mixer.clipAction(slowRunAnim.animations[0]);
-  slowRunAction.setLoop(THREE.LoopRepeat, Infinity);
-  slowRunAction.enabled = true;
+  // Walk (فایل جدید تو)
+  const walkAnim = await loader.loadAsync("/models/Walk.glb");
+  const walkAction = mixer.clipAction(walkAnim.animations[0]);
+  walkAction.setLoop(THREE.LoopRepeat, Infinity);
+  walkAction.enabled = true;
 
-  // Fast Run
-  const fastRunAnim = await loader.loadAsync("/models/Fast Run.glb");
-  const fastRunAction = mixer.clipAction(fastRunAnim.animations[0]);
-  fastRunAction.setLoop(THREE.LoopRepeat, Infinity);
-  fastRunAction.enabled = true;
+  // Run (دویدن معمولی)
+  const runAnim = await loader.loadAsync("/models/Running.glb");
+  const runAction = mixer.clipAction(runAnim.animations[0]);
+  runAction.setLoop(THREE.LoopRepeat, Infinity);
+  runAction.enabled = true;
 
   let currentAction: THREE.AnimationAction = idleAction;
 
@@ -41,9 +41,9 @@ export async function loadPlayerModel(scene: THREE.Scene) {
     let targetAction = idleAction;
 
     if (movementSpeed > 0.1 && movementSpeed < 0.6) {
-      targetAction = slowRunAction; // دویدن آرام
+      targetAction = walkAction; // راه رفتن
     } else if (movementSpeed >= 0.6) {
-      targetAction = fastRunAction; // دویدن سریع
+      targetAction = runAction; // دویدن
     }
 
     if (targetAction !== currentAction) {
