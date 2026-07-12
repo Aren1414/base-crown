@@ -86,18 +86,12 @@ export default function ChaosLane3D() {
 
         const j = joyRef.current;
 
-        // حرکت + انیمیشن راه رفتن/دویدن/ایستادن
+        // حرکت کاراکتر بر اساس جوی‌استیک
         if (playerRef.current && gameLogicRef.current) {
           gameLogicRef.current.update(delta, j);
-
-          // اگر GameLogic هندل مخصوص جوی‌استیک دارد، صدا بزن
-          // @ts-ignore
-          if ("handleJoy" in gameLogicRef.current) {
-            // @ts-ignore
-            gameLogicRef.current.handleJoy(j.x, j.y);
-          }
         }
 
+        // سرعت برای انتخاب انیمیشن Idle / Walk / Run
         const movementSpeed = Math.sqrt(j.x * j.x + j.y * j.y);
         setMoveBySpeedRef.current(movementSpeed);
 
@@ -225,4 +219,4 @@ export default function ChaosLane3D() {
       </div>
     </div>
   );
-     }
+    }
