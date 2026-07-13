@@ -140,23 +140,28 @@ export default function ChaosLane3D() {
               playerRef.current.position.z
             );
 
+            // 🔥 فاصله ثابت پشت کاراکتر
             const baseOffset = new THREE.Vector3(0, 1.0, -4.0);
 
+            // 🔥 چرخش آفست بر اساس جهت کاراکتر
             const rotatedOffset = baseOffset.clone().applyAxisAngle(
               new THREE.Vector3(0, 1, 0),
               playerRef.current.rotation.y
             );
 
+            // 🔥 چپ/راست کم → همراهی پهلو
             if (Math.abs(j.x) > 0.1 && Math.abs(j.x) < 0.4) {
               rotatedOffset.x += j.x * 1.2;
             }
 
+            // 🔥 عقب کم → دوربین تکون نخوره
             if (j.y > 0 && j.y < 0.3) {
-              // عقب کم → دوربین تکون نخوره
+              // هیچ کاری نمی‌کنیم
             }
 
+            // 🔥 عقب زیاد → دوربین پشت کاراکتر
             if (j.y >= 0.3) {
-              // عقب زیاد → دوربین پشت کاراکتر
+              // rotatedOffset خودش پشت کاراکتره
             }
 
             const desired = target.clone().add(rotatedOffset);
@@ -235,4 +240,4 @@ export default function ChaosLane3D() {
       </div>
     </div>
   );
-  }
+      }
