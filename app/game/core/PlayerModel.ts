@@ -11,7 +11,9 @@ export async function loadPlayerModel(scene: THREE.Scene) {
 
   player.scale.set(1.6, 1.6, 1.6);
   player.position.set(0, -0.3, 0);
-  player.rotation.y = 0;
+  // ❌ این خط حرکت و چرخش را خراب می‌کرد — حذف شد
+  // player.rotation.y = 0;
+
   scene.add(player);
 
   const mixer = new THREE.AnimationMixer(player);
@@ -23,13 +25,13 @@ export async function loadPlayerModel(scene: THREE.Scene) {
   idleAction.enabled = true;
   idleAction.play();
 
-  // Walk (فایل جدید تو)
+  // Walk
   const walkAnim = await loader.loadAsync("/models/Walk.glb");
   const walkAction = mixer.clipAction(walkAnim.animations[0]);
   walkAction.setLoop(THREE.LoopRepeat, Infinity);
   walkAction.enabled = true;
 
-  // Run (دویدن معمولی)
+  // Run
   const runAnim = await loader.loadAsync("/models/Running.glb");
   const runAction = mixer.clipAction(runAnim.animations[0]);
   runAction.setLoop(THREE.LoopRepeat, Infinity);
@@ -41,9 +43,9 @@ export async function loadPlayerModel(scene: THREE.Scene) {
     let targetAction = idleAction;
 
     if (movementSpeed > 0.1 && movementSpeed < 0.6) {
-      targetAction = walkAction; // راه رفتن
+      targetAction = walkAction;
     } else if (movementSpeed >= 0.6) {
-      targetAction = runAction; // دویدن
+      targetAction = runAction;
     }
 
     if (targetAction !== currentAction) {
