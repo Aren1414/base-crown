@@ -9,16 +9,16 @@ export function createGameLogic(player: THREE.Object3D) {
 
     if (x === 0 && y === 0) return;
 
-    // 🔥 اصلاح جهت چپ/راست (این درست بود)
+    // چپ/راست اصلاح
     x = -x;
 
-    // 🔥 جلو/عقب واقعی
+    // جلو/عقب واقعی
     const forwardBackward = -y;
 
     const intensity = Math.sqrt(x * x + forwardBackward * forwardBackward);
     const speed = intensity < 0.6 ? walkSpeed : runSpeed;
 
-    // 🔥 جهت حرکت
+    // جهت حرکت
     const moveDir = new THREE.Vector3(
       x,
       0,
@@ -33,7 +33,6 @@ export function createGameLogic(player: THREE.Object3D) {
     }
 
     // 🔥 جلو/عقب → بدون چرخش
-    // یعنی اگر فقط y حرکت کنه، چرخش نمی‌کنیم
 
     moveDir.normalize();
     player.position.addScaledVector(moveDir, speed);
