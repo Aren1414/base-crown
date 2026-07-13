@@ -11,27 +11,29 @@ export async function loadPlayerModel(scene: THREE.Scene) {
 
   player.scale.set(1.6, 1.6, 1.6);
   player.position.set(0, -0.3, 0);
-  // ❌ این خط حرکت و چرخش را خراب می‌کرد — حذف شد
-  // player.rotation.y = 0;
+
+  // 🔥 حذف کامل Root Motion
+  player.traverse(obj => {
+    if (obj.isBone && obj.name.toLowerCase().includes("root")) {
+      obj.position.set(0, 0, 0);
+    }
+  });
 
   scene.add(player);
 
   const mixer = new THREE.AnimationMixer(player);
 
-  // Idle
   const idleAnim = await loader.loadAsync("/models/Breathing Idle.glb");
   const idleAction = mixer.clipAction(idleAnim.animations[0]);
   idleAction.setLoop(THREE.LoopRepeat, Infinity);
   idleAction.enabled = true;
   idleAction.play();
 
-  // Walk
   const walkAnim = await loader.loadAsync("/models/Walk.glb");
   const walkAction = mixer.clipAction(walkAnim.animations[0]);
   walkAction.setLoop(THREE.LoopRepeat, Infinity);
   walkAction.enabled = true;
 
-  // Run
   const runAnim = await loader.loadAsync("/models/Running.glb");
   const runAction = mixer.clipAction(runAnim.animations[0]);
   runAction.setLoop(THREE.LoopRepeat, Infinity);
