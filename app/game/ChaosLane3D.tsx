@@ -46,10 +46,18 @@ export default function ChaosLane3D() {
     const fillLight = new THREE.HemisphereLight(0xffffff, 0x444444, 0.8);
     scene.add(fillLight);
 
-    // زمین اضافه شد
-    const groundGeo = new THREE.PlaneGeometry(200, 200);
+    // مپ شهری
+    const texLoader = new THREE.TextureLoader();
+    const asphaltTexture = texLoader.load(
+      "https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/terrain/grasslight-big.jpg"
+    );
+    asphaltTexture.wrapS = THREE.RepeatWrapping;
+    asphaltTexture.wrapT = THREE.RepeatWrapping;
+    asphaltTexture.repeat.set(20, 20);
+
+    const groundGeo = new THREE.PlaneGeometry(400, 400);
     const groundMat = new THREE.MeshStandardMaterial({
-      color: "#222222",
+      map: asphaltTexture,
       roughness: 1,
       metalness: 0
     });
@@ -57,6 +65,21 @@ export default function ChaosLane3D() {
     ground.rotation.x = -Math.PI / 2;
     ground.position.y = -0.5;
     scene.add(ground);
+
+    // ساختمان‌ها
+    const buildingMat = new THREE.MeshStandardMaterial({ color: "#333333" });
+
+    function addBuilding(x, z, w, h, d) {
+      const geo = new THREE.BoxGeometry(w, h, d);
+      const mesh = new THREE.Mesh(geo, buildingMat);
+      mesh.position.set(x, h / 2 - 0.5, z);
+      scene.add(mesh);
+    }
+
+    addBuilding(20, 20, 10, 25, 10);
+    addBuilding(-25, 10, 12, 30, 12);
+    addBuilding(15, -30, 14, 22, 14);
+    addBuilding(-35, -25, 10, 18, 10);
 
     (async () => {
       const { player, mixer, setMoveBySpeed, playAnimOnce } =
@@ -233,4 +256,4 @@ export default function ChaosLane3D() {
       </div>
     </div>
   );
-                              }
+      }
