@@ -12,18 +12,18 @@ export function createGameLogic(player: THREE.Object3D) {
     const intensity = Math.sqrt(x * x + y * y);
     const speed = intensity < 0.6 ? walkSpeed : runSpeed;
 
-    // جلو = -Z
-    // عقب = +Z
+    // 🔥 جلو = -Z
+    // 🔥 عقب = +Z
+    // 🔥 چپ/راست = X
     const moveDir = new THREE.Vector3(
-      x,
+      x * 1.8,   // 🔥 زاویه چپ/راست شدیدتر
       0,
-      -y
+      -y        // جلو/عقب
     );
 
-    // ❗ هیچ چرخشی انجام نمی‌شود
+    // 🔥 هیچ چرخشی انجام نمی‌شود
     // کاراکتر همیشه پشتش به ما می‌ماند
 
-    moveDir.normalize();
     player.position.addScaledVector(moveDir, speed);
   };
 
