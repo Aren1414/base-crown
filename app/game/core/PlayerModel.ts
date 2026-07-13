@@ -12,9 +12,9 @@ export async function loadPlayerModel(scene: THREE.Scene) {
   player.scale.set(1.6, 1.6, 1.6);
   player.position.set(0, -0.3, 0);
 
-  // 🔥 حذف کامل Root Motion
+  // 🔥 حذف کامل Root Motion بدون خطای TypeScript
   player.traverse(obj => {
-    if (obj.isBone && obj.name.toLowerCase().includes("root")) {
+    if (obj instanceof THREE.Bone && obj.name.toLowerCase().includes("root")) {
       obj.position.set(0, 0, 0);
     }
   });
