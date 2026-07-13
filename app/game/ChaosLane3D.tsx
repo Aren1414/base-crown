@@ -132,41 +132,17 @@ export default function ChaosLane3D() {
           camera.lookAt(0, 1.8, 0);
         } else {
           if (playerRef.current) {
-            const j = joyRef.current;
-
             const target = new THREE.Vector3(
               playerRef.current.position.x,
               playerRef.current.position.y + 1.6,
               playerRef.current.position.z
             );
 
-            // 🔥 فاصله ثابت پشت کاراکتر
-            const baseOffset = new THREE.Vector3(0, 1.0, -4.0);
+            const offset = new THREE.Vector3(0, 1.0, -4.0);
 
-            // 🔥 چرخش آفست بر اساس جهت کاراکتر
-            const rotatedOffset = baseOffset.clone().applyAxisAngle(
-              new THREE.Vector3(0, 1, 0),
-              playerRef.current.rotation.y
-            );
+            const desired = target.clone().add(offset);
 
-            // 🔥 چپ/راست کم → همراهی پهلو
-            if (Math.abs(j.x) > 0.1 && Math.abs(j.x) < 0.4) {
-              rotatedOffset.x += j.x * 1.2;
-            }
-
-            // 🔥 عقب کم → دوربین تکون نخوره
-            if (j.y > 0 && j.y < 0.3) {
-              // هیچ کاری نمی‌کنیم
-            }
-
-            // 🔥 عقب زیاد → دوربین پشت کاراکتر
-            if (j.y >= 0.3) {
-              // rotatedOffset خودش پشت کاراکتره
-            }
-
-            const desired = target.clone().add(rotatedOffset);
-
-            camera.position.lerp(desired, 0.18);
+            camera.position.lerp(desired, 0.12);
             camera.lookAt(target);
           }
         }
@@ -240,4 +216,4 @@ export default function ChaosLane3D() {
       </div>
     </div>
   );
-      }
+          }
