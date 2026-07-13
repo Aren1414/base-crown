@@ -138,9 +138,14 @@ export default function ChaosLane3D() {
               playerRef.current.position.z
             );
 
-            const offset = new THREE.Vector3(0, 1.0, -4.0);
+            const baseOffset = new THREE.Vector3(0, 1.0, -4.0);
 
-            const desired = target.clone().add(offset);
+            const rotatedOffset = baseOffset.clone().applyAxisAngle(
+              new THREE.Vector3(0, 1, 0),
+              playerRef.current.rotation.y
+            );
+
+            const desired = target.clone().add(rotatedOffset);
 
             camera.position.lerp(desired, 0.12);
             camera.lookAt(target);
@@ -216,4 +221,4 @@ export default function ChaosLane3D() {
       </div>
     </div>
   );
-          }
+              }
