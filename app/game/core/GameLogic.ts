@@ -5,25 +5,41 @@ export function createGameLogic(player: THREE.Object3D) {
   const runSpeed = 0.12;
 
   const update = (delta: number, joy: { x: number; y: number }) => {
-    const { x, y } = joy;
+    let { x, y } = joy;
 
     if (x === 0 && y === 0) return;
 
-    const intensity = Math.sqrt(x * x + y * y);
+    // 🔥 اصلاح جهت چپ/راست (این درست بود)
+    x = -x;
+
+    // 🔥 جلو/عقب واقعی
+    // بالا = جلو → y منفی
+    // پایین = عقب → y مثبت
+    const forwardBackward = -y;   // 🔥 فقط همین خط اصلاح شد
+
+    const intensity = Math.sqrt(x * x + forwardBackward * forwardBackward);
     const speed = intensity < 0.6 ? walkSpeed : runSpeed;
 
-    // 🔥 جلو = -Z
-    // 🔥 عقب = +Z
-    // 🔥 چپ/راست = X
     const moveDir = new THREE.Vector3(
-      x * 1.8,   // 🔥 زاویه چپ/راست شدیدتر
+      x,              // چپ/راست کاملاً مثل قبل
       0,
-      -y        // جلو/عقب
+      forwardBackward // جلو/عقب کاملاً درست شد
     );
 
-    // 🔥 هیچ چرخشی انجام نمی‌شود
-    // کاراکتر همیشه پشتش به ما می‌ماند
+    // 🔥 چرخش فقط وقتی جلو می‌ریم (مثل قبل)
+    if (forwardBackward < 0) {
+      const dir = moveDir.clone();
+      dir.y = 0;
+      if (dir.lengthSq() > 0) {
+        dir.normalize();
+        const angle = Math.atan2(dir.x, dir.z);
+        player.rotation.y = angle;
+      }
+    }
 
+    // 🔥 عقب‌عقب → بدون چرخش (مثل قبل)
+
+    moveDir.normalize();
     player.position.addScaledVector(moveDir, speed);
   };
 
