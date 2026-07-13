@@ -9,8 +9,8 @@ export function createGameLogic(player: THREE.Object3D) {
 
     if (x === 0 && y === 0) return;
 
-    // چپ/راست
-    x = -x;
+    // ❗ چپ/راست برعکس بود → این خط باید حذف شود
+    // x = -x;
 
     // جلو/عقب
     const forwardBackward = y;
@@ -22,13 +22,9 @@ export function createGameLogic(player: THREE.Object3D) {
 
     // 🔥 چرخش جلو + چپ + راست
     if (forwardBackward < 0 || Math.abs(x) > 0.05) {
-      // پایه: پشت به ما = π
       const angle = Math.PI + Math.atan2(x, -forwardBackward);
       player.rotation.y = angle;
     }
-
-    // 🔥 عقب → بدون چرخش
-    // forwardBackward > 0 یعنی عقب
 
     moveDir.normalize();
     player.position.addScaledVector(moveDir, speed);
