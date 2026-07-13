@@ -86,7 +86,6 @@ export default function ChaosLane3D() {
 
         const j = joyRef.current;
 
-        // 🔥 اول سرعت برای انتخاب انیمیشن، بعد حرکت
         const movementSpeed = Math.sqrt(j.x * j.x + j.y * j.y);
         setMoveBySpeedRef.current(movementSpeed);
 
@@ -133,14 +132,34 @@ export default function ChaosLane3D() {
           camera.lookAt(0, 1.8, 0);
         } else {
           if (playerRef.current) {
+            const j = joyRef.current;
+
             const target = new THREE.Vector3(
               playerRef.current.position.x,
               playerRef.current.position.y + 1.6,
               playerRef.current.position.z
             );
 
-            const offset = new THREE.Vector3(0, 1.0, -4.0);
-            const desired = target.clone().add(offset);
+            const baseOffset = new THREE.Vector3(0, 1.0, -4.0);
+
+            const rotatedOffset = baseOffset.clone().applyAxisAngle(
+              new THREE.Vector3(0, 1, 0),
+              playerRef.current.rotation.y
+            );
+
+            if (Math.abs(j.x) > 0.1 && Math.abs(j.x) < 0.4) {
+              rotatedOffset.x += j.x * 1.2;
+            }
+
+            if (j.y > 0 && j.y < 0.3) {
+              // عقب کم → دوربین تکون نخوره
+            }
+
+            if (j.y >= 0.3) {
+              // عقب زیاد → دوربین پشت کاراکتر
+            }
+
+            const desired = target.clone().add(rotatedOffset);
 
             camera.position.lerp(desired, 0.18);
             camera.lookAt(target);
@@ -164,8 +183,8 @@ export default function ChaosLane3D() {
     const x = e.touches[0].clientX - (rect.left + rect.width / 2);
     const y = e.touches[0].clientY - (rect.top + rect.height / 2);
     joyRef.current = {
-  x: Math.max(-1, Math.min(1, x / 50)),
-  y: Math.max(-1, Math.min(1, -(y / 50))), 
+      x: Math.max(-1, Math.min(1, x / 50)),
+      y: Math.max(-1, Math.min(1, -(y / 50))),
     };
   };
 
@@ -216,4 +235,4 @@ export default function ChaosLane3D() {
       </div>
     </div>
   );
-                             }
+  }
