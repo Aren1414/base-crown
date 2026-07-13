@@ -9,22 +9,19 @@ export function createGameLogic(player: THREE.Object3D) {
 
     if (x === 0 && y === 0) return;
 
-    // شدت جوی‌استیک
     const intensity = Math.sqrt(x * x + y * y);
     const speed = intensity < 0.6 ? walkSpeed : runSpeed;
 
-    // 🔥 جهت حرکت — بدون چرخش
     // جلو = -Z
     // عقب = +Z
-    // چپ/راست = X
     const moveDir = new THREE.Vector3(
-      x,      // چپ/راست
+      x,
       0,
-      -y      // جلو/عقب
+      -y
     );
 
-    // 🔥 هیچ چرخشی انجام نمی‌شود
-    // player.rotation.y = player.rotation.y;
+    // ❗ هیچ چرخشی انجام نمی‌شود
+    // کاراکتر همیشه پشتش به ما می‌ماند
 
     moveDir.normalize();
     player.position.addScaledVector(moveDir, speed);
