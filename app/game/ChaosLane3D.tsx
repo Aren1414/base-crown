@@ -46,6 +46,18 @@ export default function ChaosLane3D() {
     const fillLight = new THREE.HemisphereLight(0xffffff, 0x444444, 0.8);
     scene.add(fillLight);
 
+    // زمین اضافه شد
+    const groundGeo = new THREE.PlaneGeometry(200, 200);
+    const groundMat = new THREE.MeshStandardMaterial({
+      color: "#222222",
+      roughness: 1,
+      metalness: 0
+    });
+    const ground = new THREE.Mesh(groundGeo, groundMat);
+    ground.rotation.x = -Math.PI / 2;
+    ground.position.y = -0.5;
+    scene.add(ground);
+
     (async () => {
       const { player, mixer, setMoveBySpeed, playAnimOnce } =
         await loadPlayerModel(scene);
@@ -221,4 +233,4 @@ export default function ChaosLane3D() {
       </div>
     </div>
   );
-              }
+                              }
