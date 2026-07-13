@@ -13,25 +13,29 @@ export function createGameLogic(player: THREE.Object3D) {
     x = -x;
 
     // 🔥 جلو/عقب واقعی
-    // بالا = جلو → y منفی
-    // پایین = عقب → y مثبت
-    const forwardBackward = -y;   // فقط همین خط جهت عقب را درست می‌کند
+    const forwardBackward = -y;
 
     const intensity = Math.sqrt(x * x + forwardBackward * forwardBackward);
     const speed = intensity < 0.6 ? walkSpeed : runSpeed;
 
-    // 🔥 جهت حرکت واقعی — بدون چرخش
+    // 🔥 جهت حرکت
     const moveDir = new THREE.Vector3(
-      x * 1.8,          // چپ/راست قوی‌تر و واضح‌تر
+      x,
       0,
-      forwardBackward   // جلو/عقب واقعی
+      forwardBackward
     );
 
-    // 🔥 هیچ چرخشی انجام نمی‌شود
-    // کاراکتر همیشه پشتش به ما می‌ماند
-    // player.rotation.y = player.rotation.y;
+    // 🔥 چرخش فقط برای چپ/راست
+    if (Math.abs(x) > 0.05) {
+      // جلو/عقب نباید چرخش بده → فقط X زاویه می‌سازه
+      const angle = Math.atan2(x, -1); 
+      player.rotation.y = angle;
+    }
 
-    // ❗ normalize حذف شد تا چپ/راست ضعیف نشود
+    // 🔥 جلو/عقب → بدون چرخش
+    // یعنی اگر فقط y حرکت کنه، چرخش نمی‌کنیم
+
+    moveDir.normalize();
     player.position.addScaledVector(moveDir, speed);
   };
 
