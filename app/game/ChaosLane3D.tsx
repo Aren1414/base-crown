@@ -69,7 +69,7 @@ export default function ChaosLane3D() {
     // ساختمان‌ها
     const buildingMat = new THREE.MeshStandardMaterial({ color: "#333333" });
 
-    function addBuilding(x, z, w, h, d) {
+    function addBuilding(x: number, z: number, w: number, h: number, d: number) {
       const geo = new THREE.BoxGeometry(w, h, d);
       const mesh = new THREE.Mesh(geo, buildingMat);
       mesh.position.set(x, h / 2 - 0.5, z);
