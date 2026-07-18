@@ -21,6 +21,7 @@ export default function ChaosLane3D() {
     const scene = new THREE.Scene();
     scene.background = new THREE.Color("#000000");
 
+    // ایزومتریک: زاویه ثابت + ارتفاع بیشتر
     const camera = new THREE.PerspectiveCamera(
       65,
       window.innerWidth / window.innerHeight,
@@ -28,8 +29,9 @@ export default function ChaosLane3D() {
       200
     );
 
-    camera.position.set(0, 2.2, 8);
-    camera.lookAt(0, 1.6, 0);
+    // زاویه ایزومتریک
+    camera.position.set(10, 18, 10);
+    camera.lookAt(0, 0, 0);
 
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -46,27 +48,28 @@ export default function ChaosLane3D() {
     const fillLight = new THREE.HemisphereLight(0xffffff, 0x444444, 0.8);
     scene.add(fillLight);
 
-    // مپ شهری
+    // زمین حرفه‌ای‌تر برای ایزومتریک
     const texLoader = new THREE.TextureLoader();
-    const asphaltTexture = texLoader.load(
+    const groundTexture = texLoader.load(
       "https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/terrain/grasslight-big.jpg"
     );
-    asphaltTexture.wrapS = THREE.RepeatWrapping;
-    asphaltTexture.wrapT = THREE.RepeatWrapping;
-    asphaltTexture.repeat.set(20, 20);
+    groundTexture.wrapS = THREE.RepeatWrapping;
+    groundTexture.wrapT = THREE.RepeatWrapping;
+    groundTexture.repeat.set(40, 40);
 
     const groundGeo = new THREE.PlaneGeometry(400, 400);
     const groundMat = new THREE.MeshStandardMaterial({
-      map: asphaltTexture,
-      roughness: 1,
-      metalness: 0
+      map: groundTexture,
+      roughness: 0.9,
+      metalness: 0.0
     });
+
     const ground = new THREE.Mesh(groundGeo, groundMat);
     ground.rotation.x = -Math.PI / 2;
     ground.position.y = -0.5;
     scene.add(ground);
 
-    // ساختمان‌ها
+    // ساختمان‌ها (بدون تغییر)
     const buildingMat = new THREE.MeshStandardMaterial({ color: "#333333" });
 
     function addBuilding(x: number, z: number, w: number, h: number, d: number) {
@@ -109,10 +112,6 @@ export default function ChaosLane3D() {
 
       const clock = new THREE.Clock();
 
-      let introTime = 0;
-      const introDuration = 4.0;
-      let introDone = false;
-
       const animate = () => {
         requestAnimationFrame(animate);
 
@@ -128,63 +127,17 @@ export default function ChaosLane3D() {
           gameLogicRef.current.update(delta, j);
         }
 
-        introTime += delta;
-        const t = Math.min(introTime / introDuration, 1);
+        // ایزومتریک: دوربین فقط موقعیت را دنبال می‌کند، زاویه ثابت می‌ماند
+        if (playerRef.current) {
+          const p = playerRef.current.position;
 
-        if (!introDone) {
-          if (t <= 0.35) {
-            const tt = t / 0.35;
-            const farPos = new THREE.Vector3(0, 2.2, 8);
-            const closePos = new THREE.Vector3(0, 2.4, 2.0);
-            const currentPos = new THREE.Vector3().lerpVectors(farPos, closePos, tt);
-            camera.position.copy(currentPos);
-          } else if (t <= 0.75) {
-            const tt = (t - 0.35) / 0.4;
-            const radius = 2.0;
-            const height = 2.4;
-            const angle = Math.PI + tt * Math.PI;
-            const x = Math.sin(angle) * radius;
-            const z = Math.cos(angle) * radius;
-            camera.position.set(x, height, z);
-          } else {
-            const tt = (t - 0.75) / 0.25;
-            const startPos = new THREE.Vector3(0, 2.4, -2.0);
-            const endPos = new THREE.Vector3(0, 2.6, -6.0);
-            const currentPos = new THREE.Vector3().lerpVectors(startPos, endPos, tt);
-            camera.position.copy(currentPos);
+          camera.position.set(
+            p.x + 10,
+            p.y + 18,
+            p.z + 10
+          );
 
-            if (playerRef.current) {
-              const startScale = 1.6;
-              const endScale = 1.2;
-              const s = startScale + (endScale - startScale) * tt;
-              playerRef.current.scale.set(s, s, s);
-              playerRef.current.position.y = -0.4;
-            }
-
-            if (tt >= 1.0) introDone = true;
-          }
-
-          camera.lookAt(0, 1.8, 0);
-        } else {
-          if (playerRef.current) {
-            const target = new THREE.Vector3(
-              playerRef.current.position.x,
-              playerRef.current.position.y + 1.6,
-              playerRef.current.position.z
-            );
-
-            const baseOffset = new THREE.Vector3(0, 1.0, -4.0);
-
-            const rotatedOffset = baseOffset.clone().applyAxisAngle(
-              new THREE.Vector3(0, 1, 0),
-              playerRef.current.rotation.y
-            );
-
-            const desired = target.clone().add(rotatedOffset);
-
-            camera.position.lerp(desired, 0.12);
-            camera.lookAt(target);
-          }
+          camera.lookAt(p.x, p.y + 1.5, p.z);
         }
 
         renderer.render(scene, camera);
@@ -256,4 +209,4 @@ export default function ChaosLane3D() {
       </div>
     </div>
   );
-      }
+        }
