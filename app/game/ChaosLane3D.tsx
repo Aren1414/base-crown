@@ -21,7 +21,7 @@ export default function ChaosLane3D() {
     const scene = new THREE.Scene();
     scene.background = new THREE.Color("#000000");
 
-    // ایزومتریک: زاویه ثابت + ارتفاع بیشتر
+    // ایزومتریک: زاویه ثابت + ارتفاع مناسب موبایل
     const camera = new THREE.PerspectiveCamera(
       65,
       window.innerWidth / window.innerHeight,
@@ -29,8 +29,8 @@ export default function ChaosLane3D() {
       200
     );
 
-    // زاویه ایزومتریک
-    camera.position.set(10, 18, 10);
+    // زاویه ایزومتریک اصلاح‌شده
+    camera.position.set(7, 12, 7);
     camera.lookAt(0, 0, 0);
 
     const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -93,6 +93,9 @@ export default function ChaosLane3D() {
       setMoveBySpeedRef.current = setMoveBySpeed;
       playAnimOnceRef.current = playAnimOnce;
 
+      // کاراکتر بزرگ‌تر برای ایزومتریک
+      player.scale.set(1.4, 1.4, 1.4);
+
       const gameLogic = createGameLogic(player);
       gameLogicRef.current = gameLogic;
 
@@ -132,9 +135,9 @@ export default function ChaosLane3D() {
           const p = playerRef.current.position;
 
           camera.position.set(
-            p.x + 10,
-            p.y + 18,
-            p.z + 10
+            p.x + 7,
+            p.y + 12,
+            p.z + 7
           );
 
           camera.lookAt(p.x, p.y + 1.5, p.z);
@@ -209,4 +212,4 @@ export default function ChaosLane3D() {
       </div>
     </div>
   );
-        }
+                }
