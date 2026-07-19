@@ -59,33 +59,42 @@ export async function loadPlayerModel(scene: THREE.Scene) {
 
     if (targetAction !== currentAction) {
       targetAction.reset();
-      targetAction.enabled = true;     // 🔥 مهم
+      targetAction.enabled = true;
       currentAction.crossFadeTo(targetAction, 0.2, false);
       targetAction.play();
       currentAction = targetAction;
     }
   };
 
+  // 🔥 مشت/لگد بدون قطع شدن راه رفتن/دویدن
   const playAnimOnce = async (file: string) => {
     const anim = await loader.loadAsync(`/models/${file}`);
     const clip = removeRootMotion(anim.animations[0]);
 
+    // فقط استخوان‌های دست را نگه می‌داریم
+    clip.tracks = clip.tracks.filter(track => {
+      const name = track.name.toLowerCase();
+      return (
+        name.includes("arm") ||
+        name.includes("hand") ||
+        name.includes("shoulder")
+      );
+    });
+
     const temp = mixer.clipAction(clip);
+
     temp.setLoop(THREE.LoopOnce, 1);
     temp.clampWhenFinished = true;
     temp.enabled = true;
 
-    currentAction.crossFadeTo(temp, 0.15, false);
-    temp.reset();
+    // اجرای مشت روی لایهٔ بالاتر
+    temp.weight = 1.0;
     temp.play();
 
     const duration = clip.duration * 1000;
 
     setTimeout(() => {
-      // 🔥 بازگرداندن صحیح اکشن اصلی
-      currentAction.enabled = true;
-      currentAction.reset();
-      currentAction.play();
+      temp.stop();
       temp.enabled = false;
     }, Math.min(duration, 2500));
   };
