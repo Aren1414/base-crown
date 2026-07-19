@@ -12,30 +12,37 @@ export async function loadPlayerModel(scene: THREE.Scene) {
   player.scale.set(1.6, 1.6, 1.6);
   player.position.set(0, -0.3, 0);
 
-  // 🔥 حذف کامل Root Motion بدون خطای TypeScript
-  player.traverse(obj => {
-    if (obj instanceof THREE.Bone && obj.name.toLowerCase().includes("root")) {
-      obj.position.set(0, 0, 0);
-    }
-  });
-
   scene.add(player);
 
   const mixer = new THREE.AnimationMixer(player);
 
+  // 🔥 تابع حذف Root Motion از هر انیمیشن
+  const removeRootMotion = (clip: THREE.AnimationClip) => {
+    clip.tracks = clip.tracks.filter(track => {
+      return !track.name.endsWith(".position");
+    });
+    return clip;
+  };
+
+  // Idle
   const idleAnim = await loader.loadAsync("/models/Breathing Idle.glb");
-  const idleAction = mixer.clipAction(idleAnim.animations[0]);
+  const idleClip = removeRootMotion(idleAnim.animations[0]);
+  const idleAction = mixer.clipAction(idleClip);
   idleAction.setLoop(THREE.LoopRepeat, Infinity);
   idleAction.enabled = true;
   idleAction.play();
 
+  // Walk
   const walkAnim = await loader.loadAsync("/models/Walk.glb");
-  const walkAction = mixer.clipAction(walkAnim.animations[0]);
+  const walkClip = removeRootMotion(walkAnim.animations[0]);
+  const walkAction = mixer.clipAction(walkClip);
   walkAction.setLoop(THREE.LoopRepeat, Infinity);
   walkAction.enabled = true;
 
+  // Run
   const runAnim = await loader.loadAsync("/models/Running.glb");
-  const runAction = mixer.clipAction(runAnim.animations[0]);
+  const runClip = removeRootMotion(runAnim.animations[0]);
+  const runAction = mixer.clipAction(runClip);
   runAction.setLoop(THREE.LoopRepeat, Infinity);
   runAction.enabled = true;
 
@@ -52,15 +59,16 @@ export async function loadPlayerModel(scene: THREE.Scene) {
 
     if (targetAction !== currentAction) {
       currentAction.crossFadeTo(targetAction, 0.2, false);
-      targetAction.reset();
-      targetAction.play();
       currentAction = targetAction;
+      currentAction.play();
     }
   };
 
   const playAnimOnce = async (file: string) => {
     const anim = await loader.loadAsync(`/models/${file}`);
-    const temp = mixer.clipAction(anim.animations[0]);
+    const clip = removeRootMotion(anim.animations[0]);
+
+    const temp = mixer.clipAction(clip);
     temp.setLoop(THREE.LoopOnce, 1);
     temp.clampWhenFinished = true;
     temp.enabled = true;
@@ -69,11 +77,10 @@ export async function loadPlayerModel(scene: THREE.Scene) {
     temp.reset();
     temp.play();
 
-    const duration = anim.animations[0].duration * 1000;
+    const duration = clip.duration * 1000;
 
     setTimeout(() => {
       temp.crossFadeTo(currentAction, 0.15, false);
-      currentAction.reset();
       currentAction.play();
     }, Math.min(duration, 2500));
   };
