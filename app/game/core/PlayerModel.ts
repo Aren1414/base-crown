@@ -16,7 +16,7 @@ export async function loadPlayerModel(scene: THREE.Scene) {
 
   const mixer = new THREE.AnimationMixer(player);
 
-  // 🔥 تابع حذف Root Motion از هر انیمیشن
+  // حذف Root Motion
   const removeRootMotion = (clip: THREE.AnimationClip) => {
     clip.tracks = clip.tracks.filter(track => {
       return !track.name.endsWith(".position");
@@ -57,9 +57,17 @@ export async function loadPlayerModel(scene: THREE.Scene) {
       targetAction = runAction;
     }
 
+    // 🔥 همیشه reset کن تا از فریم ۰ شروع بشه
     if (targetAction !== currentAction) {
+      targetAction.reset();
       currentAction.crossFadeTo(targetAction, 0.2, false);
+      targetAction.play();
       currentAction = targetAction;
+    }
+
+    // 🔥 اگر دوباره همون اکشن انتخاب شد، باید دوباره فعال بشه
+    if (!currentAction.isRunning()) {
+      currentAction.reset();
       currentAction.play();
     }
   };
@@ -80,7 +88,7 @@ export async function loadPlayerModel(scene: THREE.Scene) {
     const duration = clip.duration * 1000;
 
     setTimeout(() => {
-      temp.crossFadeTo(currentAction, 0.15, false);
+      currentAction.reset();
       currentAction.play();
     }, Math.min(duration, 2500));
   };
