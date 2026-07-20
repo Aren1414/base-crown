@@ -17,8 +17,10 @@ export async function loadPlayerModel(scene: THREE.Scene) {
   const mixer = new THREE.AnimationMixer(player);
 
   // حذف Root Motion
-  const removeRootMotion = (clip) => {
-    clip.tracks = clip.tracks.filter(track => !track.name.endsWith(".position"));
+  const removeRootMotion = (clip: THREE.AnimationClip): THREE.AnimationClip => {
+    clip.tracks = clip.tracks.filter(
+      (track: THREE.KeyframeTrack) => !track.name.endsWith(".position")
+    );
     return clip;
   };
 
@@ -39,10 +41,10 @@ export async function loadPlayerModel(scene: THREE.Scene) {
   const runAction = mixer.clipAction(removeRootMotion(runAnim.animations[0]));
   runAction.setLoop(THREE.LoopRepeat, Infinity);
 
-  let currentAction = idleAction;
+  let currentAction: THREE.AnimationAction = idleAction;
 
   // تغییر انیمیشن حرکت
-  const setMoveBySpeed = (movementSpeed) => {
+  const setMoveBySpeed = (movementSpeed: number) => {
     let targetAction = idleAction;
 
     if (movementSpeed > 0.1 && movementSpeed < 0.6) {
@@ -60,8 +62,8 @@ export async function loadPlayerModel(scene: THREE.Scene) {
   };
 
   // فیلتر استخوان‌ها برای مشت
-  const filterPunchTracks = (clip) => {
-    clip.tracks = clip.tracks.filter(track => {
+  const filterPunchTracks = (clip: THREE.AnimationClip): THREE.AnimationClip => {
+    clip.tracks = clip.tracks.filter((track: THREE.KeyframeTrack) => {
       const name = track.name.toLowerCase();
       return (
         name.includes("arm") ||
@@ -76,8 +78,8 @@ export async function loadPlayerModel(scene: THREE.Scene) {
   };
 
   // فیلتر استخوان‌ها برای لگد
-  const filterKickTracks = (clip) => {
-    clip.tracks = clip.tracks.filter(track => {
+  const filterKickTracks = (clip: THREE.AnimationClip): THREE.AnimationClip => {
+    clip.tracks = clip.tracks.filter((track: THREE.KeyframeTrack) => {
       const name = track.name.toLowerCase();
       return (
         name.includes("leg") ||
@@ -92,8 +94,8 @@ export async function loadPlayerModel(scene: THREE.Scene) {
   };
 
   // فیلتر استخوان‌ها برای پرش
-  const filterJumpTracks = (clip) => {
-    clip.tracks = clip.tracks.filter(track => {
+  const filterJumpTracks = (clip: THREE.AnimationClip): THREE.AnimationClip => {
+    clip.tracks = clip.tracks.filter((track: THREE.KeyframeTrack) => {
       const name = track.name.toLowerCase();
       return (
         name.includes("leg") ||
@@ -107,10 +109,13 @@ export async function loadPlayerModel(scene: THREE.Scene) {
     return clip;
   };
 
-  // اجرای انیمیشن‌های مشت/لگد/پرش بدون قطع شدن حرکت
-  const playAnimOnce = async (file, type = "punch") => {
+  // اجرای مشت/لگد/پرش بدون قطع شدن حرکت
+  const playAnimOnce = async (
+    file: string,
+    type: "punch" | "kick" | "jump" = "punch"
+  ) => {
     const anim = await loader.loadAsync(`/models/${file}`);
-    let clip = removeRootMotion(anim.animations[0]);
+    let clip: THREE.AnimationClip = removeRootMotion(anim.animations[0]);
 
     if (type === "punch") clip = filterPunchTracks(clip);
     if (type === "kick") clip = filterKickTracks(clip);
@@ -139,4 +144,4 @@ export async function loadPlayerModel(scene: THREE.Scene) {
   };
 
   return { player, mixer, setMoveBySpeed, playAnimOnce };
-}
+                                      }
