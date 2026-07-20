@@ -1,7 +1,7 @@
 // WorldManager.ts
 import * as THREE from "three";
 
-// اندازه هر چانک (می‌تونی بعداً تغییر بدی)
+// اندازه هر چانک
 export const CHUNK_SIZE = 20;
 
 // ذخیرهٔ چانک‌های ساخته‌شده
@@ -20,7 +20,7 @@ function chunkKey(cx: number, cz: number) {
   return `${cx},${cz}`;
 }
 
-// اسکلت تابع ساخت چانک (فعلاً فقط یک گروه خالی می‌سازد)
+// ساخت چانک + ساخت زمین داخل چانک
 export function generateChunk(scene: THREE.Scene, cx: number, cz: number) {
   const key = chunkKey(cx, cz);
 
@@ -31,15 +31,30 @@ export function generateChunk(scene: THREE.Scene, cx: number, cz: number) {
   const chunkGroup = new THREE.Group();
   chunkGroup.position.set(cx * CHUNK_SIZE, 0, cz * CHUNK_SIZE);
 
-  // فعلاً خالیه — بعداً زمین، آبجکت، دشمن، همه اینجا ساخته می‌شن
+  // ⭐ ساخت زمین داخل چانک
+  const groundGeo = new THREE.PlaneGeometry(CHUNK_SIZE, CHUNK_SIZE);
+  const groundMat = new THREE.MeshStandardMaterial({
+    color: new THREE.Color("#2b2b2b"),
+    roughness: 0.9,
+    metalness: 0.0
+  });
+
+  const ground = new THREE.Mesh(groundGeo, groundMat);
+  ground.rotation.x = -Math.PI / 2;
+  ground.position.set(0, -0.5, 0);
+
+  chunkGroup.add(ground);
+
+  // اضافه کردن چانک به صحنه
   scene.add(chunkGroup);
 
+  // ذخیره چانک
   chunks.set(key, chunkGroup);
 
   console.log("Chunk created:", key);
 }
 
-// حذف چانک‌های دور (فعلاً اسکلت)
+// حذف چانک‌های دور
 export function destroyFarChunks(playerX: number, playerZ: number) {
   const { cx, cz } = getChunkCoord(playerX, playerZ);
 
