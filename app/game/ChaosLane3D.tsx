@@ -5,6 +5,13 @@ import * as THREE from "three";
 import { loadPlayerModel } from "@/app/game/core/PlayerModel";
 import { createGameLogic } from "@/app/game/core/GameLogic";
 
+// اضافه شد
+import { 
+  getChunkCoord, 
+  generateChunk, 
+  destroyFarChunks 
+} from "@/app/game/world/WorldManager";
+
 export default function ChaosLane3D() {
   const mountRef = useRef<HTMLDivElement | null>(null);
 
@@ -21,7 +28,6 @@ export default function ChaosLane3D() {
     const scene = new THREE.Scene();
     scene.background = new THREE.Color("#000000");
 
-    // ایزومتریک: زاویه ثابت + ارتفاع مناسب موبایل
     const camera = new THREE.PerspectiveCamera(
       65,
       window.innerWidth / window.innerHeight,
@@ -29,7 +35,6 @@ export default function ChaosLane3D() {
       200
     );
 
-    // زاویه ایزومتریک اصلاح‌شده
     camera.position.set(7, 12, 7);
     camera.lookAt(0, 0, 0);
 
@@ -48,26 +53,8 @@ export default function ChaosLane3D() {
     const fillLight = new THREE.HemisphereLight(0xffffff, 0x444444, 0.8);
     scene.add(fillLight);
 
-    // زمین حرفه‌ای‌تر برای ایزومتریک
-    const texLoader = new THREE.TextureLoader();
-    const groundTexture = texLoader.load(
-      "https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/terrain/grasslight-big.jpg"
-    );
-    groundTexture.wrapS = THREE.RepeatWrapping;
-    groundTexture.wrapT = THREE.RepeatWrapping;
-    groundTexture.repeat.set(40, 40);
-
-    const groundGeo = new THREE.PlaneGeometry(400, 400);
-    const groundMat = new THREE.MeshStandardMaterial({
-      map: groundTexture,
-      roughness: 0.9,
-      metalness: 0.0
-    });
-
-    const ground = new THREE.Mesh(groundGeo, groundMat);
-    ground.rotation.x = -Math.PI / 2;
-    ground.position.y = -0.5;
-    scene.add(ground);
+    // ❌ زمین ثابت حذف شد
+    // (چون حالا چانک‌ها زمین را می‌سازند)
 
     // ساختمان‌ها (بدون تغییر)
     const buildingMat = new THREE.MeshStandardMaterial({ color: "#333333" });
@@ -93,7 +80,6 @@ export default function ChaosLane3D() {
       setMoveBySpeedRef.current = setMoveBySpeed;
       playAnimOnceRef.current = playAnimOnce;
 
-      // کاراکتر بزرگ‌تر برای ایزومتریک
       player.scale.set(1.4, 1.4, 1.4);
 
       const gameLogic = createGameLogic(player);
@@ -130,9 +116,13 @@ export default function ChaosLane3D() {
           gameLogicRef.current.update(delta, j);
         }
 
-        // ایزومتریک: دوربین فقط موقعیت را دنبال می‌کند، زاویه ثابت می‌ماند
+        // ⭐ اضافه شد: ساخت چانک‌ها
         if (playerRef.current) {
           const p = playerRef.current.position;
+
+          const { cx, cz } = getChunkCoord(p.x, p.z);
+          generateChunk(scene, cx, cz);
+          destroyFarChunks(p.x, p.z);
 
           camera.position.set(
             p.x + 7,
@@ -184,27 +174,18 @@ export default function ChaosLane3D() {
 
       <div className="absolute bottom-8 right-8 flex flex-col gap-4">
         <div className="flex gap-4">
-          <button
-            id="btn-punch"
-            className="w-14 h-14 rounded-full bg-black/30 border border-white/15 backdrop-blur-xl shadow-xl flex items-center justify-center active:scale-90 transition-all"
-          >
+          <button id="btn-punch" className="w-14 h-14 rounded-full bg-black/30 border border-white/15 backdrop-blur-xl shadow-xl flex items-center justify-center active:scale-90 transition-all">
             <svg width="26" height="26" fill="white">
               <path d="M4 14l6 6 12-12-2-2-10 10-4-4z" />
             </svg>
           </button>
-          <button
-            id="btn-kick"
-            className="w-14 h-14 rounded-full bg-black/30 border border-white/15 backdrop-blur-xl shadow-xl flex items-center justify-center active:scale-90 transition-all"
-          >
+          <button id="btn-kick" className="w-14 h-14 rounded-full bg-black/30 border border-white/15 backdrop-blur-xl shadow-xl flex items-center justify-center active:scale-90 transition-all">
             <svg width="26" height="26" fill="white">
               <path d="M3 20l8-8-2-2-8 8zM14 4l8 8-2 2-8-8z" />
             </svg>
           </button>
         </div>
-        <button
-          id="btn-jump"
-          className="w-14 h-14 rounded-full bg-black/30 border border-white/15 backdrop-blur-xl shadow-xl flex items-center justify-center active:scale-90 transition-all mx-auto"
-        >
+        <button id="btn-jump" className="w-14 h-14 rounded-full bg-black/30 border border-white/15 backdrop-blur-xl shadow-xl flex items-center justify-center active:scale-90 transition-all mx-auto">
           <svg width="26" height="26" fill="white">
             <path d="M12 2l6 10h-4v10h-4V12H6z" />
           </svg>
@@ -212,4 +193,4 @@ export default function ChaosLane3D() {
       </div>
     </div>
   );
-                }
+      }
