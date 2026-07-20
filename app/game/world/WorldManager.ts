@@ -1,8 +1,8 @@
 // WorldManager.ts
 import * as THREE from "three";
 
-// اندازه هر چانک
-export const CHUNK_SIZE = 20;
+// اندازه هر چانک (بزرگ‌تر تا فقط یک چانک تو دید دوربین باشه)
+export const CHUNK_SIZE = 40;
 
 // ذخیرهٔ چانک‌های ساخته‌شده
 export const chunks = new Map<string, THREE.Group>();
@@ -61,7 +61,7 @@ export function generateChunk(scene: THREE.Scene, cx: number, cz: number) {
   const chunkGroup = new THREE.Group();
   chunkGroup.position.set(cx * CHUNK_SIZE, 0, cz * CHUNK_SIZE);
 
-  // ⭐ ساخت زمین بر اساس Biome
+  // زمین چانک
   const groundGeo = new THREE.PlaneGeometry(CHUNK_SIZE, CHUNK_SIZE);
   const groundMat = new THREE.MeshStandardMaterial({
     color: new THREE.Color(biomeGroundColor(biome)),
@@ -75,10 +75,7 @@ export function generateChunk(scene: THREE.Scene, cx: number, cz: number) {
 
   chunkGroup.add(ground);
 
-  // اضافه کردن چانک به صحنه
   scene.add(chunkGroup);
-
-  // ذخیره چانک
   chunks.set(key, chunkGroup);
 
   console.log("Chunk created:", key);
@@ -94,8 +91,8 @@ export function destroyFarChunks(playerX: number, playerZ: number) {
     const distX = Math.abs(chunkX - cx);
     const distZ = Math.abs(chunkZ - cz);
 
-    // اگر چانک خیلی دور بود، حذفش کن
-    if (distX > 2 || distZ > 2) {
+    // فقط چانک فعلی رو نگه می‌داریم؛ هر چانک غیر از اون حذف می‌شه
+    if (distX > 0 || distZ > 0) {
       chunk.removeFromParent();
       chunks.delete(key);
       console.log("Chunk removed:", key);
