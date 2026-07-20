@@ -61,65 +61,13 @@ export async function loadPlayerModel(scene: THREE.Scene) {
     }
   };
 
-  // فیلتر استخوان‌ها برای مشت
-  const filterPunchTracks = (clip: THREE.AnimationClip): THREE.AnimationClip => {
-    clip.tracks = clip.tracks.filter((track: THREE.KeyframeTrack) => {
-      const name = track.name.toLowerCase();
-      return (
-        name.includes("arm") ||
-        name.includes("forearm") ||
-        name.includes("hand") ||
-        name.includes("shoulder") ||
-        name.includes("spine") ||
-        name.includes("chest")
-      );
-    });
-    return clip;
-  };
-
-  // فیلتر استخوان‌ها برای لگد
-  const filterKickTracks = (clip: THREE.AnimationClip): THREE.AnimationClip => {
-    clip.tracks = clip.tracks.filter((track: THREE.KeyframeTrack) => {
-      const name = track.name.toLowerCase();
-      return (
-        name.includes("leg") ||
-        name.includes("upleg") ||
-        name.includes("foot") ||
-        name.includes("toe") ||
-        name.includes("hips") ||
-        name.includes("spine")
-      );
-    });
-    return clip;
-  };
-
-  // فیلتر استخوان‌ها برای پرش
-  const filterJumpTracks = (clip: THREE.AnimationClip): THREE.AnimationClip => {
-    clip.tracks = clip.tracks.filter((track: THREE.KeyframeTrack) => {
-      const name = track.name.toLowerCase();
-      return (
-        name.includes("leg") ||
-        name.includes("upleg") ||
-        name.includes("foot") ||
-        name.includes("hips") ||
-        name.includes("spine") ||
-        name.includes("chest")
-      );
-    });
-    return clip;
-  };
-
-  // اجرای مشت/لگد/پرش بدون قطع شدن حرکت
+  // اجرای مشت/لگد/پرش بدون حذف هیچ Track
   const playAnimOnce = async (
     file: string,
     type: "punch" | "kick" | "jump" = "punch"
   ) => {
     const anim = await loader.loadAsync(`/models/${file}`);
-    let clip: THREE.AnimationClip = removeRootMotion(anim.animations[0]);
-
-    if (type === "punch") clip = filterPunchTracks(clip);
-    if (type === "kick") clip = filterKickTracks(clip);
-    if (type === "jump") clip = filterJumpTracks(clip);
+    const clip: THREE.AnimationClip = removeRootMotion(anim.animations[0]);
 
     const temp = mixer.clipAction(clip);
 
@@ -127,9 +75,9 @@ export async function loadPlayerModel(scene: THREE.Scene) {
     temp.clampWhenFinished = true;
     temp.enabled = true;
 
-    // وزن‌ها
+    // اجرای روی لایه بالاتر
     temp.setEffectiveWeight(1.0);
-    currentAction.setEffectiveWeight(0.7);
+    currentAction.setEffectiveWeight(0.6);
 
     temp.reset();
     temp.play();
@@ -144,4 +92,4 @@ export async function loadPlayerModel(scene: THREE.Scene) {
   };
 
   return { player, mixer, setMoveBySpeed, playAnimOnce };
-                                      }
+}
