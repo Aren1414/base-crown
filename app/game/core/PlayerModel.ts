@@ -17,38 +17,32 @@ export async function loadPlayerModel(scene: THREE.Scene) {
   const mixer = new THREE.AnimationMixer(player);
 
   // حذف Root Motion
-  const removeRootMotion = (clip: THREE.AnimationClip) => {
-    clip.tracks = clip.tracks.filter(track => {
-      return !track.name.endsWith(".position");
-    });
+  const removeRootMotion = (clip) => {
+    clip.tracks = clip.tracks.filter(track => !track.name.endsWith(".position"));
     return clip;
   };
 
   // Idle
   const idleAnim = await loader.loadAsync("/models/Breathing Idle.glb");
-  const idleClip = removeRootMotion(idleAnim.animations[0]);
-  const idleAction = mixer.clipAction(idleClip);
+  const idleAction = mixer.clipAction(removeRootMotion(idleAnim.animations[0]));
   idleAction.setLoop(THREE.LoopRepeat, Infinity);
   idleAction.enabled = true;
   idleAction.play();
 
   // Walk
   const walkAnim = await loader.loadAsync("/models/Walk.glb");
-  const walkClip = removeRootMotion(walkAnim.animations[0]);
-  const walkAction = mixer.clipAction(walkClip);
+  const walkAction = mixer.clipAction(removeRootMotion(walkAnim.animations[0]));
   walkAction.setLoop(THREE.LoopRepeat, Infinity);
-  walkAction.enabled = true;
 
   // Run
   const runAnim = await loader.loadAsync("/models/Running.glb");
-  const runClip = removeRootMotion(runAnim.animations[0]);
-  const runAction = mixer.clipAction(runClip);
+  const runAction = mixer.clipAction(removeRootMotion(runAnim.animations[0]));
   runAction.setLoop(THREE.LoopRepeat, Infinity);
-  runAction.enabled = true;
 
-  let currentAction: THREE.AnimationAction = idleAction;
+  let currentAction = idleAction;
 
-  const setMoveBySpeed = (movementSpeed: number) => {
+  // تغییر انیمیشن حرکت
+  const setMoveBySpeed = (movementSpeed) => {
     let targetAction = idleAction;
 
     if (movementSpeed > 0.1 && movementSpeed < 0.6) {
@@ -58,28 +52,69 @@ export async function loadPlayerModel(scene: THREE.Scene) {
     }
 
     if (targetAction !== currentAction) {
-      targetAction.reset();
-      targetAction.enabled = true;
       currentAction.crossFadeTo(targetAction, 0.2, false);
+      targetAction.reset();
       targetAction.play();
       currentAction = targetAction;
     }
   };
 
-  // 🔥 مشت/لگد بدون قطع شدن راه رفتن/دویدن
-  const playAnimOnce = async (file: string) => {
-    const anim = await loader.loadAsync(`/models/${file}`);
-    const clip = removeRootMotion(anim.animations[0]);
-
-    // فقط استخوان‌های دست را نگه می‌داریم
+  // فیلتر استخوان‌ها برای مشت
+  const filterPunchTracks = (clip) => {
     clip.tracks = clip.tracks.filter(track => {
       const name = track.name.toLowerCase();
       return (
         name.includes("arm") ||
+        name.includes("forearm") ||
         name.includes("hand") ||
-        name.includes("shoulder")
+        name.includes("shoulder") ||
+        name.includes("spine") ||
+        name.includes("chest")
       );
     });
+    return clip;
+  };
+
+  // فیلتر استخوان‌ها برای لگد
+  const filterKickTracks = (clip) => {
+    clip.tracks = clip.tracks.filter(track => {
+      const name = track.name.toLowerCase();
+      return (
+        name.includes("leg") ||
+        name.includes("upleg") ||
+        name.includes("foot") ||
+        name.includes("toe") ||
+        name.includes("hips") ||
+        name.includes("spine")
+      );
+    });
+    return clip;
+  };
+
+  // فیلتر استخوان‌ها برای پرش
+  const filterJumpTracks = (clip) => {
+    clip.tracks = clip.tracks.filter(track => {
+      const name = track.name.toLowerCase();
+      return (
+        name.includes("leg") ||
+        name.includes("upleg") ||
+        name.includes("foot") ||
+        name.includes("hips") ||
+        name.includes("spine") ||
+        name.includes("chest")
+      );
+    });
+    return clip;
+  };
+
+  // اجرای انیمیشن‌های مشت/لگد/پرش بدون قطع شدن حرکت
+  const playAnimOnce = async (file, type = "punch") => {
+    const anim = await loader.loadAsync(`/models/${file}`);
+    let clip = removeRootMotion(anim.animations[0]);
+
+    if (type === "punch") clip = filterPunchTracks(clip);
+    if (type === "kick") clip = filterKickTracks(clip);
+    if (type === "jump") clip = filterJumpTracks(clip);
 
     const temp = mixer.clipAction(clip);
 
@@ -87,8 +122,11 @@ export async function loadPlayerModel(scene: THREE.Scene) {
     temp.clampWhenFinished = true;
     temp.enabled = true;
 
-    // اجرای مشت روی لایهٔ بالاتر
-    temp.weight = 1.0;
+    // وزن‌ها
+    temp.setEffectiveWeight(1.0);
+    currentAction.setEffectiveWeight(0.7);
+
+    temp.reset();
     temp.play();
 
     const duration = clip.duration * 1000;
@@ -96,6 +134,7 @@ export async function loadPlayerModel(scene: THREE.Scene) {
     setTimeout(() => {
       temp.stop();
       temp.enabled = false;
+      currentAction.setEffectiveWeight(1.0);
     }, Math.min(duration, 2500));
   };
 
