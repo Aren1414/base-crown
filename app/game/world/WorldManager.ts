@@ -1,7 +1,7 @@
 // WorldManager.ts
 import * as THREE from "three";
 
-// اندازه هر چانک (بزرگ‌تر تا فقط یک چانک تو دید دوربین باشه)
+// اندازه هر چانک (بزرگ‌تر تا فقط یک چانک دیده شود)
 export const CHUNK_SIZE = 40;
 
 // ذخیرهٔ چانک‌های ساخته‌شده
@@ -9,7 +9,7 @@ export const chunks = new Map<string, THREE.Group>();
 
 // لیست Biomeها
 const BIOMES = [
-  "urban",   // شهری تاریک
+  "urban",   // شهری
   "forest",  // جنگلی
   "hell",    // جهنمی
   "snow",    // برفی
@@ -21,15 +21,21 @@ function randomBiome() {
   return BIOMES[Math.floor(Math.random() * BIOMES.length)];
 }
 
-// رنگ زمین بر اساس Biome
-function biomeGroundColor(biome: string) {
+// تکسچر مخصوص هر Biome
+function biomeTexture(biome: string) {
   switch (biome) {
-    case "urban":  return "#2b2b2b";   // آسفالت تیره
-    case "forest": return "#3a4f2b";   // سبز جنگلی
-    case "hell":   return "#4a0f0f";   // قرمز جهنمی
-    case "snow":   return "#e8e8e8";   // سفید برفی
-    case "desert": return "#c2a15f";   // شن بیابانی
-    default:       return "#2b2b2b";
+    case "urban":
+      return "https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/terrain/grasslight-big.jpg"; // آسفالت واقعی پیدا نکردم، بعداً می‌ذاریم
+    case "forest":
+      return "https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/terrain/grasslight-big.jpg";
+    case "hell":
+      return "https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/lava/lava.jpg";
+    case "snow":
+      return "https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/snow/snow.jpg";
+    case "desert":
+      return "https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/sand/sand.jpg";
+    default:
+      return "https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/terrain/grasslight-big.jpg";
   }
 }
 
@@ -46,25 +52,28 @@ function chunkKey(cx: number, cz: number) {
   return `${cx},${cz}`;
 }
 
-// ساخت چانک + ساخت زمین + انتخاب Biome
+// ساخت چانک + ساخت زمین واقعی + انتخاب Biome
 export function generateChunk(scene: THREE.Scene, cx: number, cz: number) {
   const key = chunkKey(cx, cz);
 
-  // اگر قبلاً ساخته شده، دوباره نساز
   if (chunks.has(key)) return;
 
-  // انتخاب Biome تصادفی
   const biome = randomBiome();
   console.log(`Chunk ${key} biome = ${biome}`);
 
-  // گروه چانک
   const chunkGroup = new THREE.Group();
   chunkGroup.position.set(cx * CHUNK_SIZE, 0, cz * CHUNK_SIZE);
 
-  // زمین چانک
+  // ⭐ تکسچر واقعی
+  const texLoader = new THREE.TextureLoader();
+  const texture = texLoader.load(biomeTexture(biome));
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+  texture.repeat.set(2, 2);
+
   const groundGeo = new THREE.PlaneGeometry(CHUNK_SIZE, CHUNK_SIZE);
   const groundMat = new THREE.MeshStandardMaterial({
-    color: new THREE.Color(biomeGroundColor(biome)),
+    map: texture,
     roughness: 0.9,
     metalness: 0.0
   });
@@ -91,7 +100,7 @@ export function destroyFarChunks(playerX: number, playerZ: number) {
     const distX = Math.abs(chunkX - cx);
     const distZ = Math.abs(chunkZ - cz);
 
-    // فقط چانک فعلی رو نگه می‌داریم؛ هر چانک غیر از اون حذف می‌شه
+    // فقط چانک فعلی را نگه می‌داریم
     if (distX > 0 || distZ > 0) {
       chunk.removeFromParent();
       chunks.delete(key);
