@@ -2,7 +2,10 @@
 
 import dynamic from 'next/dynamic';
 
-const ChaosLane3D = dynamic(() => import('./ChaosLane3D'), { ssr: false });
+const ChaosLane3D = dynamic(() => import('./ChaosLane3D.tsx'), {
+  ssr: false,
+  loading: () => null,
+});
 
 export default function GamePage() {
   return (
