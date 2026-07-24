@@ -5,7 +5,6 @@ import * as THREE from "three";
 import { loadPlayerModel } from "@/app/game/core/PlayerModel";
 import { createGameLogic } from "@/app/game/core/GameLogic";
 
-// اضافه شد
 import { 
   getChunkCoord, 
   generateChunk, 
@@ -53,24 +52,6 @@ export default function ChaosLane3D() {
     const fillLight = new THREE.HemisphereLight(0xffffff, 0x444444, 0.8);
     scene.add(fillLight);
 
-    // ❌ زمین ثابت حذف شد
-    // (چون حالا چانک‌ها زمین را می‌سازند)
-
-    // ساختمان‌ها (بدون تغییر)
-    const buildingMat = new THREE.MeshStandardMaterial({ color: "#333333" });
-
-    function addBuilding(x: number, z: number, w: number, h: number, d: number) {
-      const geo = new THREE.BoxGeometry(w, h, d);
-      const mesh = new THREE.Mesh(geo, buildingMat);
-      mesh.position.set(x, h / 2 - 0.5, z);
-      scene.add(mesh);
-    }
-
-    addBuilding(20, 20, 10, 25, 10);
-    addBuilding(-25, 10, 12, 30, 12);
-    addBuilding(15, -30, 14, 22, 14);
-    addBuilding(-35, -25, 10, 18, 10);
-
     (async () => {
       const { player, mixer, setMoveBySpeed, playAnimOnce } =
         await loadPlayerModel(scene);
@@ -99,6 +80,9 @@ export default function ChaosLane3D() {
         btn.addEventListener("mousedown", handler);
       });
 
+      const { cx, cz } = getChunkCoord(player.position.x, player.position.z);
+      generateChunk(scene, cx, cz);
+
       const clock = new THREE.Clock();
 
       const animate = () => {
@@ -116,7 +100,6 @@ export default function ChaosLane3D() {
           gameLogicRef.current.update(delta, j);
         }
 
-        // ⭐ اضافه شد: ساخت چانک‌ها
         if (playerRef.current) {
           const p = playerRef.current.position;
 
@@ -193,4 +176,4 @@ export default function ChaosLane3D() {
       </div>
     </div>
   );
-      }
+}
