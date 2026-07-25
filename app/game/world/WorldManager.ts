@@ -13,7 +13,7 @@ import {
   FOREST_BUSHES,
   FOREST_GRASS,
   FOREST_FLOWERS
-} from "./Models";
+} from "../assets/Models";
 
 export const CHUNK_SIZE = 120;
 export const chunks = new Map<string, THREE.Group>();
@@ -22,6 +22,13 @@ const gltfLoader = new GLTFLoader();
 
 function pick<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)];
+}
+
+export function getChunkCoord(x: number, z: number) {
+  return {
+    cx: Math.floor(x / CHUNK_SIZE),
+    cz: Math.floor(z / CHUNK_SIZE)
+  };
 }
 
 function loadModel(def, group, x, z, rot = 0) {
@@ -168,4 +175,4 @@ export function destroyFarChunks(px, pz) {
       chunks.delete(key);
     }
   }
-}
+    }
