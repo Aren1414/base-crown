@@ -2,14 +2,12 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 
-export const CHUNK_SIZE = 40;
+export const CHUNK_SIZE = 60;
 export const chunks = new Map<string, THREE.Group>();
 
 const BIOMES = ["urban", "forest", "hell", "snow", "desert"];
 
 const BASE_URL = "https://pub-15ed8100c073408287949c0bebad27a6.r2.dev";
-
-// ---------------- ASSETS ----------------
 
 // URBAN
 const URBAN_STREETS = [
@@ -119,29 +117,10 @@ const FOREST_FLOWERS = [
   `${BASE_URL}/Plants_and_trees/glTF/Flower_5_Clump.gltf`,
 ];
 
-const FOREST_ROCKS = [`${BASE_URL}/Plants_and_trees/glTF/Rocks.jpg`]; // اگر GLB داشتی جایگزین کن
-
 const gltfLoader = new GLTFLoader();
 
 function randomBiome() {
   return BIOMES[Math.floor(Math.random() * BIOMES.length)];
-}
-
-function biomeTexture(biome: string) {
-  switch (biome) {
-    case "urban":
-      return "https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/terrain/grasslight-big.jpg";
-    case "forest":
-      return "https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/terrain/grasslight-big.jpg";
-    case "hell":
-      return "https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/lava/lava.jpg";
-    case "snow":
-      return "https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/snow/snow.jpg";
-    case "desert":
-      return "https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/sand/sand.jpg";
-    default:
-      return "https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/terrain/grasslight-big.jpg";
-  }
 }
 
 export function getChunkCoord(x: number, z: number) {
@@ -159,14 +138,13 @@ function pick<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
-// لود یک مدل و اضافه کردن به چانک
 function loadAndPlace(
   url: string,
   chunkGroup: THREE.Group,
   x: number,
   z: number,
   y: number = 0,
-  scale: number = 1
+  scale: number = 4
 ) {
   gltfLoader.load(
     url,
@@ -183,9 +161,8 @@ function loadAndPlace(
   );
 }
 
-// ساخت آبجکت‌های واقعی داخل چانک
 function spawnObjects(chunkGroup: THREE.Group, biome: string) {
-  const count = 6 + Math.floor(Math.random() * 6);
+  const count = 8 + Math.floor(Math.random() * 6);
 
   for (let i = 0; i < count; i++) {
     const x = (Math.random() - 0.5) * CHUNK_SIZE;
@@ -194,52 +171,47 @@ function spawnObjects(chunkGroup: THREE.Group, biome: string) {
     if (biome === "urban") {
       const r = Math.random();
       if (r < 0.25) {
-        loadAndPlace(pick(URBAN_BUILDINGS), chunkGroup, x, z, 0, 1);
+        loadAndPlace(pick(URBAN_BUILDINGS), chunkGroup, x, z, 0, 4);
       } else if (r < 0.5) {
-        loadAndPlace(pick(URBAN_VEHICLES), chunkGroup, x, z, 0, 1);
+        loadAndPlace(pick(URBAN_VEHICLES), chunkGroup, x, z, 0, 3);
       } else if (r < 0.7) {
-        loadAndPlace(pick(URBAN_ALLEYS), chunkGroup, x, z, 0, 1);
+        loadAndPlace(pick(URBAN_ALLEYS), chunkGroup, x, z, 0, 4);
       } else if (r < 0.85) {
-        loadAndPlace(pick(URBAN_STREETS), chunkGroup, x, z, 0, 1);
+        loadAndPlace(pick(URBAN_STREETS), chunkGroup, x, z, 0, 4);
       } else {
-        loadAndPlace(pick(URBAN_TUNNEL), chunkGroup, x, z, 0, 1);
+        loadAndPlace(pick(URBAN_TUNNEL), chunkGroup, x, z, 0, 4);
       }
     } else if (biome === "forest") {
       const r = Math.random();
       if (r < 0.4) {
-        loadAndPlace(pick(FOREST_TREES), chunkGroup, x, z, 0, 1);
+        loadAndPlace(pick(FOREST_TREES), chunkGroup, x, z, 0, 4);
       } else if (r < 0.7) {
-        loadAndPlace(pick(FOREST_BUSHES), chunkGroup, x, z, 0, 0.8);
+        loadAndPlace(pick(FOREST_BUSHES), chunkGroup, x, z, 0, 3);
       } else if (r < 0.9) {
-        loadAndPlace(pick(FOREST_GRASS), chunkGroup, x, z, 0, 0.7);
+        loadAndPlace(pick(FOREST_GRASS), chunkGroup, x, z, 0, 3);
       } else {
-        loadAndPlace(pick(FOREST_FLOWERS), chunkGroup, x, z, 0, 0.6);
+        loadAndPlace(pick(FOREST_FLOWERS), chunkGroup, x, z, 0, 2.5);
       }
     } else if (biome === "hell") {
-      // می‌تونی بعداً آبجکت‌های خاص جهنم اضافه کنی؛ فعلاً درخت‌های خشک + سنگ
       const r = Math.random();
       if (r < 0.7) {
-        loadAndPlace(pick(FOREST_TREES), chunkGroup, x, z, 0, 1);
-      } else {
-        // اگر GLB سنگ داشتی، اینجا جایگزین کن
+        loadAndPlace(pick(FOREST_TREES), chunkGroup, x, z, 0, 4);
       }
     } else if (biome === "snow" || biome === "desert") {
-      // فعلاً از ترکیب خیابون + ساختمان + درخت کم استفاده می‌کنیم
       const r = Math.random();
       if (r < 0.5) {
-        loadAndPlace(pick(URBAN_BUILDINGS), chunkGroup, x, z, 0, 1);
+        loadAndPlace(pick(URBAN_BUILDINGS), chunkGroup, x, z, 0, 4);
       } else {
-        loadAndPlace(pick(FOREST_TREES), chunkGroup, x, z, 0, 0.8);
+        loadAndPlace(pick(FOREST_TREES), chunkGroup, x, z, 0, 3.5);
       }
     }
   }
 
-  // رودخانه و پل‌ها را گاهی اضافه کن (برای تنوع)
   if (biome === "urban" || biome === "forest") {
     if (Math.random() < 0.3) {
-      loadAndPlace(pick(URBAN_RIVER), chunkGroup, 0, 0, -0.2, 1);
+      loadAndPlace(pick(URBAN_RIVER), chunkGroup, 0, 0, -0.2, 4);
       if (Math.random() < 0.7) {
-        loadAndPlace(pick(URBAN_BRIDGES), chunkGroup, 0, 0, 0, 1);
+        loadAndPlace(pick(URBAN_BRIDGES), chunkGroup, 0, 0, 0, 4);
       }
     }
   }
@@ -255,15 +227,18 @@ export function generateChunk(scene: THREE.Scene, cx: number, cz: number) {
   const chunkGroup = new THREE.Group();
   chunkGroup.position.set(cx * CHUNK_SIZE, 0, cz * CHUNK_SIZE);
 
-  const texLoader = new THREE.TextureLoader();
-  const texture = texLoader.load(biomeTexture(biome));
-  texture.wrapS = THREE.RepeatWrapping;
-  texture.wrapT = THREE.RepeatWrapping;
-  texture.repeat.set(2, 2);
-
   const groundGeo = new THREE.PlaneGeometry(CHUNK_SIZE, CHUNK_SIZE);
   const groundMat = new THREE.MeshStandardMaterial({
-    map: texture,
+    color:
+      biome === "urban"
+        ? 0x444444
+        : biome === "forest"
+        ? 0x225522
+        : biome === "hell"
+        ? 0x552222
+        : biome === "snow"
+        ? 0xffffff
+        : 0xccaa55,
     roughness: 0.9,
     metalness: 0.0,
   });
@@ -274,7 +249,6 @@ export function generateChunk(scene: THREE.Scene, cx: number, cz: number) {
 
   chunkGroup.add(ground);
 
-  // آبجکت‌های واقعی از R2
   spawnObjects(chunkGroup, biome);
 
   scene.add(chunkGroup);
@@ -292,4 +266,4 @@ export function destroyFarChunks(playerX: number, playerZ: number) {
       chunks.delete(key);
     }
   }
-}
+    }
