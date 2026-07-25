@@ -126,7 +126,7 @@ function randomBiome() {
 function load(url: string, group: THREE.Group, x: number, z: number, scale: number) {
   gltfLoader.load(url, (gltf) => {
     const o = gltf.scene;
-    o.position.set(x, 0, z);
+    o.position.set(x, 0.3, z);
     o.scale.set(scale, scale, scale);
     group.add(o);
   });
@@ -228,9 +228,9 @@ export function destroyFarChunks(px: number, pz: number) {
 
   for (const [key, chunk] of chunks) {
     const [x, z] = key.split(",").map(Number);
-    if (x !== cx || z !== cz) {
+    if (Math.abs(x - cx) > 1 || Math.abs(z - cz) > 1) {
       chunk.removeFromParent();
       chunks.delete(key);
     }
   }
-    }
+  }
