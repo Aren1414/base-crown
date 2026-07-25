@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 
-export const CHUNK_SIZE = 120;
+export const CHUNK_SIZE = 80;
 export const chunks = new Map<string, THREE.Group>();
 
 const BIOMES = ["urban", "forest", "hell", "snow", "desert"];
@@ -128,6 +128,7 @@ function load(url: string, group: THREE.Group, x: number, z: number, scale: numb
     const o = gltf.scene;
     o.position.set(x, 0, z);
     o.scale.set(scale, scale, scale);
+    o.position.y = 0.1;
     group.add(o);
   });
 }
@@ -144,34 +145,34 @@ function chunkKey(cx: number, cz: number) {
 }
 
 function spawnObjects(chunk: THREE.Group, biome: string) {
-  for (let i = 0; i < 6; i++) {
+  for (let i = 0; i < 4; i++) {
     const x = (Math.random() - 0.5) * CHUNK_SIZE;
     const z = (Math.random() - 0.5) * CHUNK_SIZE;
-    load(pick(URBAN_STREETS), chunk, x, z, 1);
-  }
-
-  for (let i = 0; i < 6; i++) {
-    const x = (Math.random() - 0.5) * CHUNK_SIZE;
-    const z = (Math.random() - 0.5) * CHUNK_SIZE;
-    load(pick(URBAN_ALLEYS), chunk, x, z, 1);
-  }
-
-  for (let i = 0; i < 10; i++) {
-    const x = (Math.random() - 0.5) * CHUNK_SIZE;
-    const z = (Math.random() - 0.5) * CHUNK_SIZE;
-    load(pick(URBAN_BUILDINGS), chunk, x, z, 1);
+    load(pick(URBAN_STREETS), chunk, x, z, 1.2);
   }
 
   for (let i = 0; i < 4; i++) {
     const x = (Math.random() - 0.5) * CHUNK_SIZE;
     const z = (Math.random() - 0.5) * CHUNK_SIZE;
-    load(pick(URBAN_VEHICLES), chunk, x, z, 0.6);
+    load(pick(URBAN_ALLEYS), chunk, x, z, 1.2);
+  }
+
+  for (let i = 0; i < 8; i++) {
+    const x = (Math.random() - 0.5) * CHUNK_SIZE;
+    const z = (Math.random() - 0.5) * CHUNK_SIZE;
+    load(pick(URBAN_BUILDINGS), chunk, x, z, 1.3);
+  }
+
+  for (let i = 0; i < 4; i++) {
+    const x = (Math.random() - 0.5) * CHUNK_SIZE;
+    const z = (Math.random() - 0.5) * CHUNK_SIZE;
+    load(pick(URBAN_VEHICLES), chunk, x, z, 0.8);
   }
 
   if (Math.random() < 0.2) {
-    load(pick(URBAN_RIVER), chunk, 0, 0, 1);
+    load(pick(URBAN_RIVER), chunk, 0, 0, 1.2);
     if (Math.random() < 0.7) {
-      load(pick(URBAN_BRIDGES), chunk, 0, 0, 1);
+      load(pick(URBAN_BRIDGES), chunk, 0, 0, 1.2);
     }
   }
 
@@ -179,25 +180,25 @@ function spawnObjects(chunk: THREE.Group, biome: string) {
     for (let i = 0; i < 6; i++) {
       const x = (Math.random() - 0.5) * CHUNK_SIZE;
       const z = (Math.random() - 0.5) * CHUNK_SIZE;
-      load(pick(FOREST_TREES), chunk, x, z, 0.4);
+      load(pick(FOREST_TREES), chunk, x, z, 0.5);
     }
 
     for (let i = 0; i < 6; i++) {
       const x = (Math.random() - 0.5) * CHUNK_SIZE;
       const z = (Math.random() - 0.5) * CHUNK_SIZE;
-      load(pick(FOREST_BUSHES), chunk, x, z, 0.25);
+      load(pick(FOREST_BUSHES), chunk, x, z, 0.3);
     }
 
     for (let i = 0; i < 6; i++) {
       const x = (Math.random() - 0.5) * CHUNK_SIZE;
       const z = (Math.random() - 0.5) * CHUNK_SIZE;
-      load(pick(FOREST_GRASS), chunk, x, z, 0.2);
+      load(pick(FOREST_GRASS), chunk, x, z, 0.25);
     }
 
     for (let i = 0; i < 6; i++) {
       const x = (Math.random() - 0.5) * CHUNK_SIZE;
       const z = (Math.random() - 0.5) * CHUNK_SIZE;
-      load(pick(FOREST_FLOWERS), chunk, x, z, 0.15);
+      load(pick(FOREST_FLOWERS), chunk, x, z, 0.2);
     }
   }
 }
@@ -226,4 +227,4 @@ export function destroyFarChunks(px: number, pz: number) {
       chunks.delete(key);
     }
   }
-  }
+}
