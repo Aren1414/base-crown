@@ -4,8 +4,10 @@ import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 export const CHUNK_SIZE = 120;
 export const chunks = new Map<string, THREE.Group>();
 
-const BIOMES = ["urban", "forest", "hell", "snow", "desert"];
+const BIOMES = ["urban", "forest", "hell", "snow", "desert"] as const;
 const BASE_URL = "https://pub-15ed8100c073408287949c0bebad27a6.r2.dev";
+
+type Biome = (typeof BIOMES)[number];
 
 type ModelDef = { url: string; scale: number };
 
@@ -19,7 +21,10 @@ const URBAN_ALLEYS: ModelDef[] = [
   { url: `${BASE_URL}/alleys/Alley1.glb`, scale: 7.5 },
   { url: `${BASE_URL}/alleys/Alley2.glb`, scale: 7.5 },
   { url: `${BASE_URL}/alleys/Alley3.glb`, scale: 7.5 },
-  { url: `${BASE_URL}/Connecting_alley_and_street/Connecting_alley_and_street.glb`, scale: 7.5 },
+  {
+    url: `${BASE_URL}/Connecting_alley_and_street/Connecting_alley_and_street.glb`,
+    scale: 7.5,
+  },
 ];
 
 const URBAN_BUILDINGS: ModelDef[] = [
@@ -123,7 +128,17 @@ function pick<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
-function loadModel(def: ModelDef, group: THREE.Group, x: number, z: number, rot = 0) {
+function randomBiome(): Biome {
+  return BIOMES[Math.floor(Math.random() * BIOMES.length)];
+}
+
+function loadModel(
+  def: ModelDef,
+  group: THREE.Group,
+  x: number,
+  z: number,
+  rot = 0
+) {
   gltfLoader.load(def.url, (gltf) => {
     const o = gltf.scene;
     o.position.set(x, 0, z);
@@ -141,25 +156,29 @@ function chunkKey(cx: number, cz: number) {
   return `${cx},${cz}`;
 }
 
-// شبکهٔ واقعی A (GTA)
-function buildRoadGrid(chunk: THREE.Group) {
+type Cell = { x: number; z: number };
+
+// شبکهٔ خیابان
+function buildRoadGrid(chunk: THREE.Group): Cell[] {
   const cell = 20;
   const half = CHUNK_SIZE / 2;
-  const roadCells = [];
+  const roadCells: Cell[] = [];
 
   for (let x = -half; x < half; x += cell) {
     for (let z = -half; z < half; z += cell) {
       const street = pick(URBAN_STREETS);
       const rot = Math.random() < 0.5 ? 0 : Math.PI / 2;
-      loadModel(street, chunk, x + cell / 2, z + cell / 2, rot);
-      roadCells.push({ x: x + cell / 2, z: z + cell / 2 });
+      const px = x + cell / 2;
+      const pz = z + cell / 2;
+      loadModel(street, chunk, px, pz, rot);
+      roadCells.push({ x: px, z: pz });
     }
   }
 
   return roadCells;
 }
 
-function spawnBuildings(chunk: THREE.Group, roadCells: any[]) {
+function spawnBuildings(chunk: THREE.Group, roadCells: Cell[]) {
   const offset = 14;
 
   for (const c of roadCells) {
@@ -180,7 +199,7 @@ function spawnBuildings(chunk: THREE.Group, roadCells: any[]) {
   }
 }
 
-function spawnVehicles(chunk: THREE.Group, roadCells: any[]) {
+function spawnVehicles(chunk: THREE.Group, roadCells: Cell[]) {
   for (const c of roadCells) {
     if (Math.random() < 0.5) {
       const v = pick(URBAN_VEHICLES);
@@ -194,6 +213,23 @@ function spawnUrban(chunk: THREE.Group) {
   const roads = buildRoadGrid(chunk);
   spawnBuildings(chunk, roads);
   spawnVehicles(chunk, roads);
+
+  // تونل
+  if (Math.random() < 0.3) {
+    const t = pick(URBAN_TUNNEL);
+    loadModel(t, chunk, CHUNK_SIZE / 2 - 15, CHUNK_SIZE / 2 - 15, 0);
+  }
+
+  // رودخانه + پل
+  if (Math.random() < 0.25) {
+    const river = pick(URBAN_RIVER);
+    loadModel(river, chunk, 0, -CHUNK_SIZE / 2 + 10, 0);
+
+    if (Math.random() < 0.7) {
+      const bridge = pick(URBAN_BRIDGES);
+      loadModel(bridge, chunk, 0, -CHUNK_SIZE / 2 + 10, Math.PI / 2);
+    }
+  }
 }
 
 function spawnForest(chunk: THREE.Group) {
@@ -222,7 +258,7 @@ function spawnForest(chunk: THREE.Group) {
   }
 }
 
-function spawnObjects(chunk: THREE.Group, biome: string) {
+function spawnObjects(chunk: THREE.Group, biome: Biome) {
   if (biome === "urban") spawnUrban(chunk);
   else if (biome === "forest") spawnForest(chunk);
   else spawnUrban(chunk);
@@ -236,9 +272,24 @@ export function generateChunk(scene: THREE.Scene, cx: number, cz: number) {
   const chunk = new THREE.Group();
   chunk.position.set(cx * CHUNK_SIZE, 0, cz * CHUNK_SIZE);
 
+  const groundColor =
+    biome === "urban"
+      ? 0x444444
+      : biome === "forest"
+      ? 0x225522
+      : biome === "hell"
+      ? 0x552222
+      : biome === "snow"
+      ? 0xffffff
+      : 0xccaa55;
+
   const ground = new THREE.Mesh(
     new THREE.PlaneGeometry(CHUNK_SIZE, CHUNK_SIZE),
-    new THREE.MeshStandardMaterial({ color: 0x444444 })
+    new THREE.MeshStandardMaterial({
+      color: groundColor,
+      roughness: 0.9,
+      metalness: 0.0,
+    })
   );
   ground.rotation.x = -Math.PI / 2;
   ground.position.y = -0.1;
