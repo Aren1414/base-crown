@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 
-export const CHUNK_SIZE = 80;
+export const CHUNK_SIZE = 120;
 export const chunks = new Map<string, THREE.Group>();
 
 const BIOMES = ["urban", "forest", "hell", "snow", "desert"];
@@ -128,7 +128,6 @@ function load(url: string, group: THREE.Group, x: number, z: number, scale: numb
     const o = gltf.scene;
     o.position.set(x, 0, z);
     o.scale.set(scale, scale, scale);
-    o.position.y = 0.1;
     group.add(o);
   });
 }
@@ -145,19 +144,19 @@ function chunkKey(cx: number, cz: number) {
 }
 
 function spawnObjects(chunk: THREE.Group, biome: string) {
-  for (let i = 0; i < 4; i++) {
+  for (let i = 0; i < 6; i++) {
     const x = (Math.random() - 0.5) * CHUNK_SIZE;
     const z = (Math.random() - 0.5) * CHUNK_SIZE;
     load(pick(URBAN_STREETS), chunk, x, z, 1.2);
   }
 
-  for (let i = 0; i < 4; i++) {
+  for (let i = 0; i < 6; i++) {
     const x = (Math.random() - 0.5) * CHUNK_SIZE;
     const z = (Math.random() - 0.5) * CHUNK_SIZE;
     load(pick(URBAN_ALLEYS), chunk, x, z, 1.2);
   }
 
-  for (let i = 0; i < 8; i++) {
+  for (let i = 0; i < 10; i++) {
     const x = (Math.random() - 0.5) * CHUNK_SIZE;
     const z = (Math.random() - 0.5) * CHUNK_SIZE;
     load(pick(URBAN_BUILDINGS), chunk, x, z, 1.3);
@@ -227,4 +226,4 @@ export function destroyFarChunks(px: number, pz: number) {
       chunks.delete(key);
     }
   }
-}
+       }
