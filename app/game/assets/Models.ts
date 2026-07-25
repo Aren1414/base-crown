@@ -1,19 +1,21 @@
+export type ModelDef = { url: string; scale: number };
+
 const BASE_URL = "https://pub-15ed8100c073408287949c0bebad27a6.r2.dev";
 
-export const URBAN_STREETS = [
+export const URBAN_STREETS: ModelDef[] = [
   { url: `${BASE_URL}/streets/Street1.glb`, scale: 7.5 },
   { url: `${BASE_URL}/streets/Street2.glb`, scale: 7.5 },
   { url: `${BASE_URL}/streets/Street3.glb`, scale: 7.5 },
 ];
 
-export const URBAN_ALLEYS = [
+export const URBAN_ALLEYS: ModelDef[] = [
   { url: `${BASE_URL}/alleys/Alley1.glb`, scale: 7.5 },
   { url: `${BASE_URL}/alleys/Alley2.glb`, scale: 7.5 },
   { url: `${BASE_URL}/alleys/Alley3.glb`, scale: 7.5 },
   { url: `${BASE_URL}/Connecting_alley_and_street/Connecting_alley_and_street.glb`, scale: 7.5 },
 ];
 
-export const URBAN_BUILDINGS = [
+export const URBAN_BUILDINGS: ModelDef[] = [
   { url: `${BASE_URL}/Buildings/Urban_building1.glb`, scale: 4.8 },
   { url: `${BASE_URL}/Buildings/Urban_building2.glb`, scale: 5.2 },
   { url: `${BASE_URL}/Buildings/Urban_building3.glb`, scale: 5.5 },
@@ -30,7 +32,7 @@ export const URBAN_BUILDINGS = [
   { url: `${BASE_URL}/Buildings/Villa_house3.glb`, scale: 4.0 },
 ];
 
-export const URBAN_VEHICLES = [
+export const URBAN_VEHICLES: ModelDef[] = [
   { url: `${BASE_URL}/vehicles/Ambulance_car.glb`, scale: 3.2 },
   { url: `${BASE_URL}/vehicles/Motorcycle.glb`, scale: 2.4 },
   { url: `${BASE_URL}/vehicles/Pickup_truck.glb`, scale: 3.4 },
@@ -41,7 +43,7 @@ export const URBAN_VEHICLES = [
   { url: `${BASE_URL}/vehicles/Van_car.glb`, scale: 3.4 },
 ];
 
-export const URBAN_TUNNEL = [
+export const URBAN_TUNNEL: ModelDef[] = [
   { url: `${BASE_URL}/Tunnel/Tunnel.glb`, scale: 6.0 },
   { url: `${BASE_URL}/Tunnel/Tunnel_wall1.glb`, scale: 6.0 },
   { url: `${BASE_URL}/Tunnel/Tunnel_wall2.glb`, scale: 6.0 },
@@ -49,18 +51,18 @@ export const URBAN_TUNNEL = [
   { url: `${BASE_URL}/Tunnel/Tunnel_wall4.glb`, scale: 6.0 },
 ];
 
-export const URBAN_BRIDGES = [
+export const URBAN_BRIDGES: ModelDef[] = [
   { url: `${BASE_URL}/Bridges/Crescent_Bridge.glb`, scale: 6.5 },
   { url: `${BASE_URL}/Bridges/Stone_bridge.glb`, scale: 6.5 },
   { url: `${BASE_URL}/Bridges/Urban_bridge1.glb`, scale: 6.5 },
   { url: `${BASE_URL}/Bridges/Urban_bridge2.glb`, scale: 6.5 },
 ];
 
-export const URBAN_RIVER = [
+export const URBAN_RIVER: ModelDef[] = [
   { url: `${BASE_URL}/river/River.glb`, scale: 6.5 },
 ];
 
-export const FOREST_TREES = [
+export const FOREST_TREES: string[] = [
   `${BASE_URL}/Plants_and_trees/glTF/BirchTree_1.gltf`,
   `${BASE_URL}/Plants_and_trees/glTF/BirchTree_2.gltf`,
   `${BASE_URL}/Plants_and_trees/glTF/BirchTree_3.gltf`,
@@ -83,7 +85,7 @@ export const FOREST_TREES = [
   `${BASE_URL}/Plants_and_trees/glTF/DeadTree_10.gltf`,
 ];
 
-export const FOREST_BUSHES = [
+export const FOREST_BUSHES: string[] = [
   `${BASE_URL}/Plants_and_trees/glTF/Bush.gltf`,
   `${BASE_URL}/Plants_and_trees/glTF/Bush_Small.gltf`,
   `${BASE_URL}/Plants_and_trees/glTF/Bush_Large.gltf`,
@@ -92,13 +94,13 @@ export const FOREST_BUSHES = [
   `${BASE_URL}/Plants_and_trees/glTF/Bush_Small_Flowers.gltf`,
 ];
 
-export const FOREST_GRASS = [
+export const FOREST_GRASS: string[] = [
   `${BASE_URL}/Plants_and_trees/glTF/Grass_Large.gltf`,
   `${BASE_URL}/Plants_and_trees/glTF/Grass_Large_Extruded.gltf`,
   `${BASE_URL}/Plants_and_trees/glTF/Grass_Small.gltf`,
 ];
 
-export const FOREST_FLOWERS = [
+export const FOREST_FLOWERS: string[] = [
   `${BASE_URL}/Plants_and_trees/glTF/Flower_1.gltf`,
   `${BASE_URL}/Plants_and_trees/glTF/Flower_1_Clump.gltf`,
   `${BASE_URL}/Plants_and_trees/glTF/Flower_2.gltf`,
