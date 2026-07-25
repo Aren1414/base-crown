@@ -12,7 +12,8 @@ import {
   FOREST_TREES,
   FOREST_BUSHES,
   FOREST_GRASS,
-  FOREST_FLOWERS
+  FOREST_FLOWERS,
+  ModelDef
 } from "../assets/Models";
 
 export const CHUNK_SIZE = 120;
@@ -31,7 +32,13 @@ export function getChunkCoord(x: number, z: number) {
   };
 }
 
-function loadModel(def, group, x, z, rot = 0) {
+function loadModel(
+  def: ModelDef,
+  group: THREE.Group,
+  x: number,
+  z: number,
+  rot = 0
+) {
   gltfLoader.load(def.url, (gltf) => {
     const o = gltf.scene;
     o.position.set(x, 0, z);
@@ -41,10 +48,10 @@ function loadModel(def, group, x, z, rot = 0) {
   });
 }
 
-function buildRoadGrid(chunk) {
+function buildRoadGrid(chunk: THREE.Group) {
   const gridSize = 4;
   const cellSize = CHUNK_SIZE / gridSize;
-  const roadCells = [];
+  const roadCells: { x: number; z: number }[] = [];
 
   for (let gx = 0; gx < gridSize; gx++) {
     for (let gz = 0; gz < gridSize; gz++) {
@@ -66,7 +73,7 @@ function buildRoadGrid(chunk) {
   return roadCells;
 }
 
-function spawnBuildings(chunk, roadCells) {
+function spawnBuildings(chunk: THREE.Group, roadCells: { x: number; z: number }[]) {
   const offset = 22;
 
   for (const c of roadCells) {
@@ -87,7 +94,7 @@ function spawnBuildings(chunk, roadCells) {
   }
 }
 
-function spawnVehicles(chunk, roadCells) {
+function spawnVehicles(chunk: THREE.Group, roadCells: { x: number; z: number }[]) {
   for (const c of roadCells) {
     if (Math.random() < 0.6) {
       const v = pick(URBAN_VEHICLES);
@@ -97,7 +104,7 @@ function spawnVehicles(chunk, roadCells) {
   }
 }
 
-function spawnUrban(chunk) {
+function spawnUrban(chunk: THREE.Group) {
   const roads = buildRoadGrid(chunk);
   spawnBuildings(chunk, roads);
   spawnVehicles(chunk, roads);
@@ -118,7 +125,7 @@ function spawnUrban(chunk) {
   }
 }
 
-function spawnForest(chunk) {
+function spawnForest(chunk: THREE.Group) {
   for (let i = 0; i < 10; i++) {
     const x = (Math.random() - 0.5) * CHUNK_SIZE;
     const z = (Math.random() - 0.5) * CHUNK_SIZE;
@@ -144,7 +151,7 @@ function spawnForest(chunk) {
   }
 }
 
-export function generateChunk(scene, cx, cz) {
+export function generateChunk(scene: THREE.Scene, cx: number, cz: number) {
   const key = `${cx},${cz}`;
   if (chunks.has(key)) return;
 
@@ -164,7 +171,7 @@ export function generateChunk(scene, cx, cz) {
   chunks.set(key, chunk);
 }
 
-export function destroyFarChunks(px, pz) {
+export function destroyFarChunks(px: number, pz: number) {
   const cx = Math.floor(px / CHUNK_SIZE);
   const cz = Math.floor(pz / CHUNK_SIZE);
 
@@ -175,4 +182,4 @@ export function destroyFarChunks(px, pz) {
       chunks.delete(key);
     }
   }
-    }
+}
