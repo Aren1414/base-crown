@@ -7,8 +7,7 @@ export const chunks = new Map<string, THREE.Group>();
 
 const BIOMES = ["urban", "forest", "hell", "snow", "desert"];
 
-const BASE_URL =
-  "https://0f937cebeb25a82a4a370d0f0d94125c.r2.cloudflarestorage.com/realmdevils";
+const BASE_URL = "https://pub-15ed8100c073408287949c0bebad27a6.r2.dev";
 
 // ---------------- ASSETS ----------------
 
