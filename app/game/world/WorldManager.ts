@@ -7,10 +7,7 @@ export const chunks = new Map<string, THREE.Group>();
 const BIOMES = ["urban", "forest", "hell", "snow", "desert"];
 const BASE_URL = "https://pub-15ed8100c073408287949c0bebad27a6.r2.dev";
 
-type ModelDef = {
-  url: string;
-  scale: number;
-};
+type ModelDef = { url: string; scale: number };
 
 const URBAN_STREETS: ModelDef[] = [
   { url: `${BASE_URL}/streets/Street1.glb`, scale: 7.5 },
@@ -126,178 +123,109 @@ function pick<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
-function randomBiome() {
-  return BIOMES[Math.floor(Math.random() * BIOMES.length)];
-}
-
-function loadModel(
-  def: ModelDef,
-  group: THREE.Group,
-  x: number,
-  z: number,
-  rotationY: number = 0
-) {
+function loadModel(def: ModelDef, group: THREE.Group, x: number, z: number, rot = 0) {
   gltfLoader.load(def.url, (gltf) => {
     const o = gltf.scene;
     o.position.set(x, 0, z);
     o.scale.set(def.scale, def.scale, def.scale);
-    o.rotation.y = rotationY;
-    group.add(o);
-  });
-}
-
-function loadUrl(
-  url: string,
-  group: THREE.Group,
-  x: number,
-  z: number,
-  scale: number
-) {
-  gltfLoader.load(url, (gltf) => {
-    const o = gltf.scene;
-    o.position.set(x, 0, z);
-    o.scale.set(scale, scale, scale);
+    o.rotation.y = rot;
     group.add(o);
   });
 }
 
 export function getChunkCoord(x: number, z: number) {
-  return {
-    cx: Math.floor(x / CHUNK_SIZE),
-    cz: Math.floor(z / CHUNK_SIZE),
-  };
+  return { cx: Math.floor(x / CHUNK_SIZE), cz: Math.floor(z / CHUNK_SIZE) };
 }
 
 function chunkKey(cx: number, cz: number) {
   return `${cx},${cz}`;
 }
 
-// شبکه خیابان روی چانک
-type Cell = { x: number; z: number };
+// شبکهٔ واقعی A (GTA)
+function buildRoadGrid(chunk: THREE.Group) {
+  const cell = 20;
+  const half = CHUNK_SIZE / 2;
+  const roadCells = [];
 
-function buildRoadGrid(chunk: THREE.Group): Cell[] {
-  const gridSize = 6;
-  const cellSize = CHUNK_SIZE / gridSize;
-  const roadCells: Cell[] = [];
-
-  for (let gx = 0; gx < gridSize; gx++) {
-    for (let gz = 0; gz < gridSize; gz++) {
-      const x = gx * cellSize - CHUNK_SIZE / 2 + cellSize / 2;
-      const z = gz * cellSize - CHUNK_SIZE / 2 + cellSize / 2;
-
-      // ردیف‌های اصلی افقی و عمودی برای خیابان
-      const isMainRow = gz === 2 || gz === 3;
-      const isMainCol = gx === 2 || gx === 3;
-
-      if (isMainRow || isMainCol) {
-        const street = pick(URBAN_STREETS);
-        const rotation =
-          isMainRow && !isMainCol ? 0 : Math.PI / 2; // افقی و عمودی
-        loadModel(street, chunk, x, z, rotation);
-        roadCells.push({ x, z });
-      }
+  for (let x = -half; x < half; x += cell) {
+    for (let z = -half; z < half; z += cell) {
+      const street = pick(URBAN_STREETS);
+      const rot = Math.random() < 0.5 ? 0 : Math.PI / 2;
+      loadModel(street, chunk, x + cell / 2, z + cell / 2, rot);
+      roadCells.push({ x: x + cell / 2, z: z + cell / 2 });
     }
   }
 
   return roadCells;
 }
 
-function spawnUrban(chunk: THREE.Group) {
-  const roadCells = buildRoadGrid(chunk);
+function spawnBuildings(chunk: THREE.Group, roadCells: any[]) {
+  const offset = 14;
 
-  // کوچه‌ها روی بعضی سلول‌های خیابان
-  for (let i = 0; i < roadCells.length; i++) {
-    if (Math.random() < 0.4) {
-      const c = roadCells[i];
-      const alley = pick(URBAN_ALLEYS);
-      const rotation = Math.random() < 0.5 ? 0 : Math.PI / 2;
-      loadModel(alley, chunk, c.x, c.z, rotation);
-    }
-  }
-
-  // ساختمان‌ها کنار خیابان، با Offset
-  const buildingOffset = 8;
-  for (let i = 0; i < roadCells.length; i++) {
-    if (Math.random() < 0.7) {
-      const c = roadCells[i];
+  for (const c of roadCells) {
+    if (Math.random() < 0.8) {
       const b = pick(URBAN_BUILDINGS);
 
       const side = Math.floor(Math.random() * 4);
       let bx = c.x;
       let bz = c.z;
 
-      if (side === 0) bx += buildingOffset;
-      else if (side === 1) bx -= buildingOffset;
-      else if (side === 2) bz += buildingOffset;
-      else bz -= buildingOffset;
+      if (side === 0) bx += offset;
+      else if (side === 1) bx -= offset;
+      else if (side === 2) bz += offset;
+      else bz -= offset;
 
       loadModel(b, chunk, bx, bz, 0);
     }
   }
+}
 
-  // ماشین‌ها روی خیابان
-  for (let i = 0; i < roadCells.length; i++) {
+function spawnVehicles(chunk: THREE.Group, roadCells: any[]) {
+  for (const c of roadCells) {
     if (Math.random() < 0.5) {
-      const c = roadCells[i];
       const v = pick(URBAN_VEHICLES);
-      const rotation = Math.random() < 0.5 ? 0 : Math.PI / 2;
-      loadModel(v, chunk, c.x, c.z, rotation);
+      const rot = Math.random() < 0.5 ? 0 : Math.PI / 2;
+      loadModel(v, chunk, c.x, c.z, rot);
     }
   }
+}
 
-  // رودخانه و پل در یک سمت چانک
-  if (Math.random() < 0.25) {
-    const river = pick(URBAN_RIVER);
-    loadModel(river, chunk, 0, -CHUNK_SIZE / 2 + 10, 0);
-
-    if (Math.random() < 0.7) {
-      const bridge = pick(URBAN_BRIDGES);
-      loadModel(bridge, chunk, 0, -CHUNK_SIZE / 2 + 10, Math.PI / 2);
-    }
-  }
-
-  // تونل در گوشه چانک
-  if (Math.random() < 0.3) {
-    const t = pick(URBAN_TUNNEL);
-    loadModel(t, chunk, CHUNK_SIZE / 2 - 15, CHUNK_SIZE / 2 - 15, 0);
-  }
+function spawnUrban(chunk: THREE.Group) {
+  const roads = buildRoadGrid(chunk);
+  spawnBuildings(chunk, roads);
+  spawnVehicles(chunk, roads);
 }
 
 function spawnForest(chunk: THREE.Group) {
   for (let i = 0; i < 10; i++) {
     const x = (Math.random() - 0.5) * CHUNK_SIZE;
     const z = (Math.random() - 0.5) * CHUNK_SIZE;
-    loadUrl(pick(FOREST_TREES), chunk, x, z, 3);
+    loadModel({ url: pick(FOREST_TREES), scale: 3 }, chunk, x, z);
   }
 
   for (let i = 0; i < 8; i++) {
     const x = (Math.random() - 0.5) * CHUNK_SIZE;
     const z = (Math.random() - 0.5) * CHUNK_SIZE;
-    loadUrl(pick(FOREST_BUSHES), chunk, x, z, 2);
+    loadModel({ url: pick(FOREST_BUSHES), scale: 2 }, chunk, x, z);
   }
 
   for (let i = 0; i < 8; i++) {
     const x = (Math.random() - 0.5) * CHUNK_SIZE;
     const z = (Math.random() - 0.5) * CHUNK_SIZE;
-    loadUrl(pick(FOREST_GRASS), chunk, x, z, 1.5);
+    loadModel({ url: pick(FOREST_GRASS), scale: 1.5 }, chunk, x, z);
   }
 
   for (let i = 0; i < 8; i++) {
     const x = (Math.random() - 0.5) * CHUNK_SIZE;
     const z = (Math.random() - 0.5) * CHUNK_SIZE;
-    loadUrl(pick(FOREST_FLOWERS), chunk, x, z, 1.2);
+    loadModel({ url: pick(FOREST_FLOWERS), scale: 1.2 }, chunk, x, z);
   }
 }
 
 function spawnObjects(chunk: THREE.Group, biome: string) {
-  if (biome === "urban") {
-    spawnUrban(chunk);
-  } else if (biome === "forest") {
-    spawnForest(chunk);
-  } else {
-    // بقیه بیوم‌ها بعداً
-    spawnUrban(chunk);
-  }
+  if (biome === "urban") spawnUrban(chunk);
+  else if (biome === "forest") spawnForest(chunk);
+  else spawnUrban(chunk);
 }
 
 export function generateChunk(scene: THREE.Scene, cx: number, cz: number) {
@@ -308,35 +236,18 @@ export function generateChunk(scene: THREE.Scene, cx: number, cz: number) {
   const chunk = new THREE.Group();
   chunk.position.set(cx * CHUNK_SIZE, 0, cz * CHUNK_SIZE);
 
-  const groundColor =
-    biome === "urban"
-      ? 0x444444
-      : biome === "forest"
-      ? 0x225522
-      : biome === "hell"
-      ? 0x552222
-      : biome === "snow"
-      ? 0xffffff
-      : 0xccaa55;
-
   const ground = new THREE.Mesh(
     new THREE.PlaneGeometry(CHUNK_SIZE, CHUNK_SIZE),
-    new THREE.MeshStandardMaterial({
-      color: groundColor,
-      roughness: 0.9,
-      metalness: 0.0,
-    })
+    new THREE.MeshStandardMaterial({ color: 0x444444 })
   );
   ground.rotation.x = -Math.PI / 2;
-  ground.position.set(0, -0.1, 0);
+  ground.position.y = -0.1;
   chunk.add(ground);
 
-  const ambient = new THREE.AmbientLight(0xffffff, 0.9);
-  chunk.add(ambient);
-
-  const dirLight = new THREE.DirectionalLight(0xffffff, 1.4);
-  dirLight.position.set(80, 120, 60);
-  chunk.add(dirLight);
+  chunk.add(new THREE.AmbientLight(0xffffff, 0.9));
+  const dir = new THREE.DirectionalLight(0xffffff, 1.4);
+  dir.position.set(80, 120, 60);
+  chunk.add(dir);
 
   spawnObjects(chunk, biome);
 
@@ -345,7 +256,8 @@ export function generateChunk(scene: THREE.Scene, cx: number, cz: number) {
 }
 
 export function destroyFarChunks(px: number, pz: number) {
-  const { cx, cz } = getChunkCoord(px, pz);
+  const cx = Math.floor(px / CHUNK_SIZE);
+  const cz = Math.floor(pz / CHUNK_SIZE);
 
   for (const [key, chunk] of chunks) {
     const [x, z] = key.split(",").map(Number);
