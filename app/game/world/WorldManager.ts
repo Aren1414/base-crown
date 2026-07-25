@@ -123,6 +123,7 @@ const FOREST_FLOWERS = [
 ];
 
 const gltfLoader = new GLTFLoader();
+const GLOBAL_SCALE = 10;
 
 function pick<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)];
@@ -142,7 +143,8 @@ function loadModel(
   gltfLoader.load(def.url, (gltf) => {
     const o = gltf.scene;
     o.position.set(x, 0, z);
-    o.scale.set(def.scale, def.scale, def.scale);
+    const s = def.scale * GLOBAL_SCALE;
+    o.scale.set(s, s, s);
     o.rotation.y = rot;
     group.add(o);
   });
@@ -158,20 +160,26 @@ function chunkKey(cx: number, cz: number) {
 
 type Cell = { x: number; z: number };
 
-// شبکهٔ خیابان
+// شبکهٔ خیابان منظم
 function buildRoadGrid(chunk: THREE.Group): Cell[] {
-  const cell = 20;
-  const half = CHUNK_SIZE / 2;
+  const gridSize = 4;
+  const cellSize = CHUNK_SIZE / gridSize;
   const roadCells: Cell[] = [];
 
-  for (let x = -half; x < half; x += cell) {
-    for (let z = -half; z < half; z += cell) {
-      const street = pick(URBAN_STREETS);
-      const rot = Math.random() < 0.5 ? 0 : Math.PI / 2;
-      const px = x + cell / 2;
-      const pz = z + cell / 2;
-      loadModel(street, chunk, px, pz, rot);
-      roadCells.push({ x: px, z: pz });
+  for (let gx = 0; gx < gridSize; gx++) {
+    for (let gz = 0; gz < gridSize; gz++) {
+      const x = gx * cellSize - CHUNK_SIZE / 2 + cellSize / 2;
+      const z = gz * cellSize - CHUNK_SIZE / 2 + cellSize / 2;
+
+      const isMainRow = gz === 1 || gz === 2;
+      const isMainCol = gx === 1 || gx === 2;
+
+      if (isMainRow || isMainCol) {
+        const street = pick(URBAN_STREETS);
+        const rot = isMainRow && !isMainCol ? 0 : Math.PI / 2;
+        loadModel(street, chunk, x, z, rot);
+        roadCells.push({ x, z });
+      }
     }
   }
 
@@ -179,10 +187,10 @@ function buildRoadGrid(chunk: THREE.Group): Cell[] {
 }
 
 function spawnBuildings(chunk: THREE.Group, roadCells: Cell[]) {
-  const offset = 14;
+  const offset = 40;
 
   for (const c of roadCells) {
-    if (Math.random() < 0.8) {
+    if (Math.random() < 0.9) {
       const b = pick(URBAN_BUILDINGS);
 
       const side = Math.floor(Math.random() * 4);
@@ -201,7 +209,7 @@ function spawnBuildings(chunk: THREE.Group, roadCells: Cell[]) {
 
 function spawnVehicles(chunk: THREE.Group, roadCells: Cell[]) {
   for (const c of roadCells) {
-    if (Math.random() < 0.5) {
+    if (Math.random() < 0.6) {
       const v = pick(URBAN_VEHICLES);
       const rot = Math.random() < 0.5 ? 0 : Math.PI / 2;
       loadModel(v, chunk, c.x, c.z, rot);
@@ -214,20 +222,18 @@ function spawnUrban(chunk: THREE.Group) {
   spawnBuildings(chunk, roads);
   spawnVehicles(chunk, roads);
 
-  // تونل
   if (Math.random() < 0.3) {
     const t = pick(URBAN_TUNNEL);
-    loadModel(t, chunk, CHUNK_SIZE / 2 - 15, CHUNK_SIZE / 2 - 15, 0);
+    loadModel(t, chunk, CHUNK_SIZE / 2 - 30, CHUNK_SIZE / 2 - 30, 0);
   }
 
-  // رودخانه + پل
   if (Math.random() < 0.25) {
     const river = pick(URBAN_RIVER);
-    loadModel(river, chunk, 0, -CHUNK_SIZE / 2 + 10, 0);
+    loadModel(river, chunk, 0, -CHUNK_SIZE / 2 + 20, 0);
 
     if (Math.random() < 0.7) {
       const bridge = pick(URBAN_BRIDGES);
-      loadModel(bridge, chunk, 0, -CHUNK_SIZE / 2 + 10, Math.PI / 2);
+      loadModel(bridge, chunk, 0, -CHUNK_SIZE / 2 + 20, Math.PI / 2);
     }
   }
 }
@@ -317,4 +323,4 @@ export function destroyFarChunks(px: number, pz: number) {
       chunks.delete(key);
     }
   }
-}
+  }
