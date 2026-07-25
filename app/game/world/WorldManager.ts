@@ -123,26 +123,13 @@ function randomBiome() {
   return BIOMES[Math.floor(Math.random() * BIOMES.length)];
 }
 
-function load(
-  url: string,
-  group: THREE.Group,
-  x: number,
-  z: number,
-  scale: number
-) {
-  gltfLoader.load(
-    url,
-    (gltf) => {
-      const o = gltf.scene;
-      o.position.set(x, 0, z);
-      o.scale.set(scale, scale, scale);
-      group.add(o);
-    },
-    undefined,
-    (err) => {
-      console.warn("GLTF load error:", url, err);
-    }
-  );
+function load(url: string, group: THREE.Group, x: number, z: number, scale: number) {
+  gltfLoader.load(url, (gltf) => {
+    const o = gltf.scene;
+    o.position.set(x, 0, z);
+    o.scale.set(scale, scale, scale);
+    group.add(o);
+  });
 }
 
 export function getChunkCoord(x: number, z: number) {
@@ -156,36 +143,41 @@ function chunkKey(cx: number, cz: number) {
   return `${cx},${cz}`;
 }
 
-function spawnObjects(chunk: THREE.Group, biome: string) {
-  // خیابون‌ها – بزرگ‌تر و قابل‌دید
-  for (let i = 0; i < 6; i++) {
-    const x = (Math.random() - 0.5) * CHUNK_SIZE;
-    const z = (Math.random() - 0.5) * CHUNK_SIZE;
-    load(pick(URBAN_STREETS), chunk, x, z, 8);
-  }
+// 🔥 کل چانک با خیابون پر می‌شود
+function fillStreets(chunk: THREE.Group) {
+  const grid = 3;
+  const cell = CHUNK_SIZE / grid;
 
-  // کوچه‌ها
+  for (let gx = 0; gx < grid; gx++) {
+    for (let gz = 0; gz < grid; gz++) {
+      const x = gx * cell - CHUNK_SIZE / 2 + cell / 2;
+      const z = gz * cell - CHUNK_SIZE / 2 + cell / 2;
+      load(pick(URBAN_STREETS), chunk, x, z, 8);
+    }
+  }
+}
+
+function spawnObjects(chunk: THREE.Group, biome: string) {
+  fillStreets(chunk);
+
   for (let i = 0; i < 6; i++) {
     const x = (Math.random() - 0.5) * CHUNK_SIZE;
     const z = (Math.random() - 0.5) * CHUNK_SIZE;
     load(pick(URBAN_ALLEYS), chunk, x, z, 8);
   }
 
-  // ساختمان‌ها – نسبتاً بزرگ‌تر از کارکتر
   for (let i = 0; i < 10; i++) {
     const x = (Math.random() - 0.5) * CHUNK_SIZE;
     const z = (Math.random() - 0.5) * CHUNK_SIZE;
     load(pick(URBAN_BUILDINGS), chunk, x, z, 6);
   }
 
-  // ماشین‌ها
   for (let i = 0; i < 4; i++) {
     const x = (Math.random() - 0.5) * CHUNK_SIZE;
     const z = (Math.random() - 0.5) * CHUNK_SIZE;
     load(pick(URBAN_VEHICLES), chunk, x, z, 4);
   }
 
-  // رودخونه و پل
   if (Math.random() < 0.2) {
     load(pick(URBAN_RIVER), chunk, 0, 0, 6);
     if (Math.random() < 0.7) {
@@ -193,7 +185,6 @@ function spawnObjects(chunk: THREE.Group, biome: string) {
     }
   }
 
-  // جنگل – همون اسکیل قبلی که گفتی خوبه
   if (biome === "forest") {
     for (let i = 0; i < 6; i++) {
       const x = (Math.random() - 0.5) * CHUNK_SIZE;
@@ -249,7 +240,6 @@ export function generateChunk(scene: THREE.Scene, cx: number, cz: number) {
     })
   );
   ground.rotation.x = -Math.PI / 2;
-  // کمی پایین‌تر تا کارکتر تو زمین فرو نره
   ground.position.set(0, -0.1, 0);
   chunk.add(ground);
 
@@ -276,4 +266,4 @@ export function destroyFarChunks(px: number, pz: number) {
       chunks.delete(key);
     }
   }
-}
+  }
