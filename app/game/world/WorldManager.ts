@@ -210,6 +210,13 @@ export function generateChunk(scene: THREE.Scene, cx: number, cz: number) {
   const chunk = new THREE.Group();
   chunk.position.set(cx * CHUNK_SIZE, 0, cz * CHUNK_SIZE);
 
+  const ground = new THREE.Mesh(
+    new THREE.PlaneGeometry(CHUNK_SIZE, CHUNK_SIZE),
+    new THREE.MeshBasicMaterial({ visible: false })
+  );
+  ground.rotation.x = -Math.PI / 2;
+  chunk.add(ground);
+
   spawnObjects(chunk, biome);
 
   scene.add(chunk);
@@ -226,4 +233,4 @@ export function destroyFarChunks(px: number, pz: number) {
       chunks.delete(key);
     }
   }
-       }
+    }
