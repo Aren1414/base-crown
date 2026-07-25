@@ -124,12 +124,19 @@ function randomBiome() {
 }
 
 function load(url: string, group: THREE.Group, x: number, z: number, scale: number) {
-  gltfLoader.load(url, (gltf) => {
-    const o = gltf.scene;
-    o.position.set(x, 0, z);
-    o.scale.set(scale, scale, scale);
-    group.add(o);
-  });
+  gltfLoader.load(
+    url,
+    (gltf) => {
+      const o = gltf.scene;
+      o.position.set(x, 0, z);
+      o.scale.set(scale, scale, scale);
+      group.add(o);
+    },
+    undefined,
+    (err) => {
+      console.warn("GLTF load error:", url, err);
+    }
+  );
 }
 
 export function getChunkCoord(x: number, z: number) {
@@ -143,72 +150,106 @@ function chunkKey(cx: number, cz: number) {
   return `${cx},${cz}`;
 }
 
-// 🔥 کل چانک با خیابون پر می‌شود
-function fillStreets(chunk: THREE.Group) {
-  const grid = 3;
-  const cell = CHUNK_SIZE / grid;
+// شبکه شهری برای biome urban
+type CellType = "road" | "building" | "empty";
 
-  for (let gx = 0; gx < grid; gx++) {
-    for (let gz = 0; gz < grid; gz++) {
-      const x = gx * cell - CHUNK_SIZE / 2 + cell / 2;
-      const z = gz * cell - CHUNK_SIZE / 2 + cell / 2;
-      load(pick(URBAN_STREETS), chunk, x, z, 8);
+function generateUrbanGrid(): CellType[][] {
+  const size = 6;
+  const grid: CellType[][] = [];
+  for (let r = 0; r < size; r++) {
+    const row: CellType[] = [];
+    for (let c = 0; c < size; c++) {
+      if (r === 1 || r === 4) {
+        row.push("building");
+      } else {
+        row.push("road");
+      }
+    }
+    grid.push(row);
+  }
+  return grid;
+}
+
+function spawnUrban(chunk: THREE.Group) {
+  const grid = generateUrbanGrid();
+  const size = grid.length;
+  const cellSize = CHUNK_SIZE / size;
+
+  const roadCells: { x: number; z: number }[] = [];
+  const buildingCells: { x: number; z: number }[] = [];
+
+  for (let r = 0; r < size; r++) {
+    for (let c = 0; c < size; c++) {
+      const x = c * cellSize - CHUNK_SIZE / 2 + cellSize / 2;
+      const z = r * cellSize - CHUNK_SIZE / 2 + cellSize / 2;
+      const type = grid[r][c];
+
+      if (type === "road") {
+        roadCells.push({ x, z });
+        load(pick(URBAN_STREETS), chunk, x, z, 6);
+      } else if (type === "building") {
+        buildingCells.push({ x, z });
+        load(pick(URBAN_BUILDINGS), chunk, x, z, 5);
+      }
+    }
+  }
+
+  // کوچه‌ها روی بعضی سلول‌های خیابان
+  for (let i = 0; i < Math.min(6, roadCells.length); i++) {
+    const cell = roadCells[Math.floor(Math.random() * roadCells.length)];
+    load(pick(URBAN_ALLEYS), chunk, cell.x, cell.z, 6);
+  }
+
+  // ماشین‌ها فقط روی خیابان
+  for (let i = 0; i < Math.min(6, roadCells.length); i++) {
+    const cell = roadCells[Math.floor(Math.random() * roadCells.length)];
+    load(pick(URBAN_VEHICLES), chunk, cell.x, cell.z, 3.5);
+  }
+
+  // رودخانه و پل روی یک ردیف خیابان
+  if (Math.random() < 0.3 && roadCells.length > 0) {
+    const cell = roadCells[Math.floor(Math.random() * roadCells.length)];
+    load(pick(URBAN_RIVER), chunk, cell.x, cell.z, 5);
+    if (Math.random() < 0.7) {
+      load(pick(URBAN_BRIDGES), chunk, cell.x, cell.z, 5);
     }
   }
 }
 
-function spawnObjects(chunk: THREE.Group, biome: string) {
-  fillStreets(chunk);
-
-  for (let i = 0; i < 6; i++) {
+function spawnForest(chunk: THREE.Group) {
+  for (let i = 0; i < 12; i++) {
     const x = (Math.random() - 0.5) * CHUNK_SIZE;
     const z = (Math.random() - 0.5) * CHUNK_SIZE;
-    load(pick(URBAN_ALLEYS), chunk, x, z, 8);
+    load(pick(FOREST_TREES), chunk, x, z, 3);
   }
 
   for (let i = 0; i < 10; i++) {
     const x = (Math.random() - 0.5) * CHUNK_SIZE;
     const z = (Math.random() - 0.5) * CHUNK_SIZE;
-    load(pick(URBAN_BUILDINGS), chunk, x, z, 6);
+    load(pick(FOREST_BUSHES), chunk, x, z, 2);
   }
 
-  for (let i = 0; i < 4; i++) {
+  for (let i = 0; i < 10; i++) {
     const x = (Math.random() - 0.5) * CHUNK_SIZE;
     const z = (Math.random() - 0.5) * CHUNK_SIZE;
-    load(pick(URBAN_VEHICLES), chunk, x, z, 4);
+    load(pick(FOREST_GRASS), chunk, x, z, 1.5);
   }
 
-  if (Math.random() < 0.2) {
-    load(pick(URBAN_RIVER), chunk, 0, 0, 6);
-    if (Math.random() < 0.7) {
-      load(pick(URBAN_BRIDGES), chunk, 0, 0, 6);
-    }
+  for (let i = 0; i < 8; i++) {
+    const x = (Math.random() - 0.5) * CHUNK_SIZE;
+    const z = (Math.random() - 0.5) * CHUNK_SIZE;
+    load(pick(FOREST_FLOWERS), chunk, x, z, 1.2);
   }
+}
 
-  if (biome === "forest") {
-    for (let i = 0; i < 6; i++) {
-      const x = (Math.random() - 0.5) * CHUNK_SIZE;
-      const z = (Math.random() - 0.5) * CHUNK_SIZE;
-      load(pick(FOREST_TREES), chunk, x, z, 3);
-    }
-
-    for (let i = 0; i < 6; i++) {
-      const x = (Math.random() - 0.5) * CHUNK_SIZE;
-      const z = (Math.random() - 0.5) * CHUNK_SIZE;
-      load(pick(FOREST_BUSHES), chunk, x, z, 2);
-    }
-
-    for (let i = 0; i < 6; i++) {
-      const x = (Math.random() - 0.5) * CHUNK_SIZE;
-      const z = (Math.random() - 0.5) * CHUNK_SIZE;
-      load(pick(FOREST_GRASS), chunk, x, z, 1.5);
-    }
-
-    for (let i = 0; i < 6; i++) {
-      const x = (Math.random() - 0.5) * CHUNK_SIZE;
-      const z = (Math.random() - 0.5) * CHUNK_SIZE;
-      load(pick(FOREST_FLOWERS), chunk, x, z, 1.2);
-    }
+function spawnObjects(chunk: THREE.Group, biome: string) {
+  if (biome === "urban") {
+    spawnUrban(chunk);
+  } else if (biome === "forest") {
+    spawnForest(chunk);
+  } else {
+    // بقیه بیوم‌ها فعلاً ساده
+    spawnUrban(chunk);
   }
 }
 
