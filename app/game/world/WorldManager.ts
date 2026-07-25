@@ -1,185 +1,324 @@
-import * as THREE from "three";
-import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+export type ModelDef = {
+  url: string;
+  scale: number;
+  radius: number;
+};
 
-import {
-  URBAN_STREETS,
-  URBAN_ALLEYS,
-  URBAN_BUILDINGS,
-  URBAN_VEHICLES,
-  URBAN_TUNNEL,
-  URBAN_BRIDGES,
-  URBAN_RIVER,
-  FOREST_TREES,
-  FOREST_BUSHES,
-  FOREST_GRASS,
-  FOREST_FLOWERS,
-  ModelDef
-} from "../assets/Models";
+const BASE_URL = "https://pub-15ed8100c073408287949c0bebad27a6.r2.dev";
 
-export const CHUNK_SIZE = 120;
-export const chunks = new Map<string, THREE.Group>();
+/* ---------------- Streets ---------------- */
 
-const gltfLoader = new GLTFLoader();
+export const URBAN_STREETS: ModelDef[] = [
+  {
+    url: `${BASE_URL}/streets/Street1.glb`,
+    scale: 7.5,
+    radius: 15,
+  },
+  {
+    url: `${BASE_URL}/streets/Street2.glb`,
+    scale: 7.5,
+    radius: 15,
+  },
+  {
+    url: `${BASE_URL}/streets/Street3.glb`,
+    scale: 7.5,
+    radius: 15,
+  },
+];
 
-function pick<T>(arr: T[]): T {
-  return arr[Math.floor(Math.random() * arr.length)];
-}
+/* ---------------- Alleys ---------------- */
 
-export function getChunkCoord(x: number, z: number) {
-  return {
-    cx: Math.floor(x / CHUNK_SIZE),
-    cz: Math.floor(z / CHUNK_SIZE)
-  };
-}
+export const URBAN_ALLEYS: ModelDef[] = [
+  {
+    url: `${BASE_URL}/alleys/Alley1.glb`,
+    scale: 7.5,
+    radius: 12,
+  },
+  {
+    url: `${BASE_URL}/alleys/Alley2.glb`,
+    scale: 7.5,
+    radius: 12,
+  },
+  {
+    url: `${BASE_URL}/alleys/Alley3.glb`,
+    scale: 7.5,
+    radius: 12,
+  },
+  {
+    url: `${BASE_URL}/Connecting_alley_and_street/Connecting_alley_and_street.glb`,
+    scale: 7.5,
+    radius: 12,
+  },
+];
 
-function loadModel(
-  def: ModelDef,
-  group: THREE.Group,
-  x: number,
-  z: number,
-  rot = 0
-) {
-  gltfLoader.load(def.url, (gltf) => {
-    const o = gltf.scene;
-    o.position.set(x, 0, z);
-    o.scale.set(def.scale, def.scale, def.scale);
-    o.rotation.y = rot;
-    group.add(o);
-  });
-}
+/* ---------------- Buildings ---------------- */
 
-function buildRoadGrid(chunk: THREE.Group) {
-  const gridSize = 4;
-  const cellSize = CHUNK_SIZE / gridSize;
-  const roadCells: { x: number; z: number }[] = [];
+export const URBAN_BUILDINGS: ModelDef[] = [
 
-  for (let gx = 0; gx < gridSize; gx++) {
-    for (let gz = 0; gz < gridSize; gz++) {
-      const x = gx * cellSize - CHUNK_SIZE / 2 + cellSize / 2;
-      const z = gz * cellSize - CHUNK_SIZE / 2 + cellSize / 2;
+  {
+    url: `${BASE_URL}/Buildings/Urban_building1.glb`,
+    scale: 4.8,
+    radius: 10,
+  },
 
-      const isMainRow = gz === 1 || gz === 2;
-      const isMainCol = gx === 1 || gx === 2;
+  {
+    url: `${BASE_URL}/Buildings/Urban_building2.glb`,
+    scale: 5.1,
+    radius: 10,
+  },
 
-      if (isMainRow || isMainCol) {
-        const street = pick(URBAN_STREETS);
-        const rot = isMainRow && !isMainCol ? 0 : Math.PI / 2;
-        loadModel(street, chunk, x, z, rot);
-        roadCells.push({ x, z });
-      }
-    }
-  }
+  {
+    url: `${BASE_URL}/Buildings/Urban_building3.glb`,
+    scale: 5.4,
+    radius: 11,
+  },
 
-  return roadCells;
-}
+  {
+    url: `${BASE_URL}/Buildings/Urban_building4.glb`,
+    scale: 5.8,
+    radius: 11,
+  },
 
-function spawnBuildings(chunk: THREE.Group, roadCells: { x: number; z: number }[]) {
-  const offset = 22;
+  {
+    url: `${BASE_URL}/Buildings/Urban_building5.glb`,
+    scale: 6.0,
+    radius: 12,
+  },
 
-  for (const c of roadCells) {
-    if (Math.random() < 0.9) {
-      const b = pick(URBAN_BUILDINGS);
+  {
+    url: `${BASE_URL}/Buildings/Urban_building6.glb`,
+    scale: 6.2,
+    radius: 12,
+  },
 
-      const side = Math.floor(Math.random() * 4);
-      let bx = c.x;
-      let bz = c.z;
+  {
+    url: `${BASE_URL}/Buildings/Urban_building7.glb`,
+    scale: 6.5,
+    radius: 13,
+  },
 
-      if (side === 0) bx += offset;
-      else if (side === 1) bx -= offset;
-      else if (side === 2) bz += offset;
-      else bz -= offset;
+  {
+    url: `${BASE_URL}/Buildings/Urban_building8.glb`,
+    scale: 6.8,
+    radius: 13,
+  },
 
-      loadModel(b, chunk, bx, bz);
-    }
-  }
-}
+  {
+    url: `${BASE_URL}/Buildings/Urban_building9.glb`,
+    scale: 7.0,
+    radius: 14,
+  },
 
-function spawnVehicles(chunk: THREE.Group, roadCells: { x: number; z: number }[]) {
-  for (const c of roadCells) {
-    if (Math.random() < 0.6) {
-      const v = pick(URBAN_VEHICLES);
-      const rot = Math.random() < 0.5 ? 0 : Math.PI / 2;
-      loadModel(v, chunk, c.x, c.z, rot);
-    }
-  }
-}
+  {
+    url: `${BASE_URL}/Buildings/Urban_building10.glb`,
+    scale: 7.2,
+    radius: 14,
+  },
 
-function spawnUrban(chunk: THREE.Group) {
-  const roads = buildRoadGrid(chunk);
-  spawnBuildings(chunk, roads);
-  spawnVehicles(chunk, roads);
+  {
+    url: `${BASE_URL}/Buildings/Urban_building11.glb`,
+    scale: 7.4,
+    radius: 15,
+  },
 
-  if (Math.random() < 0.3) {
-    const t = pick(URBAN_TUNNEL);
-    loadModel(t, chunk, CHUNK_SIZE / 2 - 30, CHUNK_SIZE / 2 - 30);
-  }
+  {
+    url: `${BASE_URL}/Buildings/Villa_house1.glb`,
+    scale: 3.6,
+    radius: 8,
+  },
 
-  if (Math.random() < 0.25) {
-    const river = pick(URBAN_RIVER);
-    loadModel(river, chunk, 0, -CHUNK_SIZE / 2 + 20);
+  {
+    url: `${BASE_URL}/Buildings/Villa_house2.glb`,
+    scale: 3.8,
+    radius: 8,
+  },
 
-    if (Math.random() < 0.7) {
-      const bridge = pick(URBAN_BRIDGES);
-      loadModel(bridge, chunk, 0, -CHUNK_SIZE / 2 + 20, Math.PI / 2);
-    }
-  }
-}
+  {
+    url: `${BASE_URL}/Buildings/Villa_house3.glb`,
+    scale: 4.0,
+    radius: 8,
+  },
 
-function spawnForest(chunk: THREE.Group) {
-  for (let i = 0; i < 10; i++) {
-    const x = (Math.random() - 0.5) * CHUNK_SIZE;
-    const z = (Math.random() - 0.5) * CHUNK_SIZE;
-    loadModel({ url: pick(FOREST_TREES), scale: 3 }, chunk, x, z);
-  }
+];
 
-  for (let i = 0; i < 8; i++) {
-    const x = (Math.random() - 0.5) * CHUNK_SIZE;
-    const z = (Math.random() - 0.5) * CHUNK_SIZE;
-    loadModel({ url: pick(FOREST_BUSHES), scale: 2 }, chunk, x, z);
-  }
+/* ---------------- Vehicles ---------------- */
 
-  for (let i = 0; i < 8; i++) {
-    const x = (Math.random() - 0.5) * CHUNK_SIZE;
-    const z = (Math.random() - 0.5) * CHUNK_SIZE;
-    loadModel({ url: pick(FOREST_GRASS), scale: 1.5 }, chunk, x, z);
-  }
+export const URBAN_VEHICLES: ModelDef[] = [
 
-  for (let i = 0; i < 8; i++) {
-    const x = (Math.random() - 0.5) * CHUNK_SIZE;
-    const z = (Math.random() - 0.5) * CHUNK_SIZE;
-    loadModel({ url: pick(FOREST_FLOWERS), scale: 1.2 }, chunk, x, z);
-  }
-}
+  {
+    url: `${BASE_URL}/vehicles/Ambulance_car.glb`,
+    scale: 3,
+    radius: 2,
+  },
 
-export function generateChunk(scene: THREE.Scene, cx: number, cz: number) {
-  const key = `${cx},${cz}`;
-  if (chunks.has(key)) return;
+  {
+    url: `${BASE_URL}/vehicles/Motorcycle.glb`,
+    scale: 2,
+    radius: 1,
+  },
 
-  const chunk = new THREE.Group();
-  chunk.position.set(cx * CHUNK_SIZE, 0, cz * CHUNK_SIZE);
+  {
+    url: `${BASE_URL}/vehicles/Pickup_truck.glb`,
+    scale: 3,
+    radius: 2,
+  },
 
-  const ground = new THREE.Mesh(
-    new THREE.PlaneGeometry(CHUNK_SIZE, CHUNK_SIZE),
-    new THREE.MeshStandardMaterial({ color: 0x444444 })
-  );
-  ground.rotation.x = -Math.PI / 2;
-  chunk.add(ground);
+  {
+    url: `${BASE_URL}/vehicles/Police_car.glb`,
+    scale: 3,
+    radius: 2,
+  },
 
-  spawnUrban(chunk);
+  {
+    url: `${BASE_URL}/vehicles/Sports_car1.glb`,
+    scale: 3,
+    radius: 2,
+  },
 
-  scene.add(chunk);
-  chunks.set(key, chunk);
-}
+  {
+    url: `${BASE_URL}/vehicles/Sports_car2.glb`,
+    scale: 3,
+    radius: 2,
+  },
 
-export function destroyFarChunks(px: number, pz: number) {
-  const cx = Math.floor(px / CHUNK_SIZE);
-  const cz = Math.floor(pz / CHUNK_SIZE);
+  {
+    url: `${BASE_URL}/vehicles/Sports_car3.glb`,
+    scale: 3,
+    radius: 2,
+  },
 
-  for (const [key, chunk] of chunks) {
-    const [x, z] = key.split(",").map(Number);
-    if (Math.abs(x - cx) > 1 || Math.abs(z - cz) > 1) {
-      chunk.removeFromParent();
-      chunks.delete(key);
-    }
-  }
-}
+  {
+    url: `${BASE_URL}/vehicles/Van_car.glb`,
+    scale: 3.3,
+    radius: 2.2,
+  },
+
+];
+
+/* ---------------- Tunnel ---------------- */
+
+export const URBAN_TUNNEL: ModelDef[] = [
+
+  {
+    url: `${BASE_URL}/Tunnel/Tunnel.glb`,
+    scale: 6,
+    radius: 18,
+  },
+
+  {
+    url: `${BASE_URL}/Tunnel/Tunnel_wall1.glb`,
+    scale: 6,
+    radius: 18,
+  },
+
+  {
+    url: `${BASE_URL}/Tunnel/Tunnel_wall2.glb`,
+    scale: 6,
+    radius: 18,
+  },
+
+  {
+    url: `${BASE_URL}/Tunnel/Tunnel_wall3.glb`,
+    scale: 6,
+    radius: 18,
+  },
+
+  {
+    url: `${BASE_URL}/Tunnel/Tunnel_wall4.glb`,
+    scale: 6,
+    radius: 18,
+  },
+
+];
+
+/* ---------------- Bridges ---------------- */
+
+export const URBAN_BRIDGES: ModelDef[] = [
+
+  {
+    url: `${BASE_URL}/Bridges/Crescent_Bridge.glb`,
+    scale: 6.5,
+    radius: 20,
+  },
+
+  {
+    url: `${BASE_URL}/Bridges/Stone_bridge.glb`,
+    scale: 6.5,
+    radius: 20,
+  },
+
+  {
+    url: `${BASE_URL}/Bridges/Urban_bridge1.glb`,
+    scale: 6.5,
+    radius: 20,
+  },
+
+  {
+    url: `${BASE_URL}/Bridges/Urban_bridge2.glb`,
+    scale: 6.5,
+    radius: 20,
+  },
+
+];
+
+/* ---------------- River ---------------- */
+
+export const URBAN_RIVER: ModelDef[] = [
+
+  {
+    url: `${BASE_URL}/river/River.glb`,
+    scale: 6.5,
+    radius: 25,
+  },
+
+];
+
+/* ---------------- Forest ---------------- */
+
+export const FOREST_TREES = [
+`${BASE_URL}/Plants_and_trees/glTF/BirchTree_1.gltf`,
+`${BASE_URL}/Plants_and_trees/glTF/BirchTree_2.gltf`,
+`${BASE_URL}/Plants_and_trees/glTF/BirchTree_3.gltf`,
+`${BASE_URL}/Plants_and_trees/glTF/BirchTree_4.gltf`,
+`${BASE_URL}/Plants_and_trees/glTF/BirchTree_5.gltf`,
+`${BASE_URL}/Plants_and_trees/glTF/MapleTree_1.gltf`,
+`${BASE_URL}/Plants_and_trees/glTF/MapleTree_2.gltf`,
+`${BASE_URL}/Plants_and_trees/glTF/MapleTree_3.gltf`,
+`${BASE_URL}/Plants_and_trees/glTF/MapleTree_4.gltf`,
+`${BASE_URL}/Plants_and_trees/glTF/MapleTree_5.gltf`,
+`${BASE_URL}/Plants_and_trees/glTF/DeadTree_1.gltf`,
+`${BASE_URL}/Plants_and_trees/glTF/DeadTree_2.gltf`,
+`${BASE_URL}/Plants_and_trees/glTF/DeadTree_3.gltf`,
+`${BASE_URL}/Plants_and_trees/glTF/DeadTree_4.gltf`,
+`${BASE_URL}/Plants_and_trees/glTF/DeadTree_5.gltf`,
+`${BASE_URL}/Plants_and_trees/glTF/DeadTree_6.gltf`,
+`${BASE_URL}/Plants_and_trees/glTF/DeadTree_7.gltf`,
+`${BASE_URL}/Plants_and_trees/glTF/DeadTree_8.gltf`,
+`${BASE_URL}/Plants_and_trees/glTF/DeadTree_9.gltf`,
+`${BASE_URL}/Plants_and_trees/glTF/DeadTree_10.gltf`,
+];
+
+export const FOREST_BUSHES = [
+`${BASE_URL}/Plants_and_trees/glTF/Bush.gltf`,
+`${BASE_URL}/Plants_and_trees/glTF/Bush_Small.gltf`,
+`${BASE_URL}/Plants_and_trees/glTF/Bush_Large.gltf`,
+`${BASE_URL}/Plants_and_trees/glTF/Bush_Flowers.gltf`,
+`${BASE_URL}/Plants_and_trees/glTF/Bush_Large_Flowers.gltf`,
+`${BASE_URL}/Plants_and_trees/glTF/Bush_Small_Flowers.gltf`,
+];
+
+export const FOREST_GRASS = [
+`${BASE_URL}/Plants_and_trees/glTF/Grass_Large.gltf`,
+`${BASE_URL}/Plants_and_trees/glTF/Grass_Large_Extruded.gltf`,
+`${BASE_URL}/Plants_and_trees/glTF/Grass_Small.gltf`,
+];
+
+export const FOREST_FLOWERS = [
+`${BASE_URL}/Plants_and_trees/glTF/Flower_1.gltf`,
+`${BASE_URL}/Plants_and_trees/glTF/Flower_1_Clump.gltf`,
+`${BASE_URL}/Plants_and_trees/glTF/Flower_2.gltf`,
+`${BASE_URL}/Plants_and_trees/glTF/Flower_2_Clump.gltf`,
+`${BASE_URL}/Plants_and_trees/glTF/Flower_3_Clump.gltf`,
+`${BASE_URL}/Plants_and_trees/glTF/Flower_4_Clump.gltf`,
+`${BASE_URL}/Plants_and_trees/glTF/Flower_5_Clump.gltf`,
+];
