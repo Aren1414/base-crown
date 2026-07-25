@@ -119,6 +119,10 @@ function pick<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
+function randomBiome() {
+  return BIOMES[Math.floor(Math.random() * BIOMES.length)];
+}
+
 function load(url: string, group: THREE.Group, x: number, z: number, scale: number) {
   gltfLoader.load(url, (gltf) => {
     const o = gltf.scene;
@@ -222,4 +226,4 @@ export function destroyFarChunks(px: number, pz: number) {
       chunks.delete(key);
     }
   }
-}
+  }
