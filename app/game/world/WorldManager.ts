@@ -157,43 +157,43 @@ function chunkKey(cx: number, cz: number) {
 }
 
 function spawnObjects(chunk: THREE.Group, biome: string) {
-  // خیابون‌ها
+  // خیابون‌ها – بزرگ‌تر و قابل‌دید
   for (let i = 0; i < 6; i++) {
     const x = (Math.random() - 0.5) * CHUNK_SIZE;
     const z = (Math.random() - 0.5) * CHUNK_SIZE;
-    load(pick(URBAN_STREETS), chunk, x, z, 4);
+    load(pick(URBAN_STREETS), chunk, x, z, 8);
   }
 
   // کوچه‌ها
   for (let i = 0; i < 6; i++) {
     const x = (Math.random() - 0.5) * CHUNK_SIZE;
     const z = (Math.random() - 0.5) * CHUNK_SIZE;
-    load(pick(URBAN_ALLEYS), chunk, x, z, 4);
+    load(pick(URBAN_ALLEYS), chunk, x, z, 8);
   }
 
-  // ساختمان‌ها
+  // ساختمان‌ها – نسبتاً بزرگ‌تر از کارکتر
   for (let i = 0; i < 10; i++) {
     const x = (Math.random() - 0.5) * CHUNK_SIZE;
     const z = (Math.random() - 0.5) * CHUNK_SIZE;
-    load(pick(URBAN_BUILDINGS), chunk, x, z, 4.5);
+    load(pick(URBAN_BUILDINGS), chunk, x, z, 6);
   }
 
   // ماشین‌ها
   for (let i = 0; i < 4; i++) {
     const x = (Math.random() - 0.5) * CHUNK_SIZE;
     const z = (Math.random() - 0.5) * CHUNK_SIZE;
-    load(pick(URBAN_VEHICLES), chunk, x, z, 3);
+    load(pick(URBAN_VEHICLES), chunk, x, z, 4);
   }
 
   // رودخونه و پل
   if (Math.random() < 0.2) {
-    load(pick(URBAN_RIVER), chunk, 0, 0, 4);
+    load(pick(URBAN_RIVER), chunk, 0, 0, 6);
     if (Math.random() < 0.7) {
-      load(pick(URBAN_BRIDGES), chunk, 0, 0, 4);
+      load(pick(URBAN_BRIDGES), chunk, 0, 0, 6);
     }
   }
 
-  // جنگل
+  // جنگل – همون اسکیل قبلی که گفتی خوبه
   if (biome === "forest") {
     for (let i = 0; i < 6; i++) {
       const x = (Math.random() - 0.5) * CHUNK_SIZE;
@@ -229,7 +229,6 @@ export function generateChunk(scene: THREE.Scene, cx: number, cz: number) {
   const chunk = new THREE.Group();
   chunk.position.set(cx * CHUNK_SIZE, 0, cz * CHUNK_SIZE);
 
-  // زمین با رنگ مناسب و متریال استاندارد برای نور
   const groundColor =
     biome === "urban"
       ? 0x444444
@@ -250,15 +249,15 @@ export function generateChunk(scene: THREE.Scene, cx: number, cz: number) {
     })
   );
   ground.rotation.x = -Math.PI / 2;
-  ground.position.set(0, 0, 0);
+  // کمی پایین‌تر تا کارکتر تو زمین فرو نره
+  ground.position.set(0, -0.1, 0);
   chunk.add(ground);
 
-  // نور محیطی و جهت‌دار برای روشن شدن آبجکت‌ها
-  const ambient = new THREE.AmbientLight(0xffffff, 0.8);
+  const ambient = new THREE.AmbientLight(0xffffff, 0.9);
   chunk.add(ambient);
 
-  const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
-  dirLight.position.set(50, 100, 50);
+  const dirLight = new THREE.DirectionalLight(0xffffff, 1.4);
+  dirLight.position.set(80, 120, 60);
   chunk.add(dirLight);
 
   spawnObjects(chunk, biome);
@@ -277,4 +276,4 @@ export function destroyFarChunks(px: number, pz: number) {
       chunks.delete(key);
     }
   }
-                     }
+}
