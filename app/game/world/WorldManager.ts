@@ -103,7 +103,7 @@ const FOREST_BUSHES = [
   `${BASE_URL}/Plants_and_trees/glTF/Bush_Large.gltf`,
   `${BASE_URL}/Plants_and_trees/glTF/Bush_Flowers.gltf`,
   `${BASE_URL}/Plants_and_trees/glTF/Bush_Large_Flowers.gltf`,
-  `${BASE_URL}/Plants_and_trees/glTF/Bush_Small_Flowers.gltf`,
+  `${BASE_URL}/Plants_and_trees/glTF/Bush_Small_FlowERS.gltf`.toLowerCase().replace("flowers.gltf", "Flowers.gltf"),
 ];
 
 const FOREST_GRASS = [
@@ -123,7 +123,7 @@ const FOREST_FLOWERS = [
 ];
 
 const gltfLoader = new GLTFLoader();
-const GLOBAL_SCALE = 10;
+const GLOBAL_SCALE = 1.6; // سایز واقعی‌تر برای همه مدل‌ها
 
 function pick<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)];
@@ -187,7 +187,7 @@ function buildRoadGrid(chunk: THREE.Group): Cell[] {
 }
 
 function spawnBuildings(chunk: THREE.Group, roadCells: Cell[]) {
-  const offset = 40;
+  const offset = 22; // نزدیک‌تر و منطقی‌تر نسبت به خیابان
 
   for (const c of roadCells) {
     if (Math.random() < 0.9) {
