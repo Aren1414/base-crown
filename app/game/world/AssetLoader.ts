@@ -11,34 +11,31 @@ const modelCache = new Map<
   Promise<THREE.Group>
 >();
 
-export type SpawnOptions = {
+export type ModelPlacement = {
   x: number;
   y?: number;
   z: number;
+
   rotationY?: number;
 
-  /*
-   * When targetSize is provided, the model is automatically
-   * resized according to its real bounding box.
-   */
-  targetSize?: number;
-
-  /*
-   * Maximum allowed model height.
-   * Useful for preventing unusually tall models.
-   */
+  targetFootprint?: number;
   maxHeight?: number;
 
-  /*
-   * Extra multiplier applied after automatic normalization.
-   */
-  scaleMultiplier?: number;
+  verticalMode?: "ground" | "surface";
 
   castShadow?: boolean;
   receiveShadow?: boolean;
+
+  collider?: boolean;
+  colliderPadding?: number;
 };
 
-function loadOriginalModel(
+export type SpawnedModel = {
+  object: THREE.Group;
+  collider: THREE.Box3 | null;
+};
+
+function loadOriginal(
   url: string
 ): Promise<THREE.Group> {
   const cached = modelCache.get(url);
@@ -52,11 +49,8 @@ function loadOriginalModel(
       loader.load(
         url,
         (gltf) => {
-          const root = gltf.scene;
-
-          root.updateMatrixWorld(true);
-
-          resolve(root);
+          gltf.scene.updateMatrixWorld(true);
+          resolve(gltf.scene);
         },
         undefined,
         (error) => {
@@ -79,55 +73,50 @@ function loadOriginalModel(
 }
 
 function configureMeshes(
-  root: THREE.Object3D,
+  object: THREE.Object3D,
   castShadow: boolean,
   receiveShadow: boolean
 ): void {
-  root.traverse((object) => {
-    if (!(object instanceof THREE.Mesh)) {
+  object.traverse((child) => {
+    if (!(child instanceof THREE.Mesh)) {
       return;
     }
 
-    object.castShadow = castShadow;
-    object.receiveShadow = receiveShadow;
-    object.frustumCulled = true;
-
-    if (Array.isArray(object.material)) {
-      for (const material of object.material) {
-        material.side = THREE.FrontSide;
-      }
-    } else if (object.material) {
-      object.material.side = THREE.FrontSide;
-    }
+    child.castShadow = castShadow;
+    child.receiveShadow = receiveShadow;
+    child.frustumCulled = true;
   });
 }
 
-function calculateScale(
-  model: THREE.Object3D,
-  definition: ModelDef,
-  targetSize?: number,
-  maxHeight?: number,
-  scaleMultiplier = 1
-): number {
-  model.scale.setScalar(1);
-  model.rotation.set(0, 0, 0);
-  model.position.set(0, 0, 0);
-  model.updateMatrixWorld(true);
+function getObjectBounds(
+  object: THREE.Object3D
+): THREE.Box3 {
+  object.updateMatrixWorld(true);
 
-  const box = new THREE.Box3().setFromObject(
-    model
+  return new THREE.Box3().setFromObject(
+    object
+  );
+}
+
+function normalizeModel(
+  object: THREE.Object3D,
+  definition: ModelDef,
+  placement: ModelPlacement
+): void {
+  object.position.set(0, 0, 0);
+  object.rotation.set(
+    0,
+    placement.rotationY ?? 0,
+    0
   );
 
-  const size = new THREE.Vector3();
-  box.getSize(size);
+  object.scale.setScalar(1);
+  object.updateMatrixWorld(true);
 
-  if (
-    !Number.isFinite(size.x) ||
-    !Number.isFinite(size.y) ||
-    !Number.isFinite(size.z)
-  ) {
-    return definition.scale;
-  }
+  let bounds = getObjectBounds(object);
+
+  const size = new THREE.Vector3();
+  bounds.getSize(size);
 
   const horizontalSize = Math.max(
     size.x,
@@ -137,100 +126,149 @@ function calculateScale(
 
   let scale = definition.scale;
 
-  if (targetSize !== undefined) {
-    scale = targetSize / horizontalSize;
+  if (
+    placement.targetFootprint !==
+    undefined
+  ) {
+    scale =
+      placement.targetFootprint /
+      horizontalSize;
   }
 
   if (
-    maxHeight !== undefined &&
-    size.y * scale > maxHeight
+    placement.maxHeight !== undefined &&
+    size.y * scale >
+      placement.maxHeight
   ) {
-    scale = maxHeight / Math.max(
-      size.y,
-      0.0001
-    );
+    scale =
+      placement.maxHeight /
+      Math.max(size.y, 0.0001);
   }
 
-  return scale * scaleMultiplier;
+  object.scale.setScalar(scale);
+  object.updateMatrixWorld(true);
+
+  bounds = getObjectBounds(object);
+
+  const center =
+    new THREE.Vector3();
+
+  bounds.getCenter(center);
+
+  object.position.x -= center.x;
+  object.position.z -= center.z;
+
+  if (
+    placement.verticalMode === "surface"
+  ) {
+    object.position.y -= bounds.max.y;
+  } else {
+    object.position.y -= bounds.min.y;
+  }
+
+  object.updateMatrixWorld(true);
 }
 
-function centerAndGroundModel(
-  model: THREE.Object3D
-): void {
-  model.updateMatrixWorld(true);
+function createCollider(
+  object: THREE.Object3D,
+  padding: number
+): THREE.Box3 {
+  const bounds = getObjectBounds(object);
 
-  const box = new THREE.Box3().setFromObject(
-    model
-  );
+  bounds.min.x += padding;
+  bounds.min.z += padding;
 
-  const center = new THREE.Vector3();
-  box.getCenter(center);
+  bounds.max.x -= padding;
+  bounds.max.z -= padding;
 
-  model.position.x -= center.x;
-  model.position.z -= center.z;
-  model.position.y -= box.min.y;
+  if (bounds.min.x > bounds.max.x) {
+    const center =
+      (bounds.min.x + bounds.max.x) / 2;
 
-  model.updateMatrixWorld(true);
+    bounds.min.x = center;
+    bounds.max.x = center;
+  }
+
+  if (bounds.min.z > bounds.max.z) {
+    const center =
+      (bounds.min.z + bounds.max.z) / 2;
+
+    bounds.min.z = center;
+    bounds.max.z = center;
+  }
+
+  return bounds;
 }
 
 export async function spawnModel(
   definition: ModelDef,
   parent: THREE.Group,
-  options: SpawnOptions
-): Promise<THREE.Group | null> {
+  placement: ModelPlacement
+): Promise<SpawnedModel | null> {
   try {
-    const original = await loadOriginalModel(
-      definition.url
-    );
+    const original =
+      await loadOriginal(
+        definition.url
+      );
 
     if (parent.userData.destroyed) {
       return null;
     }
 
-    const model = clone(original);
+    const clonedModel =
+      clone(original);
 
-    const wrapper = new THREE.Group();
-
-    wrapper.name = definition.url
-      .split("/")
-      .pop() ?? "Model";
-
-    model.rotation.y =
-      options.rotationY ?? 0;
-
-    const scale = calculateScale(
-      model,
+    normalizeModel(
+      clonedModel,
       definition,
-      options.targetSize,
-      options.maxHeight,
-      options.scaleMultiplier ?? 1
+      placement
     );
-
-    model.scale.setScalar(scale);
 
     configureMeshes(
-      model,
-      options.castShadow ?? true,
-      options.receiveShadow ?? true
+      clonedModel,
+      placement.castShadow ?? true,
+      placement.receiveShadow ?? true
     );
 
-    centerAndGroundModel(model);
+    const wrapper =
+      new THREE.Group();
 
-    wrapper.add(model);
+    wrapper.name =
+      definition.url
+        .split("/")
+        .pop() ?? "WorldModel";
 
     wrapper.position.set(
-      options.x,
-      options.y ?? 0,
-      options.z
+      placement.x,
+      placement.y ?? 0,
+      placement.z
     );
 
-    if (parent.userData.destroyed) {
-      return null;
-    }
+    wrapper.add(clonedModel);
 
     parent.add(wrapper);
 
-    return wrapper;
+    parent.updateMatrixWorld(true);
+    wrapper.updateMatrixWorld(true);
+
+    if (parent.userData.destroyed) {
+      wrapper.removeFromParent();
+      return null;
+    }
+
+    const collider =
+      placement.collider
+        ? createCollider(
+            wrapper,
+            placement.colliderPadding ??
+              0
+          )
+        : null;
+
+    return {
+      object: wrapper,
+      collider,
+    };
   } catch (error) {
     console.error(
       `Could not spawn model: ${definition.url}`,
@@ -239,24 +277,6 @@ export async function spawnModel(
 
     return null;
   }
-}
-
-export async function preloadModels(
-  definitions: ModelDef[]
-): Promise<void> {
-  const urls = [
-    ...new Set(
-      definitions.map(
-        (definition) => definition.url
-      )
-    ),
-  ];
-
-  await Promise.allSettled(
-    urls.map((url) =>
-      loadOriginalModel(url)
-    )
-  );
 }
 
 export function clearModelCache(): void {
