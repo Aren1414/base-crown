@@ -26,19 +26,19 @@ export default function ChaosLane3D() {
 
   const playerRef = useRef<THREE.Object3D | null>(null);
 
-  const mixerRef = useRef<THREE.AnimationMixer | null>(null);
+  const mixerRef =
+    useRef<THREE.AnimationMixer | null>(null);
 
-  const setMoveBySpeedRef = useRef<(speed: number) => void>(
-    () => {}
-  );
+  const setMoveBySpeedRef =
+    useRef<(speed: number) => void>(() => {});
 
-  const playAnimOnceRef = useRef<(file: string) => void>(
-    () => {}
-  );
+  const playAnimOnceRef =
+    useRef<(file: string) => void>(() => {});
 
-  const gameLogicRef = useRef<ReturnType<
-    typeof createGameLogic
-  > | null>(null);
+  const gameLogicRef =
+    useRef<ReturnType<typeof createGameLogic> | null>(
+      null
+    );
 
   useEffect(() => {
     const mount = mountRef.current;
@@ -57,10 +57,13 @@ export default function ChaosLane3D() {
     let requestedChunkZ = Number.NaN;
 
     let chunkUpdateRunning = false;
+    let loadingGroundDisposed = false;
 
     const scene = new THREE.Scene();
 
-    scene.background = new THREE.Color(0x252827);
+    scene.background = new THREE.Color(
+      0x252827
+    );
 
     scene.fog = new THREE.Fog(
       0x252827,
@@ -68,12 +71,14 @@ export default function ChaosLane3D() {
       280
     );
 
-    const camera = new THREE.PerspectiveCamera(
-      58,
-      window.innerWidth / window.innerHeight,
-      0.1,
-      350
-    );
+    const camera =
+      new THREE.PerspectiveCamera(
+        58,
+        window.innerWidth /
+          window.innerHeight,
+        0.1,
+        350
+      );
 
     camera.position.set(
       12,
@@ -87,10 +92,12 @@ export default function ChaosLane3D() {
       0
     );
 
-    const renderer = new THREE.WebGLRenderer({
-      antialias: true,
-      powerPreference: "high-performance",
-    });
+    const renderer =
+      new THREE.WebGLRenderer({
+        antialias: true,
+        powerPreference:
+          "high-performance",
+      });
 
     renderer.setSize(
       window.innerWidth,
@@ -145,7 +152,8 @@ export default function ChaosLane3D() {
       25
     );
 
-    directionalLight.castShadow = true;
+    directionalLight.castShadow =
+      true;
 
     directionalLight.shadow.mapSize.set(
       1024,
@@ -178,10 +186,6 @@ export default function ChaosLane3D() {
       directionalLight.target
     );
 
-    /*
-     * یک زمین موقت نمایش داده می‌شود تا قبل از
-     * دانلود شهر، صفحه کاملاً سیاه نباشد.
-     */
     const loadingGround =
       new THREE.Mesh(
         new THREE.PlaneGeometry(
@@ -208,6 +212,32 @@ export default function ChaosLane3D() {
       loadingGround
     );
 
+    const disposeLoadingGround = () => {
+      if (loadingGroundDisposed) {
+        return;
+      }
+
+      loadingGroundDisposed = true;
+
+      loadingGround.removeFromParent();
+      loadingGround.geometry.dispose();
+
+      if (
+        Array.isArray(
+          loadingGround.material
+        )
+      ) {
+        for (
+          const material
+          of loadingGround.material
+        ) {
+          material.dispose();
+        }
+      } else {
+        loadingGround.material.dispose();
+      }
+    };
+
     const clock = new THREE.Clock();
 
     const desiredCameraPosition =
@@ -221,10 +251,71 @@ export default function ChaosLane3D() {
       handler: () => void;
     }> = [];
 
-    /*
-     * حلقه رندر فوراً شروع می‌شود.
-     * دیگر منتظر دانلود مدل‌ها نمی‌ماند.
-     */
+    const requestWorldUpdate = (
+      player: THREE.Object3D
+    ) => {
+      const { cx, cz } =
+        getChunkCoord(
+          player.position.x,
+          player.position.z
+        );
+
+      requestedChunkX = cx;
+      requestedChunkZ = cz;
+
+      if (
+        cx === currentChunkX &&
+        cz === currentChunkZ
+      ) {
+        return;
+      }
+
+      if (chunkUpdateRunning) {
+        return;
+      }
+
+      chunkUpdateRunning = true;
+
+      void (async () => {
+        try {
+          while (
+            !disposed &&
+            (
+              requestedChunkX !==
+                currentChunkX ||
+              requestedChunkZ !==
+                currentChunkZ
+            )
+          ) {
+            const targetChunkX =
+              requestedChunkX;
+
+            const targetChunkZ =
+              requestedChunkZ;
+
+            await updateChunks(
+              scene,
+              player.position.x,
+              player.position.z
+            );
+
+            currentChunkX =
+              targetChunkX;
+
+            currentChunkZ =
+              targetChunkZ;
+          }
+        } catch (error) {
+          console.error(
+            "World update failed:",
+            error
+          );
+        } finally {
+          chunkUpdateRunning = false;
+        }
+      })();
+    };
+
     const animate = () => {
       if (disposed) {
         return;
@@ -247,15 +338,16 @@ export default function ChaosLane3D() {
       const joystick =
         joyRef.current;
 
-      const movementSpeed = Math.min(
-        1,
-        Math.sqrt(
-          joystick.x *
-            joystick.x +
-            joystick.y *
-            joystick.y
-        )
-      );
+      const movementSpeed =
+        Math.min(
+          1,
+          Math.sqrt(
+            joystick.x *
+              joystick.x +
+              joystick.y *
+              joystick.y
+          )
+        );
 
       setMoveBySpeedRef.current(
         movementSpeed
@@ -287,67 +379,12 @@ export default function ChaosLane3D() {
           player,
           previousX,
           previousZ,
-          0.68
+          0.55
         );
 
-        const { cx, cz } =
-          getChunkCoord(
-            player.position.x,
-            player.position.z
-          );
-
-        requestedChunkX = cx;
-        requestedChunkZ = cz;
-
-        if (
-          (
-            cx !== currentChunkX ||
-            cz !== currentChunkZ
-          ) &&
-          !chunkUpdateRunning
-        ) {
-          chunkUpdateRunning = true;
-
-          void (async () => {
-            try {
-              while (
-                !disposed &&
-                (
-                  requestedChunkX !==
-                    currentChunkX ||
-                  requestedChunkZ !==
-                    currentChunkZ
-                )
-              ) {
-                const targetChunkX =
-                  requestedChunkX;
-
-                const targetChunkZ =
-                  requestedChunkZ;
-
-                await updateChunks(
-                  scene,
-                  player.position.x,
-                  player.position.z
-                );
-
-                currentChunkX =
-                  targetChunkX;
-
-                currentChunkZ =
-                  targetChunkZ;
-              }
-            } catch (error) {
-              console.error(
-                "World update failed:",
-                error
-              );
-            } finally {
-              chunkUpdateRunning =
-                false;
-            }
-          })();
-        }
+        requestWorldUpdate(
+          player
+        );
 
         desiredCameraPosition.set(
           player.position.x + 11,
@@ -387,7 +424,8 @@ export default function ChaosLane3D() {
           player.position.z
         );
 
-        directionalLight.target.updateMatrixWorld();
+        directionalLight.target
+          .updateMatrixWorld();
       }
 
       renderer.render(
@@ -426,31 +464,27 @@ export default function ChaosLane3D() {
     const startGame = async () => {
       try {
         /*
-         * فقط Chunk مرکزی ساخته می‌شود.
-         * دیگر برای ظاهر شدن بازی منتظر ۹ Chunk نمی‌مانیم.
+         * مدل کاراکتر و Chunk مرکزی هم‌زمان Load می‌شوند.
          */
-        const centerChunkJob =
-          generateChunk(
-            scene,
-            0,
-            0
-          );
-
-        const playerJob =
-          loadPlayerModel(
-            scene
-          );
-
         const [
           ,
           playerResult,
         ] = await Promise.all([
-          centerChunkJob,
-          playerJob,
+          generateChunk(
+            scene,
+            0,
+            0
+          ),
+
+          loadPlayerModel(
+            scene
+          ),
         ]);
 
         if (disposed) {
-          playerResult.player.removeFromParent();
+          playerResult.player
+            .removeFromParent();
+
           return;
         }
 
@@ -477,11 +511,13 @@ export default function ChaosLane3D() {
           1.4
         );
 
+        player.visible = false;
+
         const safeSpawn =
           findSafeSpawnPosition(
             0,
             0,
-            0.9
+            0.75
           );
 
         player.position.x =
@@ -489,8 +525,6 @@ export default function ChaosLane3D() {
 
         player.position.z =
           safeSpawn.z;
-
-        player.visible = true;
 
         const spawnChunk =
           getChunkCoord(
@@ -515,28 +549,6 @@ export default function ChaosLane3D() {
             player
           );
 
-        /*
-         * زمین موقت بعد از آماده شدن Chunk مرکزی حذف می‌شود.
-         */
-        loadingGround.removeFromParent();
-
-        loadingGround.geometry.dispose();
-
-        if (
-          Array.isArray(
-            loadingGround.material
-          )
-        ) {
-          for (
-            const material
-            of loadingGround.material
-          ) {
-            material.dispose();
-          }
-        } else {
-          loadingGround.material.dispose();
-        }
-
         camera.position.set(
           player.position.x + 11,
           player.position.y + 15,
@@ -549,22 +561,32 @@ export default function ChaosLane3D() {
           player.position.z
         );
 
+        disposeLoadingGround();
+
+        player.visible = true;
+
         const actions = [
           {
             id: "btn-punch",
-            file: "Combo Punch.glb",
+            file:
+              "Combo Punch.glb",
           },
           {
             id: "btn-kick",
-            file: "Mma Kick.glb",
+            file:
+              "Mma Kick.glb",
           },
           {
             id: "btn-jump",
-            file: "Jumping.glb",
+            file:
+              "Jumping.glb",
           },
         ];
 
-        for (const action of actions) {
+        for (
+          const action
+          of actions
+        ) {
           const button =
             document.getElementById(
               action.id
@@ -600,24 +622,33 @@ export default function ChaosLane3D() {
         }
 
         /*
-         * Chunkهای اطراف بعد از ورود کاراکتر
+         * Chunkهای اطراف بعد از آماده‌شدن صحنه مرکزی
          * در پس‌زمینه ساخته می‌شوند.
          */
+        chunkUpdateRunning = true;
+
         void updateChunks(
           scene,
           player.position.x,
           player.position.z
-        ).catch((error) => {
-          console.error(
-            "Background chunk loading failed:",
-            error
-          );
-        });
+        )
+          .catch((error) => {
+            console.error(
+              "Background chunk loading failed:",
+              error
+            );
+          })
+          .finally(() => {
+            chunkUpdateRunning =
+              false;
+          });
       } catch (error) {
         console.error(
           "Game startup failed:",
           error
         );
+
+        disposeLoadingGround();
       }
     };
 
@@ -635,19 +666,25 @@ export default function ChaosLane3D() {
         handleResize
       );
 
-      for (const item of buttonHandlers) {
-        item.element.removeEventListener(
-          "touchstart",
-          item.handler
-        );
+      for (
+        const item
+        of buttonHandlers
+      ) {
+        item.element
+          .removeEventListener(
+            "touchstart",
+            item.handler
+          );
 
-        item.element.removeEventListener(
-          "mousedown",
-          item.handler
-        );
+        item.element
+          .removeEventListener(
+            "mousedown",
+            item.handler
+          );
       }
 
-      mixerRef.current?.stopAllAction();
+      mixerRef.current
+        ?.stopAllAction();
 
       destroyAllChunks();
 
@@ -655,14 +692,15 @@ export default function ChaosLane3D() {
       mixerRef.current = null;
       gameLogicRef.current = null;
 
-      loadingGround.removeFromParent();
+      disposeLoadingGround();
 
       scene.clear();
+
       renderer.dispose();
 
       if (
-        renderer.domElement.parentNode ===
-        mount
+        renderer.domElement
+          .parentNode === mount
       ) {
         mount.removeChild(
           renderer.domElement
@@ -672,7 +710,8 @@ export default function ChaosLane3D() {
   }, []);
 
   const handleJoy = (
-    event: React.TouchEvent<HTMLDivElement>
+    event:
+      React.TouchEvent<HTMLDivElement>
   ) => {
     event.preventDefault();
 
@@ -684,7 +723,8 @@ export default function ChaosLane3D() {
     }
 
     const rect =
-      event.currentTarget.getBoundingClientRect();
+      event.currentTarget
+        .getBoundingClientRect();
 
     const x =
       touch.clientX -
@@ -793,4 +833,4 @@ export default function ChaosLane3D() {
       </div>
     </div>
   );
-    }
+          }
