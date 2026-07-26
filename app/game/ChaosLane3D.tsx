@@ -34,9 +34,9 @@ type JoystickState = {
 
 const CAMERA_OFFSET =
   new THREE.Vector3(
-    11,
-    15,
-    11
+    12.5,
+    18,
+    12.5
   );
 
 export default function ChaosLane3D() {
@@ -106,8 +106,10 @@ export default function ChaosLane3D() {
       Number.NaN;
 
     let chunkLoading = false;
+
     let nextChunkX =
       Number.NaN;
+
     let nextChunkZ =
       Number.NaN;
 
@@ -116,19 +118,19 @@ export default function ChaosLane3D() {
 
     scene.background =
       new THREE.Color(
-        0x343937
+        0x303534
       );
 
     scene.fog =
       new THREE.Fog(
-        0x343937,
-        115,
-        280
+        0x303534,
+        120,
+        285
       );
 
     const camera =
       new THREE.PerspectiveCamera(
-        58,
+        56,
         window.innerWidth /
           window.innerHeight,
         0.1,
@@ -161,7 +163,7 @@ export default function ChaosLane3D() {
       THREE.ACESFilmicToneMapping;
 
     renderer.toneMappingExposure =
-      1.2;
+      1.3;
 
     renderer.shadowMap.enabled =
       true;
@@ -187,9 +189,9 @@ export default function ChaosLane3D() {
 
     const hemisphereLight =
       new THREE.HemisphereLight(
-        0xdde8ff,
-        0x4e5a48,
-        1.55
+        0xe4ebff,
+        0x4a514b,
+        1.7
       );
 
     scene.add(
@@ -199,7 +201,7 @@ export default function ChaosLane3D() {
     const ambientLight =
       new THREE.AmbientLight(
         0xffffff,
-        0.2
+        0.32
       );
 
     scene.add(
@@ -208,8 +210,8 @@ export default function ChaosLane3D() {
 
     const sun =
       new THREE.DirectionalLight(
-        0xffefd5,
-        2
+        0xfff0d8,
+        2.15
       );
 
     sun.position.set(
@@ -226,22 +228,22 @@ export default function ChaosLane3D() {
     );
 
     sun.shadow.camera.left =
-      -46;
+      -48;
 
     sun.shadow.camera.right =
-      46;
+      48;
 
     sun.shadow.camera.top =
-      46;
+      48;
 
     sun.shadow.camera.bottom =
-      -46;
+      -48;
 
     sun.shadow.camera.near =
       1;
 
     sun.shadow.camera.far =
-      135;
+      140;
 
     sun.shadow.bias =
       -0.00025;
@@ -260,7 +262,7 @@ export default function ChaosLane3D() {
 
     const loadingMaterial =
       new THREE.MeshStandardMaterial({
-        color: 0x485047,
+        color: 0x2d3331,
         roughness: 1,
       });
 
@@ -395,7 +397,7 @@ export default function ChaosLane3D() {
       const cameraLerp =
         1 -
         Math.exp(
-          -7 * delta
+          -6 * delta
         );
 
       camera.position.lerp(
@@ -405,12 +407,8 @@ export default function ChaosLane3D() {
 
       cameraTarget.set(
         player.position.x,
-        player.position.y + 1.8,
+        player.position.y + 1.65,
         player.position.z
-      );
-
-      camera.lookAt(
-        cameraTarget
       );
 
       occlusionTarget.copy(
@@ -419,7 +417,12 @@ export default function ChaosLane3D() {
 
       updateCameraOcclusion(
         camera,
-        occlusionTarget
+        occlusionTarget,
+        delta
+      );
+
+      camera.lookAt(
+        cameraTarget
       );
     };
 
@@ -508,7 +511,7 @@ export default function ChaosLane3D() {
           player,
           previousX,
           previousZ,
-          0.6
+          0.38
         );
 
         updatePlayerWorldHeight(
@@ -608,11 +611,18 @@ export default function ChaosLane3D() {
 
           player.visible = false;
 
+          await updateChunks(
+            scene,
+            0,
+            0,
+            1
+          );
+
           const spawn =
             findSafeSpawnPosition(
               0,
               0,
-              0.75
+              0.5
             );
 
           player.position.copy(
@@ -642,13 +652,6 @@ export default function ChaosLane3D() {
           nextChunkZ =
             spawnChunk.cz;
 
-          await updateChunks(
-            scene,
-            player.position.x,
-            player.position.z,
-            1
-          );
-
           camera.position.set(
             player.position.x +
               CAMERA_OFFSET.x,
@@ -658,13 +661,19 @@ export default function ChaosLane3D() {
               CAMERA_OFFSET.z
           );
 
-          camera.lookAt(
+          cameraTarget.set(
             player.position.x,
-            player.position.y + 1.8,
+            player.position.y + 1.65,
             player.position.z
           );
 
-          updateSun(player);
+          camera.lookAt(
+            cameraTarget
+          );
+
+          updateSun(
+            player
+          );
 
           removeLoadingGround();
 
@@ -710,6 +719,9 @@ export default function ChaosLane3D() {
         x: 0,
         y: 0,
       };
+
+      pointerIdRef.current =
+        null;
 
       removeLoadingGround();
 
@@ -918,6 +930,7 @@ export default function ChaosLane3D() {
             aria-label="Punch"
             onPointerDown={(event) => {
               event.preventDefault();
+
               playAction(
                 "Combo Punch.glb"
               );
@@ -940,6 +953,7 @@ export default function ChaosLane3D() {
             aria-label="Kick"
             onPointerDown={(event) => {
               event.preventDefault();
+
               playAction(
                 "Mma Kick.glb"
               );
@@ -963,6 +977,7 @@ export default function ChaosLane3D() {
           aria-label="Jump"
           onPointerDown={(event) => {
             event.preventDefault();
+
             playAction(
               "Jumping.glb"
             );
@@ -982,4 +997,4 @@ export default function ChaosLane3D() {
       </div>
     </div>
   );
-            }
+      }
