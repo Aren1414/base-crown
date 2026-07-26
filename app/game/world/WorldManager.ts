@@ -142,10 +142,7 @@ function disposeChunkResources(
         ? object.material
         : [object.material];
 
-    for (
-      const material
-      of objectMaterials
-    ) {
+    for (const material of objectMaterials) {
       if (
         material
           ?.userData
@@ -164,11 +161,10 @@ export async function generateChunk(
   chunkX: number,
   chunkZ: number
 ): Promise<void> {
-  const key =
-    getChunkKey(
-      chunkX,
-      chunkZ
-    );
+  const key = getChunkKey(
+    chunkX,
+    chunkZ
+  );
 
   if (chunks.has(key)) {
     const activeJob =
@@ -205,7 +201,15 @@ export async function generateChunk(
     chunk.userData.destroyed =
       false;
 
+    /*
+     * Chunk تا زمانی که تمام مدل‌هایش آماده نشده‌اند
+     * مخفی می‌ماند؛ در نتیجه آبجکت‌ها یکی‌یکی جلوی
+     * بازیکن ظاهر نمی‌شوند.
+     */
+    chunk.visible = false;
+
     chunks.set(key, chunk);
+
     scene.add(chunk);
 
     chunk.add(createGround());
@@ -233,11 +237,18 @@ export async function generateChunk(
         key,
         result.occluders
       );
+
+      /*
+       * کل شهر این Chunk یک‌جا نمایش داده می‌شود.
+       */
+      chunk.visible = true;
     } catch (error) {
       console.error(
         `Failed to generate chunk ${key}:`,
         error
       );
+
+      chunk.visible = true;
     } finally {
       generatingChunks.delete(key);
     }
@@ -251,6 +262,63 @@ export async function generateChunk(
   await job;
 }
 
+function getNearbyChunkCoordinates(
+  centerX: number,
+  centerZ: number
+): Array<{
+  x: number;
+  z: number;
+}> {
+  const coordinates: Array<{
+    x: number;
+    z: number;
+  }> = [];
+
+  for (
+    let x =
+      centerX - RENDER_DISTANCE;
+    x <=
+      centerX + RENDER_DISTANCE;
+    x++
+  ) {
+    for (
+      let z =
+        centerZ - RENDER_DISTANCE;
+      z <=
+        centerZ + RENDER_DISTANCE;
+      z++
+    ) {
+      if (
+        x === centerX &&
+        z === centerZ
+      ) {
+        continue;
+      }
+
+      coordinates.push({
+        x,
+        z,
+      });
+    }
+  }
+
+  coordinates.sort(
+    (a, b) => {
+      const distanceA =
+        Math.abs(a.x - centerX) +
+        Math.abs(a.z - centerZ);
+
+      const distanceB =
+        Math.abs(b.x - centerX) +
+        Math.abs(b.z - centerZ);
+
+      return distanceA - distanceB;
+    }
+  );
+
+  return coordinates;
+}
+
 export async function updateChunks(
   scene: THREE.Scene,
   playerX: number,
@@ -262,41 +330,66 @@ export async function updateChunks(
       playerZ
     );
 
-  const jobs:
-    Promise<void>[] = [];
-
-  for (
-    let x =
-      cx - RENDER_DISTANCE;
-    x <=
-      cx + RENDER_DISTANCE;
-    x++
-  ) {
-    for (
-      let z =
-        cz - RENDER_DISTANCE;
-      z <=
-        cz + RENDER_DISTANCE;
-      z++
-    ) {
-      jobs.push(
-        generateChunk(
-          scene,
-          x,
-          z
-        )
-      );
-    }
-  }
-
-  await Promise.allSettled(
-    jobs
+  /*
+   * ابتدا Chunk فعلی کامل می‌شود.
+   */
+  await generateChunk(
+    scene,
+    cx,
+    cz
   );
 
   destroyFarChunks(
     playerX,
     playerZ
   );
+
+  /*
+   * Chunkهای اطراف دو‌تا‌دو‌تا ساخته می‌شوند تا
+   * مرورگر موبایل با تعداد زیادی درخواست هم‌زمان
+   * قفل نشود.
+   */
+  const nearby =
+    getNearbyChunkCoordinates(
+      cx,
+      cz
+    );
+
+  for (
+    let index = 0;
+    index < nearby.length;
+    index += 2
+  ) {
+    if (
+      getChunkCoord(
+        playerX,
+        playerZ
+      ).cx !== cx ||
+      getChunkCoord(
+        playerX,
+        playerZ
+      ).cz !== cz
+    ) {
+      break;
+    }
+
+    const batch =
+      nearby.slice(
+        index,
+        index + 2
+      );
+
+    await Promise.allSettled(
+      batch.map(
+        ({ x, z }) =>
+          generateChunk(
+            scene,
+            x,
+            z
+          )
+      )
+    );
+  }
 }
 
 export function destroyFarChunks(
@@ -389,7 +482,7 @@ function circleIntersectsBox(
 export function collidesWithWorld(
   x: number,
   z: number,
-  radius = 0.7
+  radius = 0.55
 ): boolean {
   for (
     const colliders
@@ -419,13 +512,29 @@ export function resolveWorldCollision(
   player: THREE.Object3D,
   previousX: number,
   previousZ: number,
-  radius = 0.7
+  radius = 0.55
 ): void {
   const nextX =
     player.position.x;
 
   const nextZ =
     player.position.z;
+
+  /*
+   * اگر خود موقعیت قبلی داخل Collider است،
+   * Collision را موقتاً اعمال نمی‌کنیم تا کاراکتر
+   * بتواند از محل گیرکرده خارج شود.
+   */
+  const previousBlocked =
+    collidesWithWorld(
+      previousX,
+      previousZ,
+      radius
+    );
+
+  if (previousBlocked) {
+    return;
+  }
 
   if (
     collidesWithWorld(
@@ -456,18 +565,18 @@ export function resolveWorldCollision(
       radius
     )
   ) {
-    player.position.set(
-      previousX,
-      player.position.y,
-      previousZ
-    );
+    player.position.x =
+      previousX;
+
+    player.position.z =
+      previousZ;
   }
 }
 
 export function findSafeSpawnPosition(
   chunkX = 0,
   chunkZ = 0,
-  radius = 0.9
+  radius = 0.75
 ): THREE.Vector3 {
   const originX =
     chunkX * CHUNK_SIZE;
@@ -517,37 +626,6 @@ export function findSafeSpawnPosition(
     }
   }
 
-  for (
-    const roadZ
-    of [-30, 30]
-  ) {
-    for (
-      let localX = -50;
-      localX <= 50;
-      localX += 4
-    ) {
-      const x =
-        originX + localX;
-
-      const z =
-        originZ + roadZ;
-
-      if (
-        !collidesWithWorld(
-          x,
-          z,
-          radius
-        )
-      ) {
-        return new THREE.Vector3(
-          x,
-          0,
-          z
-        );
-      }
-    }
-  }
-
   return new THREE.Vector3(
     originX,
     0,
@@ -576,44 +654,39 @@ function getAllOccluders(): THREE.Mesh[] {
 }
 
 function restoreCameraMaterials(): void {
-  for (
-    const material
-    of fadedMaterials
-  ) {
-    const originalOpacity =
+  for (const material of fadedMaterials) {
+    const opacity =
       material.userData
         .cameraOriginalOpacity;
 
-    const originalTransparent =
+    const transparent =
       material.userData
         .cameraOriginalTransparent;
 
-    const originalDepthWrite =
+    const depthWrite =
       material.userData
         .cameraOriginalDepthWrite;
 
     if (
-      typeof originalOpacity ===
-      "number"
+      typeof opacity === "number"
     ) {
-      material.opacity =
-        originalOpacity;
+      material.opacity = opacity;
     }
 
     if (
-      typeof originalTransparent ===
+      typeof transparent ===
       "boolean"
     ) {
       material.transparent =
-        originalTransparent;
+        transparent;
     }
 
     if (
-      typeof originalDepthWrite ===
+      typeof depthWrite ===
       "boolean"
     ) {
       material.depthWrite =
-        originalDepthWrite;
+        depthWrite;
     }
 
     material.needsUpdate = true;
@@ -644,17 +717,13 @@ function fadeMaterial(
   }
 
   material.transparent = true;
-  material.opacity = 0.16;
+  material.opacity = 0.15;
   material.depthWrite = false;
   material.needsUpdate = true;
 
   fadedMaterials.add(material);
 }
 
-/*
- * هر ساختمانی که بین دوربین و کاراکتر قرار بگیرد
- * موقتاً شفاف می‌شود تا کاراکتر همیشه دیده شود.
- */
 export function updateCameraOcclusion(
   camera: THREE.Camera,
   target: THREE.Vector3
@@ -698,10 +767,7 @@ export function updateCameraOcclusion(
       false
     );
 
-  for (
-    const intersection
-    of intersections
-  ) {
+  for (const intersection of intersections) {
     const mesh =
       intersection.object;
 
@@ -714,10 +780,7 @@ export function updateCameraOcclusion(
         ? mesh.material
         : [mesh.material];
 
-    for (
-      const material
-      of materials
-    ) {
+    for (const material of materials) {
       fadeMaterial(material);
     }
   }
@@ -745,4 +808,4 @@ export function destroyAllChunks(): void {
   chunkColliders.clear();
   chunkOccluders.clear();
   generatingChunks.clear();
-}
+        }
