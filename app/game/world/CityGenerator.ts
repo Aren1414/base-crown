@@ -2,7 +2,6 @@ import * as THREE from "three";
 
 import {
   URBAN_STREETS,
-  URBAN_ALLEYS,
   URBAN_BUILDINGS,
   URBAN_VEHICLES,
   type ModelDef,
@@ -15,15 +14,18 @@ import {
 export const CITY_CHUNK_SIZE = 120;
 
 const ROAD_TILE_SIZE = 30;
-const ROAD_MODEL_SIZE = 29;
+const ROAD_SURFACE_Y = 0.08;
 
-const BUILDING_SIZE = 20;
-const VILLA_SIZE = 16;
+const BUILDING_FOOTPRINT = 21;
+const VILLA_FOOTPRINT = 16;
 
-const VEHICLE_SIZE = 5.5;
-const ALLEY_SIZE = 20;
+const VEHICLE_FOOTPRINT = 5.5;
 
 type RandomFunction = () => number;
+
+export type CityGenerationResult = {
+  colliders: THREE.Box3[];
+};
 
 type BuildingSlot = {
   x: number;
@@ -31,13 +33,31 @@ type BuildingSlot = {
   rotationY: number;
 };
 
-function createRandom(
+type RoadTile = {
+  x: number;
+  z: number;
+  rotationY: number;
+};
+
+type VehicleSlot = {
+  x: number;
+  z: number;
+  rotationY: number;
+};
+
+function createSeededRandom(
   chunkX: number,
   chunkZ: number
 ): RandomFunction {
   let seed =
-    Math.imul(chunkX + 8192, 374761393) ^
-    Math.imul(chunkZ + 4096, 668265263);
+    Math.imul(
+      chunkX + 10000,
+      374761393
+    ) ^
+    Math.imul(
+      chunkZ + 20000,
+      668265263
+    );
 
   seed >>>= 0;
 
@@ -51,7 +71,8 @@ function createRandom(
       value | 1
     );
 
-    value ^= value +
+    value ^=
+      value +
       Math.imul(
         value ^ (value >>> 7),
         value | 61
@@ -69,7 +90,9 @@ function pick<T>(
   random: RandomFunction
 ): T {
   return items[
-    Math.floor(random() * items.length)
+    Math.floor(
+      random() * items.length
+    )
   ];
 }
 
@@ -81,506 +104,356 @@ function isVilla(
     .includes("villa");
 }
 
-function createRoadBase(
-  chunk: THREE.Group
-): void {
-  const material =
-    new THREE.MeshStandardMaterial({
-      color: 0x242424,
-      roughness: 0.96,
-      metalness: 0,
-    });
+function getRoadTiles(): RoadTile[] {
+  const tiles: RoadTile[] = [];
 
-  material.userData.chunkOwned = true;
-
-  const horizontalGeometry =
-    new THREE.BoxGeometry(
-      CITY_CHUNK_SIZE,
-      0.12,
-      ROAD_TILE_SIZE
-    );
-
-  horizontalGeometry.userData.chunkOwned =
-    true;
-
-  const horizontalRoad = new THREE.Mesh(
-    horizontalGeometry,
-    material
-  );
-
-  horizontalRoad.position.set(
-    0,
-    0.06,
-    0
-  );
-
-  horizontalRoad.receiveShadow = true;
-  horizontalRoad.name = "HorizontalRoadBase";
-
-  chunk.add(horizontalRoad);
-
-  const verticalGeometry =
-    new THREE.BoxGeometry(
-      ROAD_TILE_SIZE,
-      0.12,
-      CITY_CHUNK_SIZE
-    );
-
-  verticalGeometry.userData.chunkOwned =
-    true;
-
-  const verticalRoad = new THREE.Mesh(
-    verticalGeometry,
-    material
-  );
-
-  verticalRoad.position.set(
-    0,
-    0.065,
-    0
-  );
-
-  verticalRoad.receiveShadow = true;
-  verticalRoad.name = "VerticalRoadBase";
-
-  chunk.add(verticalRoad);
-}
-
-function createRoadMarkings(
-  chunk: THREE.Group
-): void {
-  const material =
-    new THREE.MeshBasicMaterial({
-      color: 0xb7a85e,
-    });
-
-  material.userData.chunkOwned = true;
-
-  const markingLength = 5;
-  const markingWidth = 0.22;
-  const spacing = 10;
-
-  for (
-    let position = -55;
-    position <= 55;
-    position += spacing
-  ) {
-    if (
-      Math.abs(position) <
-      ROAD_TILE_SIZE / 2
-    ) {
-      continue;
-    }
-
-    const horizontalGeometry =
-      new THREE.BoxGeometry(
-        markingLength,
-        0.025,
-        markingWidth
-      );
-
-    horizontalGeometry.userData.chunkOwned =
-      true;
-
-    const horizontalMark =
-      new THREE.Mesh(
-        horizontalGeometry,
-        material
-      );
-
-    horizontalMark.position.set(
-      position,
-      0.14,
-      0
-    );
-
-    chunk.add(horizontalMark);
-
-    const verticalGeometry =
-      new THREE.BoxGeometry(
-        markingWidth,
-        0.025,
-        markingLength
-      );
-
-    verticalGeometry.userData.chunkOwned =
-      true;
-
-    const verticalMark = new THREE.Mesh(
-      verticalGeometry,
-      material
-    );
-
-    verticalMark.position.set(
-      0,
-      0.14,
-      position
-    );
-
-    chunk.add(verticalMark);
-  }
-}
-
-async function spawnRoadModels(
-  chunk: THREE.Group,
-  random: RandomFunction
-): Promise<void> {
-  const jobs: Promise<
-    THREE.Group | null
-  >[] = [];
-
-  const positions = [
+  const tilePositions = [
     -45,
     -15,
     15,
     45,
   ];
 
-  for (const position of positions) {
-    /*
-     * Horizontal street tiles.
-     */
-    jobs.push(
-      spawnModel(
-        pick(URBAN_STREETS, random),
-        chunk,
-        {
-          x: position,
-          y: 0.15,
-          z: 0,
-          rotationY: 0,
-          targetSize: ROAD_MODEL_SIZE,
-          maxHeight: 6,
-          castShadow: false,
-          receiveShadow: true,
-        }
-      )
-    );
+  const roadLines = [
+    -30,
+    30,
+  ];
+
+  for (const roadZ of roadLines) {
+    for (const x of tilePositions) {
+      tiles.push({
+        x,
+        z: roadZ,
+        rotationY: 0,
+      });
+    }
+  }
+
+  for (const roadX of roadLines) {
+    for (const z of tilePositions) {
+      tiles.push({
+        x: roadX,
+        z,
+        rotationY: Math.PI / 2,
+      });
+    }
+  }
+
+  return tiles;
+}
+
+function getBuildingSlots(): BuildingSlot[] {
+  return [
+    {
+      x: -48,
+      z: -48,
+      rotationY: Math.PI,
+    },
+    {
+      x: 0,
+      z: -48,
+      rotationY: Math.PI,
+    },
+    {
+      x: 48,
+      z: -48,
+      rotationY: Math.PI,
+    },
+
+    {
+      x: -48,
+      z: 0,
+      rotationY: -Math.PI / 2,
+    },
+    {
+      x: 0,
+      z: 0,
+      rotationY: 0,
+    },
+    {
+      x: 48,
+      z: 0,
+      rotationY: Math.PI / 2,
+    },
+
+    {
+      x: -48,
+      z: 48,
+      rotationY: 0,
+    },
+    {
+      x: 0,
+      z: 48,
+      rotationY: 0,
+    },
+    {
+      x: 48,
+      z: 48,
+      rotationY: 0,
+    },
+  ];
+}
+
+function getVehicleSlots(): VehicleSlot[] {
+  return [
+    {
+      x: -45,
+      z: -34,
+      rotationY: 0,
+    },
+    {
+      x: 5,
+      z: -26,
+      rotationY: Math.PI,
+    },
+    {
+      x: 45,
+      z: 26,
+      rotationY: 0,
+    },
+    {
+      x: -5,
+      z: 34,
+      rotationY: Math.PI,
+    },
+
+    {
+      x: -34,
+      z: -45,
+      rotationY: Math.PI / 2,
+    },
+    {
+      x: -26,
+      z: 5,
+      rotationY: -Math.PI / 2,
+    },
+    {
+      x: 26,
+      z: 45,
+      rotationY: Math.PI / 2,
+    },
+    {
+      x: 34,
+      z: -5,
+      rotationY: -Math.PI / 2,
+    },
+  ];
+}
+
+async function spawnRoads(
+  chunk: THREE.Group,
+  random: RandomFunction
+): Promise<void> {
+  const roadTiles =
+    getRoadTiles();
+
+  const jobs: Promise<unknown>[] = [];
+
+  for (
+    let index = 0;
+    index < roadTiles.length;
+    index++
+  ) {
+    const tile =
+      roadTiles[index];
 
     /*
-     * Vertical street tiles.
+     * Models are selected deterministically.
+     * This avoids a completely random road layout.
      */
+    const street =
+      URBAN_STREETS[
+        index %
+          URBAN_STREETS.length
+      ];
+
     jobs.push(
       spawnModel(
-        pick(URBAN_STREETS, random),
+        street,
         chunk,
         {
-          x: 0,
-          y: 0.16,
-          z: position,
-          rotationY: Math.PI / 2,
-          targetSize: ROAD_MODEL_SIZE,
-          maxHeight: 6,
+          x: tile.x,
+          y: ROAD_SURFACE_Y,
+          z: tile.z,
+
+          rotationY:
+            tile.rotationY,
+
+          targetFootprint:
+            ROAD_TILE_SIZE,
+
+          maxHeight: 30,
+
+          /*
+           * The top of the street model is placed
+           * at ground level. Its thick lower section
+           * remains below the playable surface.
+           */
+          verticalMode: "surface",
+
           castShadow: false,
           receiveShadow: true,
+
+          collider: false,
         }
       )
     );
   }
 
   await Promise.allSettled(jobs);
-}
 
-function getBuildingSlots(): BuildingSlot[] {
-  return [
-    /*
-     * North-west block.
-     */
-    {
-      x: -39,
-      z: -39,
-      rotationY: Math.PI,
-    },
-    {
-      x: -20,
-      z: -40,
-      rotationY: Math.PI,
-    },
-    {
-      x: -40,
-      z: -20,
-      rotationY: -Math.PI / 2,
-    },
-
-    /*
-     * North-east block.
-     */
-    {
-      x: 39,
-      z: -39,
-      rotationY: Math.PI,
-    },
-    {
-      x: 20,
-      z: -40,
-      rotationY: Math.PI,
-    },
-    {
-      x: 40,
-      z: -20,
-      rotationY: Math.PI / 2,
-    },
-
-    /*
-     * South-west block.
-     */
-    {
-      x: -39,
-      z: 39,
-      rotationY: 0,
-    },
-    {
-      x: -20,
-      z: 40,
-      rotationY: 0,
-    },
-    {
-      x: -40,
-      z: 20,
-      rotationY: -Math.PI / 2,
-    },
-
-    /*
-     * South-east block.
-     */
-    {
-      x: 39,
-      z: 39,
-      rotationY: 0,
-    },
-    {
-      x: 20,
-      z: 40,
-      rotationY: 0,
-    },
-    {
-      x: 40,
-      z: 20,
-      rotationY: Math.PI / 2,
-    },
-  ];
+  void random;
 }
 
 async function spawnBuildings(
   chunk: THREE.Group,
-  random: RandomFunction
+  random: RandomFunction,
+  colliders: THREE.Box3[]
 ): Promise<void> {
-  const slots = getBuildingSlots();
-
-  const jobs: Promise<
-    THREE.Group | null
-  >[] = [];
+  const slots =
+    getBuildingSlots();
 
   for (const slot of slots) {
-    /*
-     * Keep some empty lots so the city
-     * does not look completely packed.
-     */
-    if (random() < 0.12) {
+    if (random() < 0.08) {
       continue;
     }
 
-    const definition = pick(
-      URBAN_BUILDINGS,
-      random
-    );
+    const building =
+      pick(
+        URBAN_BUILDINGS,
+        random
+      );
 
-    const targetSize = isVilla(definition)
-      ? VILLA_SIZE
-      : BUILDING_SIZE;
+    const villa =
+      isVilla(building);
 
-    jobs.push(
-      spawnModel(
-        definition,
+    const spawned =
+      await spawnModel(
+        building,
         chunk,
         {
           x: slot.x,
           y: 0.1,
           z: slot.z,
+
           rotationY:
-            slot.rotationY +
-            (random() - 0.5) * 0.06,
-          targetSize,
-          maxHeight: isVilla(definition)
-            ? 15
-            : 30,
+            slot.rotationY,
+
+          targetFootprint:
+            villa
+              ? VILLA_FOOTPRINT
+              : BUILDING_FOOTPRINT,
+
+          maxHeight:
+            villa ? 14 : 32,
+
+          verticalMode: "ground",
+
           castShadow: true,
           receiveShadow: true,
+
+          collider: true,
+          colliderPadding:
+            villa ? 0.8 : 1.2,
         }
-      )
-    );
-  }
+      );
 
-  await Promise.allSettled(jobs);
-}
-
-async function spawnAlleys(
-  chunk: THREE.Group,
-  random: RandomFunction
-): Promise<void> {
-  if (URBAN_ALLEYS.length === 0) {
-    return;
-  }
-
-  const alleyPositions = [
-    {
-      x: -30,
-      z: -30,
-      rotationY: 0,
-    },
-    {
-      x: 30,
-      z: -30,
-      rotationY: Math.PI / 2,
-    },
-    {
-      x: -30,
-      z: 30,
-      rotationY: Math.PI / 2,
-    },
-    {
-      x: 30,
-      z: 30,
-      rotationY: 0,
-    },
-  ];
-
-  const jobs: Promise<
-    THREE.Group | null
-  >[] = [];
-
-  for (const alley of alleyPositions) {
-    if (random() > 0.65) {
-      continue;
+    if (spawned?.collider) {
+      colliders.push(
+        spawned.collider
+      );
     }
-
-    jobs.push(
-      spawnModel(
-        pick(URBAN_ALLEYS, random),
-        chunk,
-        {
-          x: alley.x,
-          y: 0.12,
-          z: alley.z,
-          rotationY: alley.rotationY,
-          targetSize: ALLEY_SIZE,
-          maxHeight: 5,
-          castShadow: false,
-          receiveShadow: true,
-        }
-      )
-    );
   }
-
-  await Promise.allSettled(jobs);
 }
 
 async function spawnVehicles(
   chunk: THREE.Group,
-  random: RandomFunction
+  random: RandomFunction,
+  colliders: THREE.Box3[]
 ): Promise<void> {
-  const horizontalPositions = [
-    -48,
-    -24,
-    24,
-    48,
-  ];
+  const slots =
+    getVehicleSlots();
 
-  const verticalPositions = [
-    -48,
-    -24,
-    24,
-    48,
-  ];
-
-  const jobs: Promise<
-    THREE.Group | null
-  >[] = [];
-
-  for (const x of horizontalPositions) {
+  for (const slot of slots) {
     if (random() > 0.42) {
       continue;
     }
 
-    const direction =
-      random() < 0.5 ? 0 : Math.PI;
+    const vehicle =
+      pick(
+        URBAN_VEHICLES,
+        random
+      );
 
-    const laneZ =
-      direction === 0 ? -4 : 4;
-
-    jobs.push(
-      spawnModel(
-        pick(URBAN_VEHICLES, random),
+    const spawned =
+      await spawnModel(
+        vehicle,
         chunk,
         {
-          x,
-          y: 0.2,
-          z: laneZ,
-          rotationY: direction,
-          targetSize: VEHICLE_SIZE,
+          x: slot.x,
+          y: 0.12,
+          z: slot.z,
+
+          rotationY:
+            slot.rotationY,
+
+          targetFootprint:
+            VEHICLE_FOOTPRINT,
+
           maxHeight: 3.5,
+
+          verticalMode: "ground",
+
           castShadow: true,
           receiveShadow: true,
-        }
-      )
-    );
-  }
 
-  for (const z of verticalPositions) {
-    if (random() > 0.42) {
-      continue;
+          collider: true,
+          colliderPadding: 0.35,
+        }
+      );
+
+    if (spawned?.collider) {
+      colliders.push(
+        spawned.collider
+      );
     }
-
-    const direction =
-      random() < 0.5
-        ? Math.PI / 2
-        : -Math.PI / 2;
-
-    const laneX =
-      direction > 0 ? 4 : -4;
-
-    jobs.push(
-      spawnModel(
-        pick(URBAN_VEHICLES, random),
-        chunk,
-        {
-          x: laneX,
-          y: 0.2,
-          z,
-          rotationY: direction,
-          targetSize: VEHICLE_SIZE,
-          maxHeight: 3.5,
-          castShadow: true,
-          receiveShadow: true,
-        }
-      )
-    );
   }
-
-  await Promise.allSettled(jobs);
 }
 
 export async function generateCity(
   chunk: THREE.Group,
   chunkX: number,
   chunkZ: number
-): Promise<void> {
-  const random = createRandom(
-    chunkX,
-    chunkZ
+): Promise<CityGenerationResult> {
+  const random =
+    createSeededRandom(
+      chunkX,
+      chunkZ
+    );
+
+  const colliders:
+    THREE.Box3[] = [];
+
+  await spawnRoads(
+    chunk,
+    random
   );
 
-  /*
-   * Procedural road underneath guarantees that
-   * streets always connect, even if a GLB fails.
-   */
-  createRoadBase(chunk);
-  createRoadMarkings(chunk);
-
   await Promise.all([
-    spawnRoadModels(chunk, random),
-    spawnBuildings(chunk, random),
-    spawnAlleys(chunk, random),
-    spawnVehicles(chunk, random),
+    spawnBuildings(
+      chunk,
+      random,
+      colliders
+    ),
+
+    spawnVehicles(
+      chunk,
+      random,
+      colliders
+    ),
   ]);
-}
+
+  return {
+    colliders,
+  };
+    }
