@@ -1,132 +1,161 @@
 import * as THREE from "three";
+import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 
 import {
-  CITY_CHUNK_SIZE,
-  generateCity,
-} from "./CityGenerator";
+  FOREST_BUSHES,
+  FOREST_FLOWERS,
+  FOREST_GRASS,
+  FOREST_TREES,
+  URBAN_BRIDGES,
+  URBAN_BUILDINGS,
+  URBAN_RIVER,
+  URBAN_TUNNEL,
+  URBAN_TUNNEL_WALLS,
+  URBAN_VEHICLES,
+  type ModelDef,
+} from "../assets/Models";
 
-export const CHUNK_SIZE = CITY_CHUNK_SIZE;
+export const CHUNK_SIZE = 120;
 
-/*
- * مقدار ۱ یعنی Chunk فعلی به‌همراه ۸ Chunk اطراف.
- * برای موبایل مناسب‌تر است.
- */
-export const RENDER_DISTANCE = 1;
+const ROAD_WIDTH = 12;
+const ALLEY_WIDTH = 5;
+const SIDEWALK_WIDTH = 2.5;
 
-/*
- * یک Chunk اضافه بیرون محدوده نگه داشته می‌شود تا هنگام
- * حرکت نزدیک مرز Chunk، ساخت و حذف مداوم اتفاق نیفتد.
- */
-const DESTROY_DISTANCE =
-  RENDER_DISTANCE + 1;
+const ROAD_POSITIONS = [-30, 30];
+const ALLEY_POSITIONS = [-49, 0, 49];
 
-const GENERATION_BATCH_SIZE = 2;
-const PLAYER_COLLISION_HEIGHT = 2.2;
-const COLLISION_STEP_HEIGHT = 0.45;
-const CAMERA_FADE_OPACITY = 0.15;
+type ChunkType =
+  | "urban"
+  | "river-horizontal"
+  | "river-vertical"
+  | "tunnel-horizontal"
+  | "tunnel-vertical";
 
-export const chunks = new Map<
-  string,
-  THREE.Group
->();
+type RoadDirection =
+  | "horizontal"
+  | "vertical";
 
-const chunkColliders = new Map<
-  string,
-  THREE.Box3[]
->();
-
-const chunkOccluders = new Map<
-  string,
-  THREE.Mesh[]
->();
-
-const chunkWalkableSurfaces = new Map<
-  string,
-  THREE.Object3D[]
->();
-
-const generatingChunks = new Map<
-  string,
-  Promise<void>
->();
-
-/*
- * برای جلوگیری از اینکه یک Job قدیمی، Job جدید همان Chunk
- * را از Map حذف کند.
- */
-const generationTokens = new Map<
-  string,
-  symbol
->();
-
-const raycaster =
-  new THREE.Raycaster();
-
-const surfaceRaycaster =
-  new THREE.Raycaster();
-
-const cameraDirection =
-  new THREE.Vector3();
-
-const cameraRayOrigin =
-  new THREE.Vector3();
-
-const surfaceRayOrigin =
-  new THREE.Vector3();
-
-const downDirection =
-  new THREE.Vector3(0, -1, 0);
-
-const fadedMaterials =
-  new Set<THREE.Material>();
-
-const nearbyColliderKeys: string[] =
-  [];
-
-function getChunkKey(
-  chunkX: number,
-  chunkZ: number
-): string {
-  return `${chunkX},${chunkZ}`;
-}
-
-function parseChunkKey(
-  key: string
-): {
+type RoadPoint = {
   x: number;
   z: number;
-} {
-  const separatorIndex =
-    key.indexOf(",");
+  direction: RoadDirection;
+};
 
-  if (separatorIndex < 0) {
-    return {
-      x: 0,
-      z: 0,
-    };
-  }
+type WalkableRect = {
+  x: number;
+  z: number;
+  width: number;
+  depth: number;
+  y: number;
+  type: "ground" | "road" | "alley" | "sidewalk" | "bridge";
+};
 
-  return {
-    x: Number(
-      key.slice(
-        0,
-        separatorIndex
-      )
-    ),
+export const chunks =
+  new Map<string, THREE.Group>();
 
-    z: Number(
-      key.slice(
-        separatorIndex + 1
-      )
-    ),
+const loader = new GLTFLoader();
+
+const modelCache =
+  new Map<string, Promise<THREE.Group>>();
+
+const groundMaterial =
+  new THREE.MeshStandardMaterial({
+    color: 0x696b5b,
+    roughness: 1,
+    metalness: 0,
+  });
+
+const roadMaterial =
+  new THREE.MeshStandardMaterial({
+    color: 0x30322f,
+    roughness: 0.96,
+    metalness: 0,
+  });
+
+const alleyMaterial =
+  new THREE.MeshStandardMaterial({
+    color: 0x41433d,
+    roughness: 1,
+    metalness: 0,
+  });
+
+const sidewalkMaterial =
+  new THREE.MeshStandardMaterial({
+    color: 0x77776d,
+    roughness: 1,
+    metalness: 0,
+  });
+
+const lineMaterial =
+  new THREE.MeshBasicMaterial({
+    color: 0xb3aa76,
+    transparent: true,
+    opacity: 0.45,
+    depthWrite: false,
+    polygonOffset: true,
+    polygonOffsetFactor: -2,
+    polygonOffsetUnits: -2,
+  });
+
+function createSeed(
+  cx: number,
+  cz: number
+): number {
+  let value =
+    Math.imul(cx, 374761393) +
+    Math.imul(cz, 668265263);
+
+  value =
+    (value ^ (value >>> 13)) >>> 0;
+
+  return value;
+}
+
+function createRandom(
+  seed: number
+): () => number {
+  let state = seed >>> 0;
+
+  return () => {
+    state += 0x6d2b79f5;
+
+    let value = state;
+
+    value = Math.imul(
+      value ^ (value >>> 15),
+      value | 1
+    );
+
+    value ^= value +
+      Math.imul(
+        value ^ (value >>> 7),
+        value | 61
+      );
+
+    return (
+      ((value ^ (value >>> 14)) >>> 0) /
+      4294967296
+    );
   };
 }
 
-/*
- * Chunkها از مرکز مختصات خود ساخته می‌شوند.
- * بنابراین مرز Chunk صفر از -CHUNK_SIZE/2 تا
- * +CHUNK_SIZE/2 است.
- */
+function pick<T>(
+  items: readonly T[],
+  random: () => number
+): T {
+  return items[
+    Math.floor(random() * items.length)
+  ];
+}
+
+function randomRange(
+  random: () => number,
+  min: number,
+  max: number
+): number {
+  return min + random() * (max - min);
+}
+
 export function getChunkCoord(
   x: number,
   z: number
@@ -134,535 +163,942 @@ export function getChunkCoord(
   cx: number;
   cz: number;
 } {
-  const halfChunk =
-    CHUNK_SIZE * 0.5;
-
   return {
-    cx: Math.floor(
-      (x + halfChunk) /
-        CHUNK_SIZE
-    ),
-
-    cz: Math.floor(
-      (z + halfChunk) /
-        CHUNK_SIZE
-    ),
+    cx: Math.floor(x / CHUNK_SIZE),
+    cz: Math.floor(z / CHUNK_SIZE),
   };
 }
 
-function markChunkOwned(
-  resource:
-    | THREE.BufferGeometry
-    | THREE.Material
-): void {
-  resource.userData.chunkOwned =
-    true;
-}
+function loadCachedModel(
+  url: string
+): Promise<THREE.Group> {
+  const cached = modelCache.get(url);
 
-function createGround(): THREE.Mesh {
-  const geometry =
-    new THREE.PlaneGeometry(
-      CHUNK_SIZE,
-      CHUNK_SIZE
+  if (cached) {
+    return cached;
+  }
+
+  const promise =
+    new Promise<THREE.Group>(
+      (resolve, reject) => {
+        loader.load(
+          url,
+          (gltf) => {
+            resolve(gltf.scene);
+          },
+          undefined,
+          reject
+        );
+      }
     );
 
-  markChunkOwned(geometry);
+  modelCache.set(url, promise);
 
-  const material =
-    new THREE.MeshStandardMaterial({
-      color: 0x394139,
-      roughness: 0.96,
-      metalness: 0,
-    });
-
-  markChunkOwned(material);
-
-  const ground =
-    new THREE.Mesh(
-      geometry,
-      material
-    );
-
-  ground.name =
-    "ChunkGround";
-
-  ground.rotation.x =
-    -Math.PI / 2;
-
-  ground.position.y =
-    -0.08;
-
-  ground.receiveShadow = true;
-  ground.castShadow = false;
-  ground.frustumCulled = true;
-
-  ground.userData.walkableSurface =
-    true;
-
-  ground.userData.surfacePriority =
-    -100;
-
-  return ground;
+  return promise;
 }
 
-function collectChunkWalkableSurfaces(
-  chunk: THREE.Group
-): THREE.Object3D[] {
-  const surfaces:
-    THREE.Object3D[] = [];
-
-  chunk.traverse((object) => {
-    if (
-      object.userData
-        .walkableSurface === true ||
-      object.userData
-        .walkableSurfaceData ||
-      object.userData
-        .walkableSurface
-          ?.enabled === true
-    ) {
-      surfaces.push(object);
-    }
-  });
-
-  return surfaces;
-}
-
-function disposeChunkResources(
-  chunk: THREE.Group
+function prepareModel(
+  object: THREE.Object3D
 ): void {
-  const geometries =
-    new Set<
-      THREE.BufferGeometry
-    >();
-
-  const materials =
-    new Set<THREE.Material>();
-
-  chunk.traverse((object) => {
-    if (
-      !(object instanceof THREE.Mesh)
-    ) {
+  object.traverse((child) => {
+    if (!(child instanceof THREE.Mesh)) {
       return;
     }
 
-    const geometry =
-      object.geometry;
+    child.castShadow = true;
+    child.receiveShadow = true;
 
-    if (
-      geometry &&
-      geometry.userData
-        .chunkOwned === true &&
-      !geometries.has(geometry)
-    ) {
-      geometries.add(geometry);
-      geometry.dispose();
-    }
-
-    const objectMaterials =
-      Array.isArray(
-        object.material
-      )
-        ? object.material
-        : [object.material];
-
-    for (
-      const material of
-      objectMaterials
-    ) {
-      if (
-        !material ||
-        material.userData
-          .chunkOwned !== true ||
-        materials.has(material)
-      ) {
-        continue;
-      }
-
-      materials.add(material);
-      material.dispose();
-    }
+    child.frustumCulled = true;
   });
 }
 
-function removeChunk(
-  key: string,
-  chunk: THREE.Group
+function placeModel(
+  definition: ModelDef,
+  chunk: THREE.Group,
+  x: number,
+  z: number,
+  rotationY = 0,
+  y = 0
 ): void {
-  chunk.userData.destroyed =
-    true;
-
-  chunk.visible = false;
-
-  chunkColliders.delete(key);
-  chunkOccluders.delete(key);
-  chunkWalkableSurfaces.delete(
-    key
-  );
-
-  disposeChunkResources(chunk);
-
-  chunk.removeFromParent();
-  chunk.clear();
-
-  chunks.delete(key);
-}
-
-export async function generateChunk(
-  scene: THREE.Scene,
-  chunkX: number,
-  chunkZ: number
-): Promise<void> {
-  const key =
-    getChunkKey(
-      chunkX,
-      chunkZ
-    );
-
-  const currentChunk =
-    chunks.get(key);
-
-  if (
-    currentChunk &&
-    currentChunk.userData
-      .destroyed !== true
-  ) {
-    const activeJob =
-      generatingChunks.get(key);
-
-    if (activeJob) {
-      await activeJob;
-    }
-
-    return;
-  }
-
-  const existingJob =
-    generatingChunks.get(key);
-
-  if (existingJob) {
-    await existingJob;
-    return;
-  }
-
-  const token = Symbol(key);
-
-  generationTokens.set(
-    key,
-    token
-  );
-
-  const job = (async () => {
-    const chunk =
-      new THREE.Group();
-
-    chunk.name =
-      `CityChunk_${key}`;
-
-    chunk.position.set(
-      chunkX * CHUNK_SIZE,
-      0,
-      chunkZ * CHUNK_SIZE
-    );
-
-    chunk.userData.chunkX =
-      chunkX;
-
-    chunk.userData.chunkZ =
-      chunkZ;
-
-    chunk.userData.chunkKey =
-      key;
-
-    chunk.userData.destroyed =
-      false;
-
-    chunk.userData.generating =
-      true;
-
-    /*
-     * تا پایان ساخت مخفی می‌ماند تا مدل‌ها یکی‌یکی
-     * جلوی بازیکن ظاهر نشوند.
-     */
-    chunk.visible = false;
-
-    chunks.set(key, chunk);
-    scene.add(chunk);
-
-    chunk.add(createGround());
-
-    try {
-      const result =
-        await generateCity(
-          chunk,
-          chunkX,
-          chunkZ
-        );
-
+  loadCachedModel(definition.url)
+    .then((source) => {
       if (
-        chunk.userData
-          .destroyed === true ||
-        chunks.get(key) !==
-          chunk
+        chunk.userData.destroyed ||
+        !chunk.parent
       ) {
         return;
       }
 
-      chunkColliders.set(
-        key,
-        result.colliders
+      const object =
+        source.clone(true);
+
+      object.scale.setScalar(
+        definition.scale
       );
 
-      chunkOccluders.set(
-        key,
-        result.occluders
-      );
+      object.rotation.y = rotationY;
 
-      chunkWalkableSurfaces.set(
-        key,
-        collectChunkWalkableSurfaces(
-          chunk
-        )
-      );
+      object.position.set(x, y, z);
 
-      chunk.userData.generating =
-        false;
+      prepareModel(object);
 
-      chunk.visible = true;
+      /*
+       * مدل روی سطح زمین قرار می‌گیرد؛ حتی اگر Origin
+       * فایل GLB دقیقاً پایین مدل نباشد.
+       */
+      object.updateMatrixWorld(true);
 
-      chunk.updateMatrixWorld(
-        true
-      );
-    } catch (error) {
+      const bounds =
+        new THREE.Box3().setFromObject(
+          object
+        );
+
+      if (
+        Number.isFinite(bounds.min.y)
+      ) {
+        object.position.y +=
+          y - bounds.min.y;
+      }
+
+      chunk.add(object);
+    })
+    .catch((error) => {
       console.error(
-        `Failed to generate chunk ${key}:`,
+        `Unable to load model: ${definition.url}`,
         error
       );
-
-      if (
-        chunk.userData
-          .destroyed !== true &&
-        chunks.get(key) ===
-          chunk
-      ) {
-        /*
-         * در صورت خطای بخشی از مدل‌ها، زمین Chunk
-         * همچنان قابل نمایش باقی می‌ماند.
-         */
-        chunkColliders.set(
-          key,
-          []
-        );
-
-        chunkOccluders.set(
-          key,
-          []
-        );
-
-        chunkWalkableSurfaces.set(
-          key,
-          collectChunkWalkableSurfaces(
-            chunk
-          )
-        );
-
-        chunk.userData.generating =
-          false;
-
-        chunk.visible = true;
-      }
-    } finally {
-      if (
-        generationTokens.get(
-          key
-        ) === token
-      ) {
-        generationTokens.delete(
-          key
-        );
-
-        generatingChunks.delete(
-          key
-        );
-      }
-    }
-  })();
-
-  generatingChunks.set(
-    key,
-    job
-  );
-
-  await job;
+    });
 }
 
-function getNearbyChunkCoordinates(
-  centerX: number,
-  centerZ: number
-): Array<{
-  x: number;
-  z: number;
-}> {
-  const coordinates: Array<{
-    x: number;
-    z: number;
-  }> = [];
+function createPlane(
+  width: number,
+  depth: number,
+  material: THREE.Material,
+  x: number,
+  z: number,
+  y: number
+): THREE.Mesh {
+  const mesh =
+    new THREE.Mesh(
+      new THREE.PlaneGeometry(
+        width,
+        depth
+      ),
+      material
+    );
+
+  mesh.rotation.x =
+    -Math.PI / 2;
+
+  mesh.position.set(x, y, z);
+
+  mesh.receiveShadow = true;
+
+  return mesh;
+}
+
+function addWalkableRect(
+  chunk: THREE.Group,
+  rectangle: WalkableRect
+): void {
+  const walkable =
+    chunk.userData.walkableRects as
+      | WalkableRect[]
+      | undefined;
+
+  if (walkable) {
+    walkable.push(rectangle);
+  }
+}
+
+function addGround(
+  chunk: THREE.Group
+): void {
+  const ground =
+    createPlane(
+      CHUNK_SIZE,
+      CHUNK_SIZE,
+      groundMaterial,
+      0,
+      0,
+      0
+    );
+
+  ground.name = "CityGround";
+
+  chunk.add(ground);
+
+  addWalkableRect(chunk, {
+    x: 0,
+    z: 0,
+    width: CHUNK_SIZE,
+    depth: CHUNK_SIZE,
+    y: 0,
+    type: "ground",
+  });
+}
+
+function addRoad(
+  chunk: THREE.Group,
+  direction: RoadDirection,
+  position: number
+): void {
+  const horizontal =
+    direction === "horizontal";
+
+  const road =
+    createPlane(
+      horizontal
+        ? CHUNK_SIZE
+        : ROAD_WIDTH,
+      horizontal
+        ? ROAD_WIDTH
+        : CHUNK_SIZE,
+      roadMaterial,
+      horizontal ? 0 : position,
+      horizontal ? position : 0,
+      0.03
+    );
+
+  road.name = "ProceduralRoad";
+
+  chunk.add(road);
+
+  addWalkableRect(chunk, {
+    x: horizontal ? 0 : position,
+    z: horizontal ? position : 0,
+    width: horizontal
+      ? CHUNK_SIZE
+      : ROAD_WIDTH,
+    depth: horizontal
+      ? ROAD_WIDTH
+      : CHUNK_SIZE,
+    y: 0.03,
+    type: "road",
+  });
+
+  const sidewalkOffset =
+    ROAD_WIDTH / 2 +
+    SIDEWALK_WIDTH / 2;
+
+  for (const side of [-1, 1]) {
+    const sidewalk =
+      createPlane(
+        horizontal
+          ? CHUNK_SIZE
+          : SIDEWALK_WIDTH,
+        horizontal
+          ? SIDEWALK_WIDTH
+          : CHUNK_SIZE,
+        sidewalkMaterial,
+        horizontal
+          ? 0
+          : position +
+            sidewalkOffset * side,
+        horizontal
+          ? position +
+            sidewalkOffset * side
+          : 0,
+        0.055
+      );
+
+    sidewalk.name =
+      "ProceduralSidewalk";
+
+    chunk.add(sidewalk);
+
+    addWalkableRect(chunk, {
+      x: sidewalk.position.x,
+      z: sidewalk.position.z,
+      width: horizontal
+        ? CHUNK_SIZE
+        : SIDEWALK_WIDTH,
+      depth: horizontal
+        ? SIDEWALK_WIDTH
+        : CHUNK_SIZE,
+      y: 0.055,
+      type: "sidewalk",
+    });
+  }
+
+  addRoadMarkings(
+    chunk,
+    direction,
+    position
+  );
+}
+
+function addRoadMarkings(
+  chunk: THREE.Group,
+  direction: RoadDirection,
+  position: number
+): void {
+  const horizontal =
+    direction === "horizontal";
 
   for (
-    let x =
-      centerX -
-      RENDER_DISTANCE;
-    x <=
-      centerX +
-      RENDER_DISTANCE;
-    x++
+    let offset = -52;
+    offset <= 52;
+    offset += 10
   ) {
-    for (
-      let z =
-        centerZ -
-        RENDER_DISTANCE;
-      z <=
-        centerZ +
-        RENDER_DISTANCE;
-      z++
-    ) {
-      if (
-        x === centerX &&
-        z === centerZ
-      ) {
-        continue;
-      }
+    const marking =
+      createPlane(
+        horizontal ? 4.8 : 0.18,
+        horizontal ? 0.18 : 4.8,
+        lineMaterial,
+        horizontal ? offset : position,
+        horizontal ? position : offset,
+        0.072
+      );
 
-      coordinates.push({
+    marking.name = "RoadMarking";
+
+    chunk.add(marking);
+  }
+}
+
+function addAlley(
+  chunk: THREE.Group,
+  direction: RoadDirection,
+  position: number
+): void {
+  const horizontal =
+    direction === "horizontal";
+
+  const alley =
+    createPlane(
+      horizontal
+        ? CHUNK_SIZE
+        : ALLEY_WIDTH,
+      horizontal
+        ? ALLEY_WIDTH
+        : CHUNK_SIZE,
+      alleyMaterial,
+      horizontal ? 0 : position,
+      horizontal ? position : 0,
+      0.04
+    );
+
+  alley.name = "ProceduralAlley";
+
+  chunk.add(alley);
+
+  addWalkableRect(chunk, {
+    x: alley.position.x,
+    z: alley.position.z,
+    width: horizontal
+      ? CHUNK_SIZE
+      : ALLEY_WIDTH,
+    depth: horizontal
+      ? ALLEY_WIDTH
+      : CHUNK_SIZE,
+    y: 0.04,
+    type: "alley",
+  });
+}
+
+function getChunkType(
+  random: () => number
+): ChunkType {
+  const value = random();
+
+  if (value < 0.08) {
+    return random() < 0.5
+      ? "river-horizontal"
+      : "river-vertical";
+  }
+
+  if (value < 0.14) {
+    return random() < 0.5
+      ? "tunnel-horizontal"
+      : "tunnel-vertical";
+  }
+
+  return "urban";
+}
+
+function buildRoadLayout(
+  chunk: THREE.Group,
+  chunkType: ChunkType
+): RoadPoint[] {
+  const roadPoints: RoadPoint[] = [];
+
+  let horizontalRoads =
+    [...ROAD_POSITIONS];
+
+  let verticalRoads =
+    [...ROAD_POSITIONS];
+
+  if (
+    chunkType === "river-horizontal"
+  ) {
+    horizontalRoads = [-38, 38];
+  }
+
+  if (
+    chunkType === "river-vertical"
+  ) {
+    verticalRoads = [-38, 38];
+  }
+
+  for (const z of horizontalRoads) {
+    addRoad(chunk, "horizontal", z);
+
+    for (
+      let x = -50;
+      x <= 50;
+      x += 20
+    ) {
+      roadPoints.push({
         x,
         z,
+        direction: "horizontal",
       });
     }
   }
 
-  coordinates.sort(
-    (a, b) => {
-      const ax =
-        a.x - centerX;
+  for (const x of verticalRoads) {
+    addRoad(chunk, "vertical", x);
 
-      const az =
-        a.z - centerZ;
-
-      const bx =
-        b.x - centerX;
-
-      const bz =
-        b.z - centerZ;
-
-      const distanceA =
-        ax * ax + az * az;
-
-      const distanceB =
-        bx * bx + bz * bz;
-
-      return (
-        distanceA -
-        distanceB
-      );
+    for (
+      let z = -50;
+      z <= 50;
+      z += 20
+    ) {
+      roadPoints.push({
+        x,
+        z,
+        direction: "vertical",
+      });
     }
-  );
+  }
 
-  return coordinates;
+  for (const z of ALLEY_POSITIONS) {
+    if (
+      chunkType ===
+        "river-horizontal" &&
+      Math.abs(z) < 10
+    ) {
+      continue;
+    }
+
+    addAlley(chunk, "horizontal", z);
+  }
+
+  for (const x of ALLEY_POSITIONS) {
+    if (
+      chunkType ===
+        "river-vertical" &&
+      Math.abs(x) < 10
+    ) {
+      continue;
+    }
+
+    addAlley(chunk, "vertical", x);
+  }
+
+  return roadPoints;
 }
 
-function isStillInChunk(
-  playerX: number,
-  playerZ: number,
-  chunkX: number,
-  chunkZ: number
-): boolean {
-  const current =
-    getChunkCoord(
-      playerX,
-      playerZ
+function createBuildingSlots(
+  chunkType: ChunkType
+): Array<{
+  x: number;
+  z: number;
+  rotation: number;
+}> {
+  const slots = [
+    { x: -45, z: -45, rotation: 0 },
+    { x: -15, z: -45, rotation: 0 },
+    { x: 15, z: -45, rotation: 0 },
+    { x: 45, z: -45, rotation: 0 },
+
+    {
+      x: -45,
+      z: -15,
+      rotation: Math.PI / 2,
+    },
+    {
+      x: 45,
+      z: -15,
+      rotation: -Math.PI / 2,
+    },
+
+    {
+      x: -45,
+      z: 15,
+      rotation: Math.PI / 2,
+    },
+    {
+      x: 45,
+      z: 15,
+      rotation: -Math.PI / 2,
+    },
+
+    {
+      x: -45,
+      z: 45,
+      rotation: Math.PI,
+    },
+    {
+      x: -15,
+      z: 45,
+      rotation: Math.PI,
+    },
+    {
+      x: 15,
+      z: 45,
+      rotation: Math.PI,
+    },
+    {
+      x: 45,
+      z: 45,
+      rotation: Math.PI,
+    },
+  ];
+
+  if (
+    chunkType === "river-horizontal"
+  ) {
+    return slots.filter(
+      (slot) =>
+        Math.abs(slot.z) > 20
+    );
+  }
+
+  if (
+    chunkType === "river-vertical"
+  ) {
+    return slots.filter(
+      (slot) =>
+        Math.abs(slot.x) > 20
+    );
+  }
+
+  return slots;
+}
+
+function spawnBuildings(
+  chunk: THREE.Group,
+  random: () => number,
+  chunkType: ChunkType
+): void {
+  const slots =
+    createBuildingSlots(chunkType);
+
+  for (const slot of slots) {
+    if (random() > 0.76) {
+      continue;
+    }
+
+    const building =
+      pick(
+        URBAN_BUILDINGS,
+        random
+      );
+
+    const jitterX =
+      randomRange(random, -2, 2);
+
+    const jitterZ =
+      randomRange(random, -2, 2);
+
+    placeModel(
+      building,
+      chunk,
+      slot.x + jitterX,
+      slot.z + jitterZ,
+      slot.rotation +
+        randomRange(
+          random,
+          -0.04,
+          0.04
+        )
+    );
+  }
+}
+
+function spawnVehicles(
+  chunk: THREE.Group,
+  random: () => number,
+  roads: RoadPoint[]
+): void {
+  let vehicleCount = 0;
+
+  for (const road of roads) {
+    if (
+      vehicleCount >= 5 ||
+      random() > 0.12
+    ) {
+      continue;
+    }
+
+    const vehicle =
+      pick(
+        URBAN_VEHICLES,
+        random
+      );
+
+    const rotation =
+      road.direction === "horizontal"
+        ? random() < 0.5
+          ? 0
+          : Math.PI
+        : random() < 0.5
+          ? Math.PI / 2
+          : -Math.PI / 2;
+
+    const laneOffset =
+      random() < 0.5 ? -2.2 : 2.2;
+
+    placeModel(
+      vehicle,
+      chunk,
+      road.direction === "vertical"
+        ? road.x + laneOffset
+        : road.x,
+      road.direction === "horizontal"
+        ? road.z + laneOffset
+        : road.z,
+      rotation,
+      0.04
     );
 
+    vehicleCount++;
+  }
+}
+
+function spawnRiver(
+  chunk: THREE.Group,
+  random: () => number,
+  chunkType: ChunkType
+): void {
+  if (
+    chunkType !== "river-horizontal" &&
+    chunkType !== "river-vertical"
+  ) {
+    return;
+  }
+
+  const horizontal =
+    chunkType === "river-horizontal";
+
+  const river =
+    pick(URBAN_RIVER, random);
+
+  placeModel(
+    river,
+    chunk,
+    0,
+    0,
+    horizontal
+      ? 0
+      : Math.PI / 2,
+    -0.2
+  );
+
+  const bridge =
+    pick(URBAN_BRIDGES, random);
+
+  placeModel(
+    bridge,
+    chunk,
+    horizontal ? 30 : 0,
+    horizontal ? 0 : 30,
+    horizontal
+      ? 0
+      : Math.PI / 2,
+    0.02
+  );
+
+  addWalkableRect(chunk, {
+    x: horizontal ? 30 : 0,
+    z: horizontal ? 0 : 30,
+    width: horizontal
+      ? ROAD_WIDTH
+      : 32,
+    depth: horizontal
+      ? 32
+      : ROAD_WIDTH,
+    y: 0.5,
+    type: "bridge",
+  });
+}
+
+function spawnTunnel(
+  chunk: THREE.Group,
+  random: () => number,
+  chunkType: ChunkType
+): void {
+  if (
+    chunkType !== "tunnel-horizontal" &&
+    chunkType !== "tunnel-vertical"
+  ) {
+    return;
+  }
+
+  const horizontal =
+    chunkType === "tunnel-horizontal";
+
+  const tunnel =
+    pick(URBAN_TUNNEL, random);
+
+  const tunnelX =
+    horizontal ? 52 : 30;
+
+  const tunnelZ =
+    horizontal ? -30 : -52;
+
+  const rotation =
+    horizontal ? Math.PI / 2 : 0;
+
+  placeModel(
+    tunnel,
+    chunk,
+    tunnelX,
+    tunnelZ,
+    rotation
+  );
+
+  /*
+   * فقط دو دیواره استفاده می‌شود تا چانک بی‌دلیل
+   * سنگین نشود.
+   */
+  for (let index = 0; index < 2; index++) {
+    const wall =
+      URBAN_TUNNEL_WALLS[
+        index %
+          URBAN_TUNNEL_WALLS.length
+      ];
+
+    placeModel(
+      wall,
+      chunk,
+      horizontal
+        ? tunnelX
+        : tunnelX +
+          (index === 0 ? -7 : 7),
+      horizontal
+        ? tunnelZ +
+          (index === 0 ? -7 : 7)
+        : tunnelZ,
+      rotation
+    );
+  }
+}
+
+function isNearRoad(
+  x: number,
+  z: number
+): boolean {
   return (
-    current.cx === chunkX &&
-    current.cz === chunkZ
+    ROAD_POSITIONS.some(
+      (roadX) =>
+        Math.abs(x - roadX) <
+        ROAD_WIDTH
+    ) ||
+    ROAD_POSITIONS.some(
+      (roadZ) =>
+        Math.abs(z - roadZ) <
+        ROAD_WIDTH
+    ) ||
+    ALLEY_POSITIONS.some(
+      (alleyX) =>
+        Math.abs(x - alleyX) <
+        ALLEY_WIDTH
+    ) ||
+    ALLEY_POSITIONS.some(
+      (alleyZ) =>
+        Math.abs(z - alleyZ) <
+        ALLEY_WIDTH
+    )
   );
 }
 
-export async function updateChunks(
+function spawnVegetation(
+  chunk: THREE.Group,
+  random: () => number,
+  chunkType: ChunkType
+): void {
+  const vegetationCount =
+    chunkType === "urban" ? 14 : 20;
+
+  for (
+    let index = 0;
+    index < vegetationCount;
+    index++
+  ) {
+    const x =
+      randomRange(random, -56, 56);
+
+    const z =
+      randomRange(random, -56, 56);
+
+    if (isNearRoad(x, z)) {
+      continue;
+    }
+
+    const value = random();
+
+    let definition: ModelDef;
+
+    if (value < 0.34) {
+      definition =
+        pick(FOREST_TREES, random);
+    } else if (value < 0.62) {
+      definition =
+        pick(FOREST_BUSHES, random);
+    } else if (value < 0.84) {
+      definition =
+        pick(FOREST_GRASS, random);
+    } else {
+      definition =
+        pick(FOREST_FLOWERS, random);
+    }
+
+    placeModel(
+      definition,
+      chunk,
+      x,
+      z,
+      random() *
+        Math.PI *
+        2
+    );
+  }
+}
+
+function buildChunk(
+  chunk: THREE.Group,
+  cx: number,
+  cz: number
+): void {
+  const random =
+    createRandom(
+      createSeed(cx, cz)
+    );
+
+  const chunkType =
+    getChunkType(random);
+
+  chunk.userData.chunkType =
+    chunkType;
+
+  chunk.userData.walkableRects =
+    [] as WalkableRect[];
+
+  addGround(chunk);
+
+  const roads =
+    buildRoadLayout(
+      chunk,
+      chunkType
+    );
+
+  spawnBuildings(
+    chunk,
+    random,
+    chunkType
+  );
+
+  spawnVehicles(
+    chunk,
+    random,
+    roads
+  );
+
+  spawnRiver(
+    chunk,
+    random,
+    chunkType
+  );
+
+  spawnTunnel(
+    chunk,
+    random,
+    chunkType
+  );
+
+  spawnVegetation(
+    chunk,
+    random,
+    chunkType
+  );
+}
+
+export function generateChunk(
+  scene: THREE.Scene,
+  cx: number,
+  cz: number
+): THREE.Group {
+  const key = `${cx},${cz}`;
+
+  const existing =
+    chunks.get(key);
+
+  if (existing) {
+    return existing;
+  }
+
+  const chunk =
+    new THREE.Group();
+
+  chunk.name = `WorldChunk_${key}`;
+
+  chunk.position.set(
+    cx * CHUNK_SIZE,
+    0,
+    cz * CHUNK_SIZE
+  );
+
+  chunk.userData.destroyed = false;
+
+  buildChunk(chunk, cx, cz);
+
+  scene.add(chunk);
+
+  chunks.set(key, chunk);
+
+  return chunk;
+}
+
+export function updateWorldChunks(
   scene: THREE.Scene,
   playerX: number,
-  playerZ: number
-): Promise<void> {
+  playerZ: number,
+  renderDistance = 1
+): void {
   const { cx, cz } =
     getChunkCoord(
       playerX,
       playerZ
     );
 
-  /*
-   * ابتدا Chunk فعلی ساخته می‌شود.
-   */
-  await generateChunk(
-    scene,
-    cx,
-    cz
-  );
+  for (
+    let x = cx - renderDistance;
+    x <= cx + renderDistance;
+    x++
+  ) {
+    for (
+      let z = cz - renderDistance;
+      z <= cz + renderDistance;
+      z++
+    ) {
+      generateChunk(scene, x, z);
+    }
+  }
 
   destroyFarChunks(
     playerX,
-    playerZ
+    playerZ,
+    renderDistance
   );
-
-  const nearby =
-    getNearbyChunkCoordinates(
-      cx,
-      cz
-    );
-
-  /*
-   * ساخت دو Chunk در هر Batch برای جلوگیری از فشار
-   * ناگهانی روی حافظه و CPU موبایل.
-   */
-  for (
-    let index = 0;
-    index < nearby.length;
-    index +=
-      GENERATION_BATCH_SIZE
-  ) {
-    if (
-      !isStillInChunk(
-        playerX,
-        playerZ,
-        cx,
-        cz
-      )
-    ) {
-      break;
-    }
-
-    const batch =
-      nearby.slice(
-        index,
-        index +
-          GENERATION_BATCH_SIZE
-      );
-
-    await Promise.allSettled(
-      batch.map(
-        ({ x, z }) =>
-          generateChunk(
-            scene,
-            x,
-            z
-          )
-      )
-    );
-  }
 }
 
 export function destroyFarChunks(
   playerX: number,
-  playerZ: number
+  playerZ: number,
+  renderDistance = 1
 ): void {
   const { cx, cz } =
     getChunkCoord(
@@ -670,755 +1106,33 @@ export function destroyFarChunks(
       playerZ
     );
 
-  for (
-    const [key, chunk]
-    of Array.from(
-      chunks.entries()
-    )
-  ) {
-    const coordinates =
-      parseChunkKey(key);
+  for (const [key, chunk] of chunks) {
+    const [chunkX, chunkZ] =
+      key.split(",").map(Number);
 
-    const far =
-      Math.abs(
-        coordinates.x - cx
-      ) > DESTROY_DISTANCE ||
-      Math.abs(
-        coordinates.z - cz
-      ) > DESTROY_DISTANCE;
+    const tooFar =
+      Math.abs(chunkX - cx) >
+        renderDistance ||
+      Math.abs(chunkZ - cz) >
+        renderDistance;
 
-    if (!far) {
+    if (!tooFar) {
       continue;
     }
 
-    removeChunk(
-      key,
-      chunk
-    );
+    chunk.userData.destroyed = true;
+
+    chunk.removeFromParent();
+
+    chunks.delete(key);
   }
 }
 
-function circleIntersectsBox(
-  x: number,
-  z: number,
-  radius: number,
-  box: THREE.Box3
-): boolean {
-  const closestX =
-    THREE.MathUtils.clamp(
-      x,
-      box.min.x,
-      box.max.x
-    );
-
-  const closestZ =
-    THREE.MathUtils.clamp(
-      z,
-      box.min.z,
-      box.max.z
-    );
-
-  const deltaX =
-    x - closestX;
-
-  const deltaZ =
-    z - closestZ;
-
-  return (
-    deltaX * deltaX +
-      deltaZ * deltaZ <
-    radius * radius
-  );
-}
-
-function verticalRangesOverlap(
-  playerY: number,
-  playerHeight: number,
-  box: THREE.Box3
-): boolean {
-  const playerMinY =
-    playerY +
-    COLLISION_STEP_HEIGHT;
-
-  const playerMaxY =
-    playerY +
-    playerHeight;
-
-  return (
-    box.max.y >
-      playerMinY &&
-    box.min.y <
-      playerMaxY
-  );
-}
-
-function collectNearbyColliderKeys(
-  x: number,
-  z: number,
-  radius: number
-): string[] {
-  nearbyColliderKeys.length =
-    0;
-
-  const minChunk =
-    getChunkCoord(
-      x - radius,
-      z - radius
-    );
-
-  const maxChunk =
-    getChunkCoord(
-      x + radius,
-      z + radius
-    );
-
-  for (
-    let chunkX =
-      minChunk.cx;
-    chunkX <=
-      maxChunk.cx;
-    chunkX++
-  ) {
-    for (
-      let chunkZ =
-        minChunk.cz;
-      chunkZ <=
-        maxChunk.cz;
-      chunkZ++
-    ) {
-      nearbyColliderKeys.push(
-        getChunkKey(
-          chunkX,
-          chunkZ
-        )
-      );
-    }
-  }
-
-  return nearbyColliderKeys;
-}
-
-export function collidesWithWorld(
-  x: number,
-  z: number,
-  radius = 0.55,
-  playerY = 0,
-  playerHeight =
-    PLAYER_COLLISION_HEIGHT
-): boolean {
-  const keys =
-    collectNearbyColliderKeys(
-      x,
-      z,
-      radius
-    );
-
-  for (const key of keys) {
-    const colliders =
-      chunkColliders.get(key);
-
-    if (!colliders) {
-      continue;
-    }
-
-    for (
-      const collider of
-      colliders
-    ) {
-      if (
-        !verticalRangesOverlap(
-          playerY,
-          playerHeight,
-          collider
-        )
-      ) {
-        continue;
-      }
-
-      if (
-        circleIntersectsBox(
-          x,
-          z,
-          radius,
-          collider
-        )
-      ) {
-        return true;
-      }
-    }
-  }
-
-  return false;
-}
-
-export function resolveWorldCollision(
-  player: THREE.Object3D,
-  previousX: number,
-  previousZ: number,
-  radius = 0.55
-): void {
-  const nextX =
-    player.position.x;
-
-  const nextZ =
-    player.position.z;
-
-  const playerY =
-    player.position.y;
-
-  const previousBlocked =
-    collidesWithWorld(
-      previousX,
-      previousZ,
-      radius,
-      playerY
-    );
-
-  /*
-   * اگر موقعیت قبلی داخل Collider باشد، بازیکن باید بتواند
-   * از آن خارج شود و نباید دائماً به همان نقطه بازگردد.
-   */
-  if (previousBlocked) {
-    const currentBlocked =
-      collidesWithWorld(
-        nextX,
-        nextZ,
-        radius,
-        playerY
-      );
-
-    if (!currentBlocked) {
-      return;
-    }
-  }
-
-  const blockedX =
-    collidesWithWorld(
-      nextX,
-      previousZ,
-      radius,
-      playerY
-    );
-
-  if (blockedX) {
-    player.position.x =
-      previousX;
-  }
-
-  const blockedZ =
-    collidesWithWorld(
-      player.position.x,
-      nextZ,
-      radius,
-      playerY
-    );
-
-  if (blockedZ) {
-    player.position.z =
-      previousZ;
-  }
-
-  if (
-    collidesWithWorld(
-      player.position.x,
-      player.position.z,
-      radius,
-      playerY
-    )
-  ) {
-    player.position.x =
-      previousX;
-
-    player.position.z =
-      previousZ;
-  }
-}
-
-function getSurfaceObjectsNearPosition(
-  x: number,
-  z: number
-): THREE.Object3D[] {
-  const { cx, cz } =
-    getChunkCoord(x, z);
-
-  const result:
-    THREE.Object3D[] = [];
-
-  for (
-    let chunkX = cx - 1;
-    chunkX <= cx + 1;
-    chunkX++
-  ) {
-    for (
-      let chunkZ = cz - 1;
-      chunkZ <= cz + 1;
-      chunkZ++
-    ) {
-      const surfaces =
-        chunkWalkableSurfaces.get(
-          getChunkKey(
-            chunkX,
-            chunkZ
-          )
-        );
-
-      if (!surfaces) {
-        continue;
-      }
-
-      for (
-        const surface of
-        surfaces
-      ) {
-        if (
-          surface.parent &&
-          surface.visible
-        ) {
-          result.push(surface);
-        }
-      }
-    }
-  }
-
-  return result;
-}
-
-/*
- * ارتفاع سطح قابل راه‌رفتن را پیدا می‌کند.
- * روی پل، رمپ و زمین از بالاترین سطح معتبر زیر بازیکن
- * استفاده می‌شود.
- */
-export function getWorldSurfaceHeight(
-  x: number,
-  z: number,
-  currentY = 0,
-  maxStepUp = 1.25,
-  rayHeight = 40
-): number {
-  const surfaces =
-    getSurfaceObjectsNearPosition(
-      x,
-      z
-    );
-
-  if (surfaces.length === 0) {
-    return 0;
-  }
-
-  surfaceRayOrigin.set(
-    x,
-    Math.max(
-      currentY +
-        maxStepUp,
-      rayHeight
-    ),
-    z
-  );
-
-  surfaceRaycaster.set(
-    surfaceRayOrigin,
-    downDirection
-  );
-
-  surfaceRaycaster.near = 0;
-  surfaceRaycaster.far =
-    rayHeight * 2 +
-    Math.abs(currentY);
-
-  const intersections =
-    surfaceRaycaster.intersectObjects(
-      surfaces,
-      true
-    );
-
-  if (
-    intersections.length === 0
-  ) {
-    return 0;
-  }
-
-  const maximumAllowedY =
-    currentY + maxStepUp;
-
-  let fallbackHeight:
-    number | null = null;
-
-  for (
-    const intersection of
-    intersections
-  ) {
-    const surfaceY =
-      intersection.point.y;
-
-    if (
-      fallbackHeight === null
-    ) {
-      fallbackHeight =
-        surfaceY;
-    }
-
-    if (
-      surfaceY <=
-      maximumAllowedY
-    ) {
-      return surfaceY;
-    }
-  }
-
-  return fallbackHeight ?? 0;
-}
-
-export function snapObjectToWorldSurface(
-  object: THREE.Object3D,
-  maxStepUp = 1.25,
-  verticalOffset = 0
-): number {
-  const surfaceHeight =
-    getWorldSurfaceHeight(
-      object.position.x,
-      object.position.z,
-      object.position.y,
-      maxStepUp
-    );
-
-  object.position.y =
-    surfaceHeight +
-    verticalOffset;
-
-  return surfaceHeight;
-}
-
-export function findSafeSpawnPosition(
-  chunkX = 0,
-  chunkZ = 0,
-  radius = 0.75
-): THREE.Vector3 {
-  const originX =
-    chunkX * CHUNK_SIZE;
-
-  const originZ =
-    chunkZ * CHUNK_SIZE;
-
-  const candidates: ReadonlyArray<
-    readonly [number, number]
-  > = [
-    [0, -30],
-    [0, 30],
-    [-30, 0],
-    [30, 0],
-
-    [-15, -30],
-    [15, -30],
-    [-15, 30],
-    [15, 30],
-
-    [-30, -15],
-    [-30, 15],
-    [30, -15],
-    [30, 15],
-
-    [0, 0],
-  ];
-
-  for (
-    const [
-      localX,
-      localZ,
-    ] of candidates
-  ) {
-    const x =
-      originX + localX;
-
-    const z =
-      originZ + localZ;
-
-    const y =
-      getWorldSurfaceHeight(
-        x,
-        z,
-        0,
-        2
-      );
-
-    if (
-      !collidesWithWorld(
-        x,
-        z,
-        radius,
-        y
-      )
-    ) {
-      return new THREE.Vector3(
-        x,
-        y,
-        z
-      );
-    }
-  }
-
-  const fallbackX =
-    originX;
-
-  const fallbackZ =
-    originZ - 30;
-
-  return new THREE.Vector3(
-    fallbackX,
-    getWorldSurfaceHeight(
-      fallbackX,
-      fallbackZ,
-      0,
-      2
-    ),
-    fallbackZ
-  );
-}
-
-function getAllOccluders(): THREE.Mesh[] {
-  const result:
-    THREE.Mesh[] = [];
-
-  for (
-    const meshes of
-    chunkOccluders.values()
-  ) {
-    for (
-      const mesh of meshes
-    ) {
-      if (
-        !mesh.parent ||
-        !mesh.visible ||
-        mesh.userData
-          .cameraOccluder !==
-          true
-      ) {
-        continue;
-      }
-
-      result.push(mesh);
-    }
-  }
-
-  return result;
-}
-
-function restoreCameraMaterials(): void {
-  for (
-    const material of
-    fadedMaterials
-  ) {
-    const opacity =
-      material.userData
-        .cameraOriginalOpacity;
-
-    const transparent =
-      material.userData
-        .cameraOriginalTransparent;
-
-    const depthWrite =
-      material.userData
-        .cameraOriginalDepthWrite;
-
-    const alphaTest =
-      material.userData
-        .cameraOriginalAlphaTest;
-
-    if (
-      typeof opacity ===
-      "number"
-    ) {
-      material.opacity =
-        opacity;
-    }
-
-    if (
-      typeof transparent ===
-      "boolean"
-    ) {
-      material.transparent =
-        transparent;
-    }
-
-    if (
-      typeof depthWrite ===
-      "boolean"
-    ) {
-      material.depthWrite =
-        depthWrite;
-    }
-
-    if (
-      typeof alphaTest ===
-      "number"
-    ) {
-      material.alphaTest =
-        alphaTest;
-    }
-
-    material.needsUpdate = true;
-  }
-
-  fadedMaterials.clear();
-}
-
-function fadeMaterial(
-  material: THREE.Material
-): void {
-  if (
-    material.userData
-      .cameraOriginalOpacity ===
-    undefined
-  ) {
-    material.userData
-      .cameraOriginalOpacity =
-      material.opacity;
-
-    material.userData
-      .cameraOriginalTransparent =
-      material.transparent;
-
-    material.userData
-      .cameraOriginalDepthWrite =
-      material.depthWrite;
-
-    material.userData
-      .cameraOriginalAlphaTest =
-      material.alphaTest;
-  }
-
-  material.transparent = true;
-  material.opacity =
-    CAMERA_FADE_OPACITY;
-
-  material.depthWrite = false;
-  material.alphaTest = 0;
-
-  material.needsUpdate = true;
-
-  fadedMaterials.add(material);
-}
-
-export function updateCameraOcclusion(
-  camera: THREE.Camera,
-  target: THREE.Vector3
-): void {
-  restoreCameraMaterials();
-
-  const occluders =
-    getAllOccluders();
-
-  if (
-    occluders.length === 0
-  ) {
-    return;
-  }
-
-  cameraRayOrigin.copy(
-    target
-  );
-
-  cameraRayOrigin.y += 1.3;
-
-  cameraDirection
-    .copy(camera.position)
-    .sub(cameraRayOrigin);
-
-  const distance =
-    cameraDirection.length();
-
-  if (
-    distance <= 0.01
-  ) {
-    return;
-  }
-
-  cameraDirection.normalize();
-
-  raycaster.set(
-    cameraRayOrigin,
-    cameraDirection
-  );
-
-  raycaster.near = 0.05;
-
-  /*
-   * کمی قبل از دوربین متوقف می‌شود تا Mesh پشت دوربین
-   * یا خود دوربین به‌اشتباه محو نشود.
-   */
-  raycaster.far =
-    Math.max(
-      distance - 0.1,
-      0
-    );
-
-  const intersections =
-    raycaster.intersectObjects(
-      occluders,
-      false
-    );
-
-  const processedMeshes =
-    new Set<THREE.Mesh>();
-
-  for (
-    const intersection of
-    intersections
-  ) {
-    const mesh =
-      intersection.object;
-
-    if (
-      !(mesh instanceof THREE.Mesh) ||
-      processedMeshes.has(mesh)
-    ) {
-      continue;
-    }
-
-    processedMeshes.add(mesh);
-
-    const materials =
-      Array.isArray(
-        mesh.material
-      )
-        ? mesh.material
-        : [mesh.material];
-
-    for (
-      const material of
-      materials
-    ) {
-      if (material) {
-        fadeMaterial(material);
-      }
-    }
-  }
-}
-
-export function destroyAllChunks(): void {
-  restoreCameraMaterials();
-
-  for (
-    const [key, chunk]
-    of Array.from(
-      chunks.entries()
-    )
-  ) {
-    removeChunk(
-      key,
-      chunk
-    );
+export function clearWorld(): void {
+  for (const chunk of chunks.values()) {
+    chunk.userData.destroyed = true;
+    chunk.removeFromParent();
   }
 
   chunks.clear();
-  chunkColliders.clear();
-  chunkOccluders.clear();
-  chunkWalkableSurfaces.clear();
-
-  /*
-   * Promiseهای در حال اجرا لغو نمی‌شوند، اما به دلیل
-   * destroyed بودن Parent دیگر مدل‌ها به صحنه اضافه
-   * نخواهند شد.
-   */
-  generatingChunks.clear();
-  generationTokens.clear();
-    }
+  }
