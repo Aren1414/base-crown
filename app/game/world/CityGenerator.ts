@@ -1,10 +1,11 @@
 import * as THREE from "three";
 
 import {
-  URBAN_STREETS,
-  URBAN_ALLEYS,
   URBAN_BUILDINGS,
   URBAN_VEHICLES,
+  URBAN_TUNNEL,
+  URBAN_BRIDGES,
+  URBAN_RIVER,
   FOREST_TREES,
   FOREST_BUSHES,
   FOREST_GRASS,
@@ -19,8 +20,8 @@ import {
 
 export const CITY_CHUNK_SIZE = 120;
 
-const ROAD_TILE_SIZE = 30;
-const ALLEY_TILE_SIZE = 22;
+const MAIN_ROAD_WIDTH = 18;
+const ALLEY_WIDTH = 7;
 
 const BUILDING_SIZE = 21;
 const VILLA_SIZE = 16;
@@ -35,6 +36,13 @@ type Placement = {
   z: number;
   rotationY: number;
 };
+
+type SpecialChunkType =
+  | "normal"
+  | "river-horizontal"
+  | "river-vertical"
+  | "tunnel-north"
+  | "tunnel-east";
 
 export type CityGenerationResult = {
   colliders: THREE.Box3[];
@@ -75,12 +83,69 @@ function createRandom(
   };
 }
 
+function positiveModulo(
+  value: number,
+  divisor: number
+): number {
+  return (
+    ((value % divisor) + divisor) %
+    divisor
+  );
+}
+
+function getChunkAssetOffset(
+  chunkX: number,
+  chunkZ: number,
+  assetCount: number
+): number {
+  if (assetCount <= 0) {
+    return 0;
+  }
+
+  /*
+   * باعث می‌شود با حرکت میان Chunkها تمام مدل‌های
+   * موجود در Models.ts به‌صورت چرخشی استفاده شوند.
+   */
+  const value =
+    chunkX * 11 +
+    chunkZ * 17 +
+    chunkX * chunkZ * 3;
+
+  return positiveModulo(
+    value,
+    assetCount
+  );
+}
+
+function getCycledItem<T>(
+  items: T[],
+  chunkX: number,
+  chunkZ: number,
+  slotIndex: number
+): T {
+  const offset =
+    getChunkAssetOffset(
+      chunkX,
+      chunkZ,
+      items.length
+    );
+
+  return items[
+    positiveModulo(
+      offset + slotIndex,
+      items.length
+    )
+  ];
+}
+
 function pick<T>(
-  array: T[],
+  items: T[],
   random: RandomFunction
 ): T {
-  return array[
-    Math.floor(random() * array.length)
+  return items[
+    Math.floor(
+      random() * items.length
+    )
   ];
 }
 
@@ -89,7 +154,10 @@ function randomRange(
   min: number,
   max: number
 ): number {
-  return min + random() * (max - min);
+  return (
+    min +
+    random() * (max - min)
+  );
 }
 
 function isVilla(
@@ -117,6 +185,17 @@ function modelFromUrl(
   };
 }
 
+function markChunkOwned(
+  geometry: THREE.BufferGeometry,
+  material: THREE.Material
+): void {
+  geometry.userData.chunkOwned =
+    true;
+
+  material.userData.chunkOwned =
+    true;
+}
+
 function collectSpawnedModels(
   results: PromiseSettledResult<
     SpawnedModel | null
@@ -142,68 +221,745 @@ function collectSpawnedModels(
   }
 }
 
-function getRoadTiles(): Placement[] {
-  const tiles: Placement[] = [];
-
-  const segmentPositions = [
-    -45,
-    -15,
-    15,
-    45,
-  ];
-
-  // دو خیابان افقی
-  for (const z of [-30, 30]) {
-    for (const x of segmentPositions) {
-      tiles.push({
-        x,
-        z,
-        rotationY: 0,
-      });
-    }
+function getSpecialChunkType(
+  chunkX: number,
+  chunkZ: number
+): SpecialChunkType {
+  /*
+   * Chunk مرکزی همیشه شهر معمولی است تا محل شروع
+   * بازیکن روی رودخانه یا داخل تونل قرار نگیرد.
+   */
+  if (
+    chunkX === 0 &&
+    chunkZ === 0
+  ) {
+    return "normal";
   }
 
-  // دو خیابان عمودی
-  for (const x of [-30, 30]) {
-    for (const z of segmentPositions) {
-      tiles.push({
-        x,
-        z,
-        rotationY: Math.PI / 2,
-      });
-    }
+  const typeIndex =
+    positiveModulo(
+      chunkX * 7 +
+        chunkZ * 13,
+      12
+    );
+
+  if (typeIndex === 0) {
+    return "river-horizontal";
   }
 
-  return tiles;
+  if (typeIndex === 3) {
+    return "river-vertical";
+  }
+
+  if (typeIndex === 6) {
+    return "tunnel-north";
+  }
+
+  if (typeIndex === 9) {
+    return "tunnel-east";
+  }
+
+  return "normal";
 }
 
-function getAlleyTiles(): Placement[] {
-  return [
+function createSurface(
+  width: number,
+  depth: number,
+  color: number,
+  x: number,
+  z: number,
+  y: number,
+  roughness = 1
+): THREE.Mesh {
+  const geometry =
+    new THREE.PlaneGeometry(
+      width,
+      depth
+    );
+
+  const material =
+    new THREE.MeshStandardMaterial({
+      color,
+      roughness,
+      metalness: 0,
+
+      polygonOffset: true,
+      polygonOffsetFactor: -1,
+      polygonOffsetUnits: -1,
+    });
+
+  markChunkOwned(
+    geometry,
+    material
+  );
+
+  const mesh =
+    new THREE.Mesh(
+      geometry,
+      material
+    );
+
+  mesh.rotation.x =
+    -Math.PI / 2;
+
+  mesh.position.set(
+    x,
+    y,
+    z
+  );
+
+  mesh.receiveShadow = true;
+
+  return mesh;
+}
+
+function createGround(
+  chunk: THREE.Group
+): void {
+  const ground =
+    createSurface(
+      CITY_CHUNK_SIZE,
+      CITY_CHUNK_SIZE,
+      0x34382f,
+      0,
+      0,
+      0.01
+    );
+
+  ground.name =
+    "ProceduralCityGround";
+
+  chunk.add(ground);
+}
+
+function createNormalRoads(
+  chunk: THREE.Group
+): void {
+  const roadColor = 0x242724;
+
+  for (const z of [-30, 30]) {
+    const road =
+      createSurface(
+        CITY_CHUNK_SIZE,
+        MAIN_ROAD_WIDTH,
+        roadColor,
+        0,
+        z,
+        0.035,
+        0.98
+      );
+
+    road.name =
+      "ProceduralMainRoad";
+
+    chunk.add(road);
+  }
+
+  for (const x of [-30, 30]) {
+    const road =
+      createSurface(
+        MAIN_ROAD_WIDTH,
+        CITY_CHUNK_SIZE,
+        roadColor,
+        x,
+        0,
+        0.04,
+        0.98
+      );
+
+    road.name =
+      "ProceduralMainRoad";
+
+    chunk.add(road);
+  }
+}
+
+function createRiverRoads(
+  chunk: THREE.Group,
+  specialType: SpecialChunkType
+): void {
+  const roadColor = 0x242724;
+
+  if (
+    specialType ===
+    "river-horizontal"
+  ) {
+    /*
+     * رودخانه از شرق به غرب عبور می‌کند.
+     * خیابان‌های عمودی از روی پل رد می‌شوند.
+     */
+    for (const x of [-30, 30]) {
+      chunk.add(
+        createSurface(
+          MAIN_ROAD_WIDTH,
+          CITY_CHUNK_SIZE,
+          roadColor,
+          x,
+          0,
+          0.04,
+          0.98
+        )
+      );
+    }
+
+    for (const z of [-38, 38]) {
+      chunk.add(
+        createSurface(
+          CITY_CHUNK_SIZE,
+          MAIN_ROAD_WIDTH,
+          roadColor,
+          0,
+          z,
+          0.035,
+          0.98
+        )
+      );
+    }
+
+    return;
+  }
+
+  /*
+   * رودخانه از شمال به جنوب عبور می‌کند.
+   * خیابان‌های افقی از روی پل رد می‌شوند.
+   */
+  for (const z of [-30, 30]) {
+    chunk.add(
+      createSurface(
+        CITY_CHUNK_SIZE,
+        MAIN_ROAD_WIDTH,
+        roadColor,
+        0,
+        z,
+        0.035,
+        0.98
+      )
+    );
+  }
+
+  for (const x of [-38, 38]) {
+    chunk.add(
+      createSurface(
+        MAIN_ROAD_WIDTH,
+        CITY_CHUNK_SIZE,
+        roadColor,
+        x,
+        0,
+        0.04,
+        0.98
+      )
+    );
+  }
+}
+
+function createTunnelRoads(
+  chunk: THREE.Group,
+  specialType: SpecialChunkType
+): void {
+  createNormalRoads(chunk);
+
+  const roadColor = 0x222421;
+
+  if (
+    specialType ===
+    "tunnel-north"
+  ) {
+    chunk.add(
+      createSurface(
+        MAIN_ROAD_WIDTH,
+        62,
+        roadColor,
+        0,
+        -29,
+        0.055,
+        0.98
+      )
+    );
+  } else {
+    chunk.add(
+      createSurface(
+        62,
+        MAIN_ROAD_WIDTH,
+        roadColor,
+        29,
+        0,
+        0.055,
+        0.98
+      )
+    );
+  }
+}
+
+function createRoads(
+  chunk: THREE.Group,
+  specialType: SpecialChunkType
+): void {
+  if (
+    specialType ===
+      "river-horizontal" ||
+    specialType ===
+      "river-vertical"
+  ) {
+    createRiverRoads(
+      chunk,
+      specialType
+    );
+
+    return;
+  }
+
+  if (
+    specialType ===
+      "tunnel-north" ||
+    specialType ===
+      "tunnel-east"
+  ) {
+    createTunnelRoads(
+      chunk,
+      specialType
+    );
+
+    return;
+  }
+
+  createNormalRoads(chunk);
+}
+
+function createAlleys(
+  chunk: THREE.Group,
+  specialType: SpecialChunkType
+): void {
+  const alleyColor = 0x2d302a;
+
+  const horizontalAlleys = [
     {
       x: 0,
       z: -49,
-      rotationY: Math.PI / 2,
+      width: CITY_CHUNK_SIZE,
+      depth: ALLEY_WIDTH,
     },
     {
       x: 0,
       z: 49,
-      rotationY: Math.PI / 2,
+      width: CITY_CHUNK_SIZE,
+      depth: ALLEY_WIDTH,
     },
+    {
+      x: 0,
+      z: 0,
+      width: CITY_CHUNK_SIZE,
+      depth: ALLEY_WIDTH,
+    },
+  ];
+
+  const verticalAlleys = [
     {
       x: -49,
       z: 0,
-      rotationY: 0,
+      width: ALLEY_WIDTH,
+      depth: CITY_CHUNK_SIZE,
     },
     {
       x: 49,
       z: 0,
-      rotationY: 0,
+      width: ALLEY_WIDTH,
+      depth: CITY_CHUNK_SIZE,
+    },
+    {
+      x: 0,
+      z: 0,
+      width: ALLEY_WIDTH,
+      depth: CITY_CHUNK_SIZE,
     },
   ];
+
+  for (
+    const alley
+    of horizontalAlleys
+  ) {
+    if (
+      specialType ===
+        "river-horizontal" &&
+      Math.abs(alley.z) < 10
+    ) {
+      continue;
+    }
+
+    chunk.add(
+      createSurface(
+        alley.width,
+        alley.depth,
+        alleyColor,
+        alley.x,
+        alley.z,
+        0.05,
+        1
+      )
+    );
+  }
+
+  for (
+    const alley
+    of verticalAlleys
+  ) {
+    if (
+      specialType ===
+        "river-vertical" &&
+      Math.abs(alley.x) < 10
+    ) {
+      continue;
+    }
+
+    chunk.add(
+      createSurface(
+        alley.width,
+        alley.depth,
+        alleyColor,
+        alley.x,
+        alley.z,
+        0.055,
+        1
+      )
+    );
+  }
 }
 
-function getBuildingSlots(): Placement[] {
-  return [
+function createRoadMarkings(
+  chunk: THREE.Group,
+  random: RandomFunction,
+  specialType: SpecialChunkType
+): void {
+  const geometry =
+    new THREE.PlaneGeometry(
+      4.5,
+      0.22
+    );
+
+  const material =
+    new THREE.MeshBasicMaterial({
+      color: 0x8e875b,
+      transparent: true,
+      opacity: 0.4,
+      depthWrite: false,
+
+      polygonOffset: true,
+      polygonOffsetFactor: -2,
+      polygonOffsetUnits: -2,
+    });
+
+  markChunkOwned(
+    geometry,
+    material
+  );
+
+  const horizontalRoads =
+    specialType ===
+    "river-horizontal"
+      ? [-38, 38]
+      : [-30, 30];
+
+  const verticalRoads =
+    specialType ===
+    "river-vertical"
+      ? [-38, 38]
+      : [-30, 30];
+
+  for (
+    const roadZ
+    of horizontalRoads
+  ) {
+    for (
+      let x = -54;
+      x <= 54;
+      x += 10
+    ) {
+      if (random() < 0.27) {
+        continue;
+      }
+
+      const mark =
+        new THREE.Mesh(
+          geometry,
+          material
+        );
+
+      mark.rotation.x =
+        -Math.PI / 2;
+
+      mark.rotation.z =
+        randomRange(
+          random,
+          -0.035,
+          0.035
+        );
+
+      mark.position.set(
+        x,
+        0.072,
+        roadZ
+      );
+
+      chunk.add(mark);
+    }
+  }
+
+  for (
+    const roadX
+    of verticalRoads
+  ) {
+    for (
+      let z = -54;
+      z <= 54;
+      z += 10
+    ) {
+      if (random() < 0.27) {
+        continue;
+      }
+
+      const mark =
+        new THREE.Mesh(
+          geometry,
+          material
+        );
+
+      mark.rotation.x =
+        -Math.PI / 2;
+
+      mark.rotation.z =
+        Math.PI / 2 +
+        randomRange(
+          random,
+          -0.035,
+          0.035
+        );
+
+      mark.position.set(
+        roadX,
+        0.073,
+        z
+      );
+
+      chunk.add(mark);
+    }
+  }
+}
+
+function createCracks(
+  chunk: THREE.Group,
+  random: RandomFunction
+): void {
+  const crackMaterial =
+    new THREE.LineBasicMaterial({
+      color: 0x111310,
+      transparent: true,
+      opacity: 0.72,
+      depthTest: true,
+    });
+
+  crackMaterial.userData.chunkOwned =
+    true;
+
+  for (
+    let index = 0;
+    index < 32;
+    index++
+  ) {
+    const horizontalRoad =
+      random() < 0.5;
+
+    const baseX =
+      horizontalRoad
+        ? randomRange(
+            random,
+            -57,
+            57
+          )
+        : pick(
+              [-30, 30],
+              random
+            ) +
+          randomRange(
+            random,
+            -7,
+            7
+          );
+
+    const baseZ =
+      horizontalRoad
+        ? pick(
+              [-30, 30],
+              random
+            ) +
+          randomRange(
+            random,
+            -7,
+            7
+          )
+        : randomRange(
+            random,
+            -57,
+            57
+          );
+
+    const points:
+      THREE.Vector3[] = [];
+
+    const segmentCount =
+      3 +
+      Math.floor(
+        random() * 4
+      );
+
+    let x = baseX;
+    let z = baseZ;
+
+    points.push(
+      new THREE.Vector3(
+        x,
+        0.081,
+        z
+      )
+    );
+
+    for (
+      let segment = 0;
+      segment < segmentCount;
+      segment++
+    ) {
+      x += randomRange(
+        random,
+        -1.8,
+        1.8
+      );
+
+      z += randomRange(
+        random,
+        -1.8,
+        1.8
+      );
+
+      points.push(
+        new THREE.Vector3(
+          x,
+          0.081,
+          z
+        )
+      );
+    }
+
+    const geometry =
+      new THREE.BufferGeometry()
+        .setFromPoints(points);
+
+    geometry.userData.chunkOwned =
+      true;
+
+    const crack =
+      new THREE.Line(
+        geometry,
+        crackMaterial
+      );
+
+    chunk.add(crack);
+  }
+}
+
+function createDirtPatches(
+  chunk: THREE.Group,
+  random: RandomFunction
+): void {
+  const materials = [
+    new THREE.MeshBasicMaterial({
+      color: 0x4a4937,
+      transparent: true,
+      opacity: 0.36,
+      depthWrite: false,
+    }),
+
+    new THREE.MeshBasicMaterial({
+      color: 0x405039,
+      transparent: true,
+      opacity: 0.3,
+      depthWrite: false,
+    }),
+
+    new THREE.MeshBasicMaterial({
+      color: 0x5b5038,
+      transparent: true,
+      opacity: 0.2,
+      depthWrite: false,
+    }),
+  ];
+
+  for (
+    const material
+    of materials
+  ) {
+    material.userData.chunkOwned =
+      true;
+  }
+
+  for (
+    let index = 0;
+    index < 24;
+    index++
+  ) {
+    const geometry =
+      new THREE.PlaneGeometry(
+        randomRange(
+          random,
+          2,
+          7
+        ),
+        randomRange(
+          random,
+          1.5,
+          5
+        )
+      );
+
+    geometry.userData.chunkOwned =
+      true;
+
+    const patch =
+      new THREE.Mesh(
+        geometry,
+        pick(
+          materials,
+          random
+        )
+      );
+
+    patch.rotation.x =
+      -Math.PI / 2;
+
+    patch.rotation.z =
+      random() *
+      Math.PI *
+      2;
+
+    patch.position.set(
+      randomRange(
+        random,
+        -58,
+        58
+      ),
+      0.075,
+      randomRange(
+        random,
+        -58,
+        58
+      )
+    );
+
+    chunk.add(patch);
+  }
+}
+
+function getBuildingSlots(
+  specialType: SpecialChunkType
+): Placement[] {
+  const defaultSlots: Placement[] = [
     {
       x: -49,
       z: -49,
@@ -247,10 +1003,60 @@ function getBuildingSlots(): Placement[] {
       rotationY: 0,
     },
   ];
+
+  if (
+    specialType ===
+    "river-horizontal"
+  ) {
+    return defaultSlots.filter(
+      (slot) =>
+        Math.abs(slot.z) >= 40
+    );
+  }
+
+  if (
+    specialType ===
+    "river-vertical"
+  ) {
+    return defaultSlots.filter(
+      (slot) =>
+        Math.abs(slot.x) >= 40
+    );
+  }
+
+  if (
+    specialType ===
+    "tunnel-north"
+  ) {
+    return defaultSlots.filter(
+      (slot) =>
+        !(
+          slot.z < -40 &&
+          Math.abs(slot.x) < 15
+        )
+    );
+  }
+
+  if (
+    specialType ===
+    "tunnel-east"
+  ) {
+    return defaultSlots.filter(
+      (slot) =>
+        !(
+          slot.x > 40 &&
+          Math.abs(slot.z) < 15
+        )
+    );
+  }
+
+  return defaultSlots;
 }
 
-function getVehicleSlots(): Placement[] {
-  return [
+function getVehicleSlots(
+  specialType: SpecialChunkType
+): Placement[] {
+  const defaultSlots: Placement[] = [
     {
       x: -44,
       z: -34,
@@ -293,166 +1099,104 @@ function getVehicleSlots(): Placement[] {
       rotationY: -Math.PI / 2,
     },
   ];
-}
 
-async function spawnRoads(
-  chunk: THREE.Group
-): Promise<void> {
-  const tiles = getRoadTiles();
-
-  /*
-   * یک مدل برای مسیرهای افقی و یک مدل برای
-   * مسیرهای عمودی انتخاب می‌شود تا خیابان‌ها
-   * منظم‌تر و هماهنگ‌تر باشند.
-   */
-  const horizontalStreet =
-    URBAN_STREETS[0];
-
-  const verticalStreet =
-    URBAN_STREETS[
-      Math.min(
-        1,
-        URBAN_STREETS.length - 1
-      )
-    ];
-
-  const jobs = tiles.map((tile) => {
-    const horizontal =
-      Math.abs(tile.rotationY) < 0.01;
-
-    return spawnModel(
-      horizontal
-        ? horizontalStreet
-        : verticalStreet,
-      chunk,
-      {
-        x: tile.x,
-        y: 0.04,
-        z: tile.z,
-
-        rotationY: tile.rotationY,
-
-        targetFootprint:
-          ROAD_TILE_SIZE,
-
-        verticalMode:
-          "center-surface",
-
-        /*
-         * مهم:
-         * خیابان Collider ندارد.
-         * کاراکتر باید بتواند روی آن حرکت کند.
-         */
-        colliderMode: "none",
-
-        castShadow: false,
-        receiveShadow: true,
-        cameraOccluder: false,
-      }
+  if (
+    specialType ===
+    "river-horizontal"
+  ) {
+    return defaultSlots.filter(
+      (slot) =>
+        Math.abs(slot.z) > 20
     );
-  });
-
-  await Promise.allSettled(jobs);
-}
-
-async function spawnAlleys(
-  chunk: THREE.Group
-): Promise<void> {
-  if (URBAN_ALLEYS.length === 0) {
-    return;
   }
 
-  const tiles = getAlleyTiles();
+  if (
+    specialType ===
+    "river-vertical"
+  ) {
+    return defaultSlots.filter(
+      (slot) =>
+        Math.abs(slot.x) > 20
+    );
+  }
 
-  const jobs = tiles.map(
-    (tile, index) =>
-      spawnModel(
-        URBAN_ALLEYS[
-          index %
-            URBAN_ALLEYS.length
-        ],
-        chunk,
-        {
-          x: tile.x,
-          y: 0.045,
-          z: tile.z,
-
-          rotationY:
-            tile.rotationY,
-
-          targetFootprint:
-            ALLEY_TILE_SIZE,
-
-          verticalMode:
-            "center-surface",
-
-          /*
-           * کوچه هم سطح قابل حرکت است.
-           */
-          colliderMode: "none",
-
-          castShadow: false,
-          receiveShadow: true,
-          cameraOccluder: false,
-        }
-      )
-  );
-
-  await Promise.allSettled(jobs);
+  return defaultSlots;
 }
 
 async function spawnBuildings(
   chunk: THREE.Group,
-  random: RandomFunction,
+  chunkX: number,
+  chunkZ: number,
+  specialType: SpecialChunkType,
   colliders: THREE.Box3[],
   occluders: THREE.Mesh[]
 ): Promise<void> {
-  const jobs = getBuildingSlots()
-    .filter(() => random() >= 0.08)
-    .map((slot) => {
-      const building = pick(
-        URBAN_BUILDINGS,
-        random
-      );
+  const slots =
+    getBuildingSlots(
+      specialType
+    );
 
-      const villa =
-        isVilla(building);
+  const jobs =
+    slots.map(
+      (
+        slot,
+        slotIndex
+      ) => {
+        const building =
+          getCycledItem(
+            URBAN_BUILDINGS,
+            chunkX,
+            chunkZ,
+            slotIndex
+          );
 
-      return spawnModel(
-        building,
-        chunk,
-        {
-          x: slot.x,
-          y: 0.08,
-          z: slot.z,
+        const villa =
+          isVilla(building);
 
-          rotationY:
-            slot.rotationY,
+        return spawnModel(
+          building,
+          chunk,
+          {
+            x: slot.x,
+            y: 0.08,
+            z: slot.z,
 
-          targetFootprint:
-            villa
-              ? VILLA_SIZE
-              : BUILDING_SIZE,
+            rotationY:
+              slot.rotationY,
 
-          maxHeight:
-            villa ? 15 : 32,
+            targetFootprint:
+              villa
+                ? VILLA_SIZE
+                : BUILDING_SIZE,
 
-          verticalMode: "ground",
+            maxHeight:
+              villa
+                ? 15
+                : 32,
 
-          colliderMode: "mesh",
+            verticalMode:
+              "ground",
 
-          colliderPadding:
-            villa ? 0.15 : 0.2,
+            colliderMode:
+              "mesh",
 
-          castShadow: true,
-          receiveShadow: true,
-          cameraOccluder: true,
-        }
-      );
-    });
+            colliderPadding:
+              villa
+                ? 0.15
+                : 0.2,
+
+            castShadow: true,
+            receiveShadow: true,
+            cameraOccluder: true,
+          }
+        );
+      }
+    );
 
   const results =
-    await Promise.allSettled(jobs);
+    await Promise.allSettled(
+      jobs
+    );
 
   collectSpawnedModels(
     results,
@@ -463,63 +1207,87 @@ async function spawnBuildings(
 
 async function spawnVehicles(
   chunk: THREE.Group,
-  random: RandomFunction,
+  chunkX: number,
+  chunkZ: number,
+  specialType: SpecialChunkType,
   colliders: THREE.Box3[],
   occluders: THREE.Mesh[]
 ): Promise<void> {
-  const jobs = getVehicleSlots()
-    .filter(() => random() <= 0.48)
-    .map((slot) => {
-      const vehicle = pick(
-        URBAN_VEHICLES,
-        random
-      );
+  const slots =
+    getVehicleSlots(
+      specialType
+    );
 
-      const motorcycle =
-        isMotorcycle(vehicle);
+  const jobs =
+    slots.map(
+      (
+        slot,
+        slotIndex
+      ) => {
+        const vehicle =
+          getCycledItem(
+            URBAN_VEHICLES,
+            chunkX,
+            chunkZ,
+            slotIndex
+          );
 
-      return spawnModel(
-        vehicle,
-        chunk,
-        {
-          x: slot.x,
-          y: motorcycle
-            ? 0.12
-            : 0.08,
-          z: slot.z,
+        const motorcycle =
+          isMotorcycle(
+            vehicle
+          );
 
-          rotationY:
-            slot.rotationY,
+        return spawnModel(
+          vehicle,
+          chunk,
+          {
+            x: slot.x,
 
-          rotationZ:
-            motorcycle
-              ? Math.PI / 2
-              : 0,
+            y: motorcycle
+              ? 0.12
+              : 0.08,
 
-          targetFootprint:
-            motorcycle
-              ? MOTORCYCLE_SIZE
-              : CAR_SIZE,
+            z: slot.z,
 
-          maxHeight:
-            motorcycle
-              ? 2
-              : 3.5,
+            rotationY:
+              slot.rotationY,
 
-          verticalMode: "ground",
+            rotationZ:
+              motorcycle
+                ? Math.PI / 2
+                : 0,
 
-          colliderMode: "mesh",
-          colliderPadding: 0.1,
+            targetFootprint:
+              motorcycle
+                ? MOTORCYCLE_SIZE
+                : CAR_SIZE,
 
-          castShadow: true,
-          receiveShadow: true,
-          cameraOccluder: true,
-        }
-      );
-    });
+            maxHeight:
+              motorcycle
+                ? 2
+                : 3.5,
+
+            verticalMode:
+              "ground",
+
+            colliderMode:
+              "mesh",
+
+            colliderPadding:
+              0.1,
+
+            castShadow: true,
+            receiveShadow: true,
+            cameraOccluder: true,
+          }
+        );
+      }
+    );
 
   const results =
-    await Promise.allSettled(jobs);
+    await Promise.allSettled(
+      jobs
+    );
 
   collectSpawnedModels(
     results,
@@ -528,77 +1296,503 @@ async function spawnVehicles(
   );
 }
 
-async function spawnVegetation(
+async function spawnRiverAndBridges(
   chunk: THREE.Group,
-  random: RandomFunction,
+  chunkX: number,
+  chunkZ: number,
+  specialType: SpecialChunkType,
   colliders: THREE.Box3[],
   occluders: THREE.Mesh[]
 ): Promise<void> {
-  const areas = [
-    {
-      x: 0,
-      z: 0,
-      radius: 10,
-    },
-    {
-      x: -50,
-      z: 18,
-      radius: 6,
-    },
-    {
-      x: 50,
-      z: -18,
-      radius: 6,
-    },
-    {
-      x: -18,
-      z: 50,
-      radius: 6,
-    },
-    {
-      x: 18,
-      z: -50,
-      radius: 6,
-    },
-  ];
+  if (
+    specialType !==
+      "river-horizontal" &&
+    specialType !==
+      "river-vertical"
+  ) {
+    return;
+  }
 
+  const river =
+    URBAN_RIVER[0];
+
+  const riverRotation =
+    specialType ===
+    "river-horizontal"
+      ? Math.PI / 2
+      : 0;
+
+  const bridgeRotation =
+    specialType ===
+    "river-horizontal"
+      ? 0
+      : Math.PI / 2;
+
+  const bridgeIndex =
+    positiveModulo(
+      Math.abs(
+        chunkX * 5 +
+          chunkZ * 7
+      ),
+      URBAN_BRIDGES.length
+    );
+
+  const bridge =
+    URBAN_BRIDGES[
+      bridgeIndex
+    ];
+
+  const riverJob =
+    spawnModel(
+      river,
+      chunk,
+      {
+        x: 0,
+        y: 0.025,
+        z: 0,
+
+        rotationY:
+          riverRotation,
+
+        targetFootprint:
+          CITY_CHUNK_SIZE,
+
+        maxHeight: 5,
+
+        verticalMode:
+          "center-surface",
+
+        colliderMode:
+          "none",
+
+        castShadow: false,
+        receiveShadow: true,
+        cameraOccluder: false,
+      }
+    );
+
+  const bridgePositions =
+    specialType ===
+    "river-horizontal"
+      ? [
+          {
+            x: -30,
+            z: 0,
+          },
+          {
+            x: 30,
+            z: 0,
+          },
+        ]
+      : [
+          {
+            x: 0,
+            z: -30,
+          },
+          {
+            x: 0,
+            z: 30,
+          },
+        ];
+
+  const bridgeJobs =
+    bridgePositions.map(
+      (
+        position,
+        index
+      ) =>
+        spawnModel(
+          URBAN_BRIDGES[
+            positiveModulo(
+              bridgeIndex +
+                index,
+              URBAN_BRIDGES.length
+            )
+          ] ?? bridge,
+          chunk,
+          {
+            x: position.x,
+            y: 0.09,
+            z: position.z,
+
+            rotationY:
+              bridgeRotation,
+
+            targetFootprint:
+              19,
+
+            maxHeight: 8,
+
+            verticalMode:
+              "ground",
+
+            /*
+             * سطح عبور پل نباید با یک Box بزرگ
+             * کاملاً مسدود شود.
+             */
+            colliderMode:
+              "mesh",
+
+            colliderPadding:
+              0.05,
+
+            castShadow: true,
+            receiveShadow: true,
+            cameraOccluder: true,
+          }
+        )
+    );
+
+  const [
+    riverResult,
+    bridgeResults,
+  ] = await Promise.all([
+    Promise.allSettled([
+      riverJob,
+    ]),
+
+    Promise.allSettled(
+      bridgeJobs
+    ),
+  ]);
+
+  collectSpawnedModels(
+    riverResult,
+    colliders,
+    occluders
+  );
+
+  collectSpawnedModels(
+    bridgeResults,
+    colliders,
+    occluders
+  );
+}
+
+async function spawnTunnel(
+  chunk: THREE.Group,
+  specialType: SpecialChunkType,
+  colliders: THREE.Box3[],
+  occluders: THREE.Mesh[]
+): Promise<void> {
+  if (
+    specialType !==
+      "tunnel-north" &&
+    specialType !==
+      "tunnel-east"
+  ) {
+    return;
+  }
+
+  const horizontal =
+    specialType ===
+    "tunnel-east";
+
+  const rotationY =
+    horizontal
+      ? Math.PI / 2
+      : 0;
+
+  const tunnelX =
+    horizontal
+      ? 48
+      : 0;
+
+  const tunnelZ =
+    horizontal
+      ? 0
+      : -48;
+
+  const jobs =
+    URBAN_TUNNEL.map(
+      (
+        tunnelPart,
+        index
+      ) => {
+        /*
+         * تمام Tunnel.glb و چهار دیواره‌ی تونل
+         * در همان Chunk استفاده می‌شوند.
+         */
+        const isMainTunnel =
+          index === 0;
+
+        let offsetX = 0;
+        let offsetZ = 0;
+
+        if (!isMainTunnel) {
+          const wallOffset =
+            (index - 2.5) * 7;
+
+          if (horizontal) {
+            offsetX =
+              wallOffset;
+          } else {
+            offsetZ =
+              wallOffset;
+          }
+        }
+
+        return spawnModel(
+          tunnelPart,
+          chunk,
+          {
+            x:
+              tunnelX +
+              offsetX,
+
+            y: 0.08,
+
+            z:
+              tunnelZ +
+              offsetZ,
+
+            rotationY,
+
+            targetFootprint:
+              isMainTunnel
+                ? 26
+                : 15,
+
+            maxHeight:
+              isMainTunnel
+                ? 15
+                : 12,
+
+            verticalMode:
+              "ground",
+
+            colliderMode:
+              "mesh",
+
+            colliderPadding:
+              0.08,
+
+            castShadow: true,
+            receiveShadow: true,
+            cameraOccluder: true,
+          }
+        );
+      }
+    );
+
+  const results =
+    await Promise.allSettled(
+      jobs
+    );
+
+  collectSpawnedModels(
+    results,
+    colliders,
+    occluders
+  );
+}
+
+function isInsideRiverArea(
+  x: number,
+  z: number,
+  specialType: SpecialChunkType
+): boolean {
+  if (
+    specialType ===
+    "river-horizontal"
+  ) {
+    return Math.abs(z) < 13;
+  }
+
+  if (
+    specialType ===
+    "river-vertical"
+  ) {
+    return Math.abs(x) < 13;
+  }
+
+  return false;
+}
+
+function isInsideTunnelArea(
+  x: number,
+  z: number,
+  specialType: SpecialChunkType
+): boolean {
+  if (
+    specialType ===
+    "tunnel-north"
+  ) {
+    return (
+      z < -35 &&
+      Math.abs(x) < 20
+    );
+  }
+
+  if (
+    specialType ===
+    "tunnel-east"
+  ) {
+    return (
+      x > 35 &&
+      Math.abs(z) < 20
+    );
+  }
+
+  return false;
+}
+
+function createVegetationPosition(
+  random: RandomFunction,
+  specialType: SpecialChunkType
+): {
+  x: number;
+  z: number;
+} {
+  for (
+    let attempt = 0;
+    attempt < 20;
+    attempt++
+  ) {
+    const edge =
+      Math.floor(
+        random() * 4
+      );
+
+    let x =
+      randomRange(
+        random,
+        -57,
+        57
+      );
+
+    let z =
+      randomRange(
+        random,
+        -57,
+        57
+      );
+
+    if (edge === 0) {
+      x =
+        pick(
+          [
+            -55,
+            -42,
+            42,
+            55,
+          ],
+          random
+        );
+    } else if (edge === 1) {
+      z =
+        pick(
+          [
+            -55,
+            -42,
+            42,
+            55,
+          ],
+          random
+        );
+    } else if (edge === 2) {
+      x =
+        pick(
+          [
+            -20,
+            20,
+            -40,
+            40,
+          ],
+          random
+        );
+    } else {
+      z =
+        pick(
+          [
+            -20,
+            20,
+            -40,
+            40,
+          ],
+          random
+        );
+    }
+
+    if (
+      isInsideRiverArea(
+        x,
+        z,
+        specialType
+      )
+    ) {
+      continue;
+    }
+
+    if (
+      isInsideTunnelArea(
+        x,
+        z,
+        specialType
+      )
+    ) {
+      continue;
+    }
+
+    return {
+      x,
+      z,
+    };
+  }
+
+  return {
+    x: 52,
+    z: 52,
+  };
+}
+
+async function spawnVegetation(
+  chunk: THREE.Group,
+  chunkX: number,
+  chunkZ: number,
+  random: RandomFunction,
+  specialType: SpecialChunkType,
+  colliders: THREE.Box3[],
+  occluders: THREE.Mesh[]
+): Promise<void> {
   const treeJobs: Promise<
     SpawnedModel | null
   >[] = [];
 
-  for (let index = 0; index < 5; index++) {
-    const area = pick(
-      areas,
-      random
-    );
+  /*
+   * در هر Chunk هشت درخت ایجاد می‌شود و انتخاب آن‌ها
+   * چرخشی است؛ بنابراین تمام ۲۰ مدل درخت در شهر
+   * استفاده خواهند شد.
+   */
+  for (
+    let index = 0;
+    index < 8;
+    index++
+  ) {
+    const position =
+      createVegetationPosition(
+        random,
+        specialType
+      );
 
-    const angle =
-      random() * Math.PI * 2;
-
-    const distance =
-      random() * area.radius;
+    const treeUrl =
+      getCycledItem(
+        FOREST_TREES,
+        chunkX,
+        chunkZ,
+        index
+      );
 
     treeJobs.push(
       spawnModel(
         modelFromUrl(
-          pick(
-            FOREST_TREES,
-            random
-          )
+          treeUrl
         ),
         chunk,
         {
-          x:
-            area.x +
-            Math.cos(angle) *
-              distance,
-
-          y: 0.06,
-
-          z:
-            area.z +
-            Math.sin(angle) *
-              distance,
+          x: position.x,
+          y: 0.07,
+          z: position.z,
 
           rotationY:
             random() *
@@ -608,21 +1802,25 @@ async function spawnVegetation(
           targetFootprint:
             randomRange(
               random,
-              4,
-              5.5
+              3.8,
+              5.4
             ),
 
           maxHeight:
             randomRange(
               random,
-              10,
+              9,
               15
             ),
 
-          verticalMode: "ground",
+          verticalMode:
+            "ground",
 
-          colliderMode: "mesh",
-          colliderPadding: 0.25,
+          colliderMode:
+            "mesh",
+
+          colliderPadding:
+            0.2,
 
           castShadow: true,
           receiveShadow: true,
@@ -636,39 +1834,40 @@ async function spawnVegetation(
     SpawnedModel | null
   >[] = [];
 
-  for (let index = 0; index < 8; index++) {
-    const area = pick(
-      areas,
-      random
-    );
+  /*
+   * شش مدل بوته وجود دارد و هر شش مدل در هر Chunk
+   * یک‌بار استفاده می‌شوند.
+   */
+  for (
+    let index = 0;
+    index <
+    FOREST_BUSHES.length;
+    index++
+  ) {
+    const position =
+      createVegetationPosition(
+        random,
+        specialType
+      );
 
-    const angle =
-      random() * Math.PI * 2;
-
-    const distance =
-      random() * area.radius;
+    const bushUrl =
+      getCycledItem(
+        FOREST_BUSHES,
+        chunkX,
+        chunkZ,
+        index
+      );
 
     bushJobs.push(
       spawnModel(
         modelFromUrl(
-          pick(
-            FOREST_BUSHES,
-            random
-          )
+          bushUrl
         ),
         chunk,
         {
-          x:
-            area.x +
-            Math.cos(angle) *
-              distance,
-
-          y: 0.05,
-
-          z:
-            area.z +
-            Math.sin(angle) *
-              distance,
+          x: position.x,
+          y: 0.065,
+          z: position.z,
 
           rotationY:
             random() *
@@ -678,16 +1877,20 @@ async function spawnVegetation(
           targetFootprint:
             randomRange(
               random,
-              1.4,
-              2.6
+              1.3,
+              2.5
             ),
 
           maxHeight: 3,
 
-          verticalMode: "ground",
+          verticalMode:
+            "ground",
 
-          colliderMode: "mesh",
-          colliderPadding: 0.08,
+          colliderMode:
+            "mesh",
+
+          colliderPadding:
+            0.06,
 
           castShadow: true,
           receiveShadow: true,
@@ -697,52 +1900,40 @@ async function spawnVegetation(
     );
   }
 
-  const decorationUrls = [
-    ...FOREST_GRASS,
-    ...FOREST_FLOWERS,
-  ];
-
-  const decorationJobs: Promise<
+  const grassJobs: Promise<
     SpawnedModel | null
   >[] = [];
 
+  /*
+   * هر سه مدل Grass در هر Chunk استفاده می‌شوند.
+   */
   for (
     let index = 0;
-    index < 14;
+    index <
+    FOREST_GRASS.length;
     index++
   ) {
-    const area = pick(
-      areas,
-      random
-    );
+    const position =
+      createVegetationPosition(
+        random,
+        specialType
+      );
 
-    const angle =
-      random() * Math.PI * 2;
-
-    const distance =
-      random() * area.radius;
-
-    decorationJobs.push(
+    grassJobs.push(
       spawnModel(
         modelFromUrl(
-          pick(
-            decorationUrls,
-            random
+          getCycledItem(
+            FOREST_GRASS,
+            chunkX,
+            chunkZ,
+            index
           )
         ),
         chunk,
         {
-          x:
-            area.x +
-            Math.cos(angle) *
-              distance,
-
-          y: 0.04,
-
-          z:
-            area.z +
-            Math.sin(angle) *
-              distance,
+          x: position.x,
+          y: 0.075,
+          z: position.z,
 
           rotationY:
             random() *
@@ -752,15 +1943,80 @@ async function spawnVegetation(
           targetFootprint:
             randomRange(
               random,
-              0.6,
+              0.7,
               1.4
             ),
 
-          maxHeight: 1.8,
+          maxHeight: 1.7,
 
-          verticalMode: "ground",
+          verticalMode:
+            "ground",
 
-          colliderMode: "none",
+          colliderMode:
+            "none",
+
+          castShadow: false,
+          receiveShadow: true,
+          cameraOccluder: false,
+        }
+      )
+    );
+  }
+
+  const flowerJobs: Promise<
+    SpawnedModel | null
+  >[] = [];
+
+  /*
+   * هر هفت مدل گل در هر Chunk استفاده می‌شوند.
+   */
+  for (
+    let index = 0;
+    index <
+    FOREST_FLOWERS.length;
+    index++
+  ) {
+    const position =
+      createVegetationPosition(
+        random,
+        specialType
+      );
+
+    flowerJobs.push(
+      spawnModel(
+        modelFromUrl(
+          getCycledItem(
+            FOREST_FLOWERS,
+            chunkX,
+            chunkZ,
+            index
+          )
+        ),
+        chunk,
+        {
+          x: position.x,
+          y: 0.075,
+          z: position.z,
+
+          rotationY:
+            random() *
+            Math.PI *
+            2,
+
+          targetFootprint:
+            randomRange(
+              random,
+              0.45,
+              1
+            ),
+
+          maxHeight: 1.3,
+
+          verticalMode:
+            "ground",
+
+          colliderMode:
+            "none",
 
           castShadow: false,
           receiveShadow: true,
@@ -777,11 +2033,17 @@ async function spawnVegetation(
     Promise.allSettled(
       treeJobs
     ),
+
     Promise.allSettled(
       bushJobs
     ),
+
     Promise.allSettled(
-      decorationJobs
+      grassJobs
+    ),
+
+    Promise.allSettled(
+      flowerJobs
     ),
   ]);
 
@@ -803,10 +2065,17 @@ export async function generateCity(
   chunkX: number,
   chunkZ: number
 ): Promise<CityGenerationResult> {
-  const random = createRandom(
-    chunkX,
-    chunkZ
-  );
+  const random =
+    createRandom(
+      chunkX,
+      chunkZ
+    );
+
+  const specialType =
+    getSpecialChunkType(
+      chunkX,
+      chunkZ
+    );
 
   const colliders:
     THREE.Box3[] = [];
@@ -815,31 +2084,83 @@ export async function generateCity(
     THREE.Mesh[] = [];
 
   /*
-   * همه گروه‌های مدل هم‌زمان شروع به دانلود و
-   * ساخته‌شدن می‌کنند، نه یکی‌یکی.
+   * زمین، خیابان، کوچه، ترک و لکه‌ها با کد ساخته
+   * می‌شوند. مدل‌های URBAN_STREETS و URBAN_ALLEYS
+   * عمداً استفاده نمی‌شوند.
+   */
+  createGround(chunk);
+
+  createRoads(
+    chunk,
+    specialType
+  );
+
+  createAlleys(
+    chunk,
+    specialType
+  );
+
+  createRoadMarkings(
+    chunk,
+    random,
+    specialType
+  );
+
+  createCracks(
+    chunk,
+    random
+  );
+
+  createDirtPatches(
+    chunk,
+    random
+  );
+
+  /*
+   * تمام گروه‌ها هم‌زمان Load می‌شوند تا زمان
+   * ساخته‌شدن Chunk کمتر شود.
    */
   await Promise.all([
-    spawnRoads(chunk),
-
-    spawnAlleys(chunk),
-
     spawnBuildings(
       chunk,
-      random,
+      chunkX,
+      chunkZ,
+      specialType,
       colliders,
       occluders
     ),
 
     spawnVehicles(
       chunk,
-      random,
+      chunkX,
+      chunkZ,
+      specialType,
+      colliders,
+      occluders
+    ),
+
+    spawnRiverAndBridges(
+      chunk,
+      chunkX,
+      chunkZ,
+      specialType,
+      colliders,
+      occluders
+    ),
+
+    spawnTunnel(
+      chunk,
+      specialType,
       colliders,
       occluders
     ),
 
     spawnVegetation(
       chunk,
+      chunkX,
+      chunkZ,
       random,
+      specialType,
       colliders,
       occluders
     ),
