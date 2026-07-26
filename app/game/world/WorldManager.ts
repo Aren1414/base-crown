@@ -1,93 +1,191 @@
 import * as THREE from "three";
 
-import { generateChunkContent } from "./WorldGenerator";
+import {
+  generateChunkContent,
+  type ChunkBiome,
+} from "./WorldGenerator";
 
 export const CHUNK_SIZE = 120;
 
-const RENDER_DISTANCE = 2;
+export const RENDER_DISTANCE = 1;
 
 export const chunks = new Map<
   string,
   THREE.Group
 >();
 
-function key(
+const generatingChunks = new Map<
+  string,
+  Promise<void>
+>();
+
+function getChunkKey(
   cx: number,
   cz: number
-) {
+): string {
   return `${cx},${cz}`;
 }
 
 export function getChunkCoord(
   x: number,
   z: number
-) {
+): {
+  cx: number;
+  cz: number;
+} {
   return {
     cx: Math.floor(x / CHUNK_SIZE),
     cz: Math.floor(z / CHUNK_SIZE),
   };
 }
 
-function createGround() {
-  const mesh = new THREE.Mesh(
+function createGround(
+  biome: ChunkBiome
+): THREE.Mesh {
+  let color = 0x444444;
+
+  if (biome === "forest") {
+    color = 0x344536;
+  } else if (biome === "mixed") {
+    color = 0x3e463d;
+  }
+
+  const geometry =
     new THREE.PlaneGeometry(
       CHUNK_SIZE,
       CHUNK_SIZE
-    ),
+    );
+
+  const material =
     new THREE.MeshStandardMaterial({
-      color: 0x474747,
-    })
+      color,
+      roughness: 1,
+      metalness: 0,
+    });
+
+  const ground = new THREE.Mesh(
+    geometry,
+    material
   );
 
-  mesh.rotation.x = -Math.PI / 2;
+  ground.rotation.x = -Math.PI / 2;
+  ground.receiveShadow = true;
 
-  mesh.receiveShadow = true;
+  ground.name = "ChunkGround";
+  ground.userData.ownedResource = true;
 
-  return mesh;
+  return ground;
+}
+
+function disposeChunkGround(
+  chunk: THREE.Group
+): void {
+  const ground = chunk.getObjectByName(
+    "ChunkGround"
+  );
+
+  if (!(ground instanceof THREE.Mesh)) {
+    return;
+  }
+
+  ground.geometry.dispose();
+
+  if (Array.isArray(ground.material)) {
+    for (const material of ground.material) {
+      material.dispose();
+    }
+  } else {
+    ground.material.dispose();
+  }
 }
 
 export async function generateChunk(
   scene: THREE.Scene,
   cx: number,
   cz: number
-) {
-  const id = key(cx, cz);
+): Promise<void> {
+  const key = getChunkKey(cx, cz);
 
-  if (chunks.has(id))
+  if (chunks.has(key)) {
     return;
+  }
 
-  const chunk =
-    new THREE.Group();
+  const existingJob =
+    generatingChunks.get(key);
 
-  chunk.position.set(
-    cx * CHUNK_SIZE,
-    0,
-    cz * CHUNK_SIZE
+  if (existingJob) {
+    return existingJob;
+  }
+
+  const generationJob = (async () => {
+    const chunk = new THREE.Group();
+
+    chunk.name = `Chunk_${key}`;
+
+    chunk.position.set(
+      cx * CHUNK_SIZE,
+      0,
+      cz * CHUNK_SIZE
+    );
+
+    chunk.userData.destroyed = false;
+
+    /*
+     * The chunk is registered before models load.
+     * This prevents duplicate chunk generation.
+     */
+    chunks.set(key, chunk);
+    scene.add(chunk);
+
+    try {
+      const {
+        getChunkBiome,
+      } = await import("./WorldGenerator");
+
+      const biome = getChunkBiome(cx, cz);
+
+      chunk.add(
+        createGround(biome)
+      );
+
+      await generateChunkContent(
+        chunk,
+        CHUNK_SIZE,
+        cx,
+        cz
+      );
+    } catch (error) {
+      console.error(
+        `Failed to generate chunk ${key}`,
+        error
+      );
+
+      chunk.userData.destroyed = true;
+
+      disposeChunkGround(chunk);
+      chunk.clear();
+      chunk.removeFromParent();
+
+      chunks.delete(key);
+    } finally {
+      generatingChunks.delete(key);
+    }
+  })();
+
+  generatingChunks.set(
+    key,
+    generationJob
   );
 
-  chunk.add(createGround());
-
-  scene.add(chunk);
-
-  chunks.set(id, chunk);
-
-  await generateChunkContent(
-    chunk,
-    CHUNK_SIZE,
-    cx,
-    cz
-  );
+  return generationJob;
 }
 
 export async function updateChunks(
   scene: THREE.Scene,
   playerX: number,
   playerZ: number
-) {
-  const {
-    cx,
-    cz,
-  } = getChunkCoord(
+): Promise<void> {
+  const { cx, cz } = getChunkCoord(
     playerX,
     playerZ
   );
@@ -105,70 +203,64 @@ export async function updateChunks(
       z++
     ) {
       jobs.push(
-        generateChunk(
-          scene,
-          x,
-          z
-        )
+        generateChunk(scene, x, z)
       );
     }
   }
 
-  await Promise.all(jobs);
+  await Promise.allSettled(jobs);
 
-  destroyFarChunks(cx, cz);
+  destroyFarChunks(
+    playerX,
+    playerZ
+  );
 }
 
 export function destroyFarChunks(
-  currentCX: number,
-  currentCZ: number
-) {
-  for (const [
-    id,
-    chunk,
-  ] of chunks) {
-    const [
-      x,
-      z,
-    ] = id
+  playerX: number,
+  playerZ: number
+): void {
+  const { cx, cz } = getChunkCoord(
+    playerX,
+    playerZ
+  );
+
+  for (const [key, chunk] of chunks) {
+    const [chunkX, chunkZ] = key
       .split(",")
       .map(Number);
 
-    if (
-      Math.abs(
-        x - currentCX
-      ) >
+    const isFar =
+      Math.abs(chunkX - cx) >
         RENDER_DISTANCE ||
-      Math.abs(
-        z - currentCZ
-      ) >
-        RENDER_DISTANCE
-    ) {
-      chunk.traverse(
-        (obj: any) => {
-          if (!obj.isMesh)
-            return;
+      Math.abs(chunkZ - cz) >
+        RENDER_DISTANCE;
 
-          obj.geometry?.dispose();
-
-          if (
-            Array.isArray(
-              obj.material
-            )
-          ) {
-            obj.material.forEach(
-              (m: any) =>
-                m.dispose()
-            );
-          } else {
-            obj.material?.dispose();
-          }
-        }
-      );
-
-      chunk.removeFromParent();
-
-      chunks.delete(id);
+    if (!isFar) {
+      continue;
     }
+
+    chunk.userData.destroyed = true;
+
+    disposeChunkGround(chunk);
+
+    chunk.clear();
+    chunk.removeFromParent();
+
+    chunks.delete(key);
   }
+}
+
+export function destroyAllChunks(): void {
+  for (const [, chunk] of chunks) {
+    chunk.userData.destroyed = true;
+
+    disposeChunkGround(chunk);
+
+    chunk.clear();
+    chunk.removeFromParent();
+  }
+
+  chunks.clear();
+  generatingChunks.clear();
 }
