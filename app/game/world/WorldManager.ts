@@ -1,324 +1,174 @@
-export type ModelDef = {
-  url: string;
-  scale: number;
-  radius: number;
-};
+import * as THREE from "three";
 
-const BASE_URL = "https://pub-15ed8100c073408287949c0bebad27a6.r2.dev";
+import { generateChunkContent } from "./WorldGenerator";
 
-/* ---------------- Streets ---------------- */
+export const CHUNK_SIZE = 120;
 
-export const URBAN_STREETS: ModelDef[] = [
-  {
-    url: `${BASE_URL}/streets/Street1.glb`,
-    scale: 7.5,
-    radius: 15,
-  },
-  {
-    url: `${BASE_URL}/streets/Street2.glb`,
-    scale: 7.5,
-    radius: 15,
-  },
-  {
-    url: `${BASE_URL}/streets/Street3.glb`,
-    scale: 7.5,
-    radius: 15,
-  },
-];
+const RENDER_DISTANCE = 2;
 
-/* ---------------- Alleys ---------------- */
+export const chunks = new Map<
+  string,
+  THREE.Group
+>();
 
-export const URBAN_ALLEYS: ModelDef[] = [
-  {
-    url: `${BASE_URL}/alleys/Alley1.glb`,
-    scale: 7.5,
-    radius: 12,
-  },
-  {
-    url: `${BASE_URL}/alleys/Alley2.glb`,
-    scale: 7.5,
-    radius: 12,
-  },
-  {
-    url: `${BASE_URL}/alleys/Alley3.glb`,
-    scale: 7.5,
-    radius: 12,
-  },
-  {
-    url: `${BASE_URL}/Connecting_alley_and_street/Connecting_alley_and_street.glb`,
-    scale: 7.5,
-    radius: 12,
-  },
-];
+function key(
+  cx: number,
+  cz: number
+) {
+  return `${cx},${cz}`;
+}
 
-/* ---------------- Buildings ---------------- */
+export function getChunkCoord(
+  x: number,
+  z: number
+) {
+  return {
+    cx: Math.floor(x / CHUNK_SIZE),
+    cz: Math.floor(z / CHUNK_SIZE),
+  };
+}
 
-export const URBAN_BUILDINGS: ModelDef[] = [
+function createGround() {
+  const mesh = new THREE.Mesh(
+    new THREE.PlaneGeometry(
+      CHUNK_SIZE,
+      CHUNK_SIZE
+    ),
+    new THREE.MeshStandardMaterial({
+      color: 0x474747,
+    })
+  );
 
-  {
-    url: `${BASE_URL}/Buildings/Urban_building1.glb`,
-    scale: 4.8,
-    radius: 10,
-  },
+  mesh.rotation.x = -Math.PI / 2;
 
-  {
-    url: `${BASE_URL}/Buildings/Urban_building2.glb`,
-    scale: 5.1,
-    radius: 10,
-  },
+  mesh.receiveShadow = true;
 
-  {
-    url: `${BASE_URL}/Buildings/Urban_building3.glb`,
-    scale: 5.4,
-    radius: 11,
-  },
+  return mesh;
+}
 
-  {
-    url: `${BASE_URL}/Buildings/Urban_building4.glb`,
-    scale: 5.8,
-    radius: 11,
-  },
+export async function generateChunk(
+  scene: THREE.Scene,
+  cx: number,
+  cz: number
+) {
+  const id = key(cx, cz);
 
-  {
-    url: `${BASE_URL}/Buildings/Urban_building5.glb`,
-    scale: 6.0,
-    radius: 12,
-  },
+  if (chunks.has(id))
+    return;
 
-  {
-    url: `${BASE_URL}/Buildings/Urban_building6.glb`,
-    scale: 6.2,
-    radius: 12,
-  },
+  const chunk =
+    new THREE.Group();
 
-  {
-    url: `${BASE_URL}/Buildings/Urban_building7.glb`,
-    scale: 6.5,
-    radius: 13,
-  },
+  chunk.position.set(
+    cx * CHUNK_SIZE,
+    0,
+    cz * CHUNK_SIZE
+  );
 
-  {
-    url: `${BASE_URL}/Buildings/Urban_building8.glb`,
-    scale: 6.8,
-    radius: 13,
-  },
+  chunk.add(createGround());
 
-  {
-    url: `${BASE_URL}/Buildings/Urban_building9.glb`,
-    scale: 7.0,
-    radius: 14,
-  },
+  scene.add(chunk);
 
-  {
-    url: `${BASE_URL}/Buildings/Urban_building10.glb`,
-    scale: 7.2,
-    radius: 14,
-  },
+  chunks.set(id, chunk);
 
-  {
-    url: `${BASE_URL}/Buildings/Urban_building11.glb`,
-    scale: 7.4,
-    radius: 15,
-  },
+  await generateChunkContent(
+    chunk,
+    CHUNK_SIZE,
+    cx,
+    cz
+  );
+}
 
-  {
-    url: `${BASE_URL}/Buildings/Villa_house1.glb`,
-    scale: 3.6,
-    radius: 8,
-  },
+export async function updateChunks(
+  scene: THREE.Scene,
+  playerX: number,
+  playerZ: number
+) {
+  const {
+    cx,
+    cz,
+  } = getChunkCoord(
+    playerX,
+    playerZ
+  );
 
-  {
-    url: `${BASE_URL}/Buildings/Villa_house2.glb`,
-    scale: 3.8,
-    radius: 8,
-  },
+  const jobs: Promise<void>[] = [];
 
-  {
-    url: `${BASE_URL}/Buildings/Villa_house3.glb`,
-    scale: 4.0,
-    radius: 8,
-  },
+  for (
+    let x = cx - RENDER_DISTANCE;
+    x <= cx + RENDER_DISTANCE;
+    x++
+  ) {
+    for (
+      let z = cz - RENDER_DISTANCE;
+      z <= cz + RENDER_DISTANCE;
+      z++
+    ) {
+      jobs.push(
+        generateChunk(
+          scene,
+          x,
+          z
+        )
+      );
+    }
+  }
 
-];
+  await Promise.all(jobs);
 
-/* ---------------- Vehicles ---------------- */
+  destroyFarChunks(cx, cz);
+}
 
-export const URBAN_VEHICLES: ModelDef[] = [
+export function destroyFarChunks(
+  currentCX: number,
+  currentCZ: number
+) {
+  for (const [
+    id,
+    chunk,
+  ] of chunks) {
+    const [
+      x,
+      z,
+    ] = id
+      .split(",")
+      .map(Number);
 
-  {
-    url: `${BASE_URL}/vehicles/Ambulance_car.glb`,
-    scale: 3,
-    radius: 2,
-  },
+    if (
+      Math.abs(
+        x - currentCX
+      ) >
+        RENDER_DISTANCE ||
+      Math.abs(
+        z - currentCZ
+      ) >
+        RENDER_DISTANCE
+    ) {
+      chunk.traverse(
+        (obj: any) => {
+          if (!obj.isMesh)
+            return;
 
-  {
-    url: `${BASE_URL}/vehicles/Motorcycle.glb`,
-    scale: 2,
-    radius: 1,
-  },
+          obj.geometry?.dispose();
 
-  {
-    url: `${BASE_URL}/vehicles/Pickup_truck.glb`,
-    scale: 3,
-    radius: 2,
-  },
+          if (
+            Array.isArray(
+              obj.material
+            )
+          ) {
+            obj.material.forEach(
+              (m: any) =>
+                m.dispose()
+            );
+          } else {
+            obj.material?.dispose();
+          }
+        }
+      );
 
-  {
-    url: `${BASE_URL}/vehicles/Police_car.glb`,
-    scale: 3,
-    radius: 2,
-  },
+      chunk.removeFromParent();
 
-  {
-    url: `${BASE_URL}/vehicles/Sports_car1.glb`,
-    scale: 3,
-    radius: 2,
-  },
-
-  {
-    url: `${BASE_URL}/vehicles/Sports_car2.glb`,
-    scale: 3,
-    radius: 2,
-  },
-
-  {
-    url: `${BASE_URL}/vehicles/Sports_car3.glb`,
-    scale: 3,
-    radius: 2,
-  },
-
-  {
-    url: `${BASE_URL}/vehicles/Van_car.glb`,
-    scale: 3.3,
-    radius: 2.2,
-  },
-
-];
-
-/* ---------------- Tunnel ---------------- */
-
-export const URBAN_TUNNEL: ModelDef[] = [
-
-  {
-    url: `${BASE_URL}/Tunnel/Tunnel.glb`,
-    scale: 6,
-    radius: 18,
-  },
-
-  {
-    url: `${BASE_URL}/Tunnel/Tunnel_wall1.glb`,
-    scale: 6,
-    radius: 18,
-  },
-
-  {
-    url: `${BASE_URL}/Tunnel/Tunnel_wall2.glb`,
-    scale: 6,
-    radius: 18,
-  },
-
-  {
-    url: `${BASE_URL}/Tunnel/Tunnel_wall3.glb`,
-    scale: 6,
-    radius: 18,
-  },
-
-  {
-    url: `${BASE_URL}/Tunnel/Tunnel_wall4.glb`,
-    scale: 6,
-    radius: 18,
-  },
-
-];
-
-/* ---------------- Bridges ---------------- */
-
-export const URBAN_BRIDGES: ModelDef[] = [
-
-  {
-    url: `${BASE_URL}/Bridges/Crescent_Bridge.glb`,
-    scale: 6.5,
-    radius: 20,
-  },
-
-  {
-    url: `${BASE_URL}/Bridges/Stone_bridge.glb`,
-    scale: 6.5,
-    radius: 20,
-  },
-
-  {
-    url: `${BASE_URL}/Bridges/Urban_bridge1.glb`,
-    scale: 6.5,
-    radius: 20,
-  },
-
-  {
-    url: `${BASE_URL}/Bridges/Urban_bridge2.glb`,
-    scale: 6.5,
-    radius: 20,
-  },
-
-];
-
-/* ---------------- River ---------------- */
-
-export const URBAN_RIVER: ModelDef[] = [
-
-  {
-    url: `${BASE_URL}/river/River.glb`,
-    scale: 6.5,
-    radius: 25,
-  },
-
-];
-
-/* ---------------- Forest ---------------- */
-
-export const FOREST_TREES = [
-`${BASE_URL}/Plants_and_trees/glTF/BirchTree_1.gltf`,
-`${BASE_URL}/Plants_and_trees/glTF/BirchTree_2.gltf`,
-`${BASE_URL}/Plants_and_trees/glTF/BirchTree_3.gltf`,
-`${BASE_URL}/Plants_and_trees/glTF/BirchTree_4.gltf`,
-`${BASE_URL}/Plants_and_trees/glTF/BirchTree_5.gltf`,
-`${BASE_URL}/Plants_and_trees/glTF/MapleTree_1.gltf`,
-`${BASE_URL}/Plants_and_trees/glTF/MapleTree_2.gltf`,
-`${BASE_URL}/Plants_and_trees/glTF/MapleTree_3.gltf`,
-`${BASE_URL}/Plants_and_trees/glTF/MapleTree_4.gltf`,
-`${BASE_URL}/Plants_and_trees/glTF/MapleTree_5.gltf`,
-`${BASE_URL}/Plants_and_trees/glTF/DeadTree_1.gltf`,
-`${BASE_URL}/Plants_and_trees/glTF/DeadTree_2.gltf`,
-`${BASE_URL}/Plants_and_trees/glTF/DeadTree_3.gltf`,
-`${BASE_URL}/Plants_and_trees/glTF/DeadTree_4.gltf`,
-`${BASE_URL}/Plants_and_trees/glTF/DeadTree_5.gltf`,
-`${BASE_URL}/Plants_and_trees/glTF/DeadTree_6.gltf`,
-`${BASE_URL}/Plants_and_trees/glTF/DeadTree_7.gltf`,
-`${BASE_URL}/Plants_and_trees/glTF/DeadTree_8.gltf`,
-`${BASE_URL}/Plants_and_trees/glTF/DeadTree_9.gltf`,
-`${BASE_URL}/Plants_and_trees/glTF/DeadTree_10.gltf`,
-];
-
-export const FOREST_BUSHES = [
-`${BASE_URL}/Plants_and_trees/glTF/Bush.gltf`,
-`${BASE_URL}/Plants_and_trees/glTF/Bush_Small.gltf`,
-`${BASE_URL}/Plants_and_trees/glTF/Bush_Large.gltf`,
-`${BASE_URL}/Plants_and_trees/glTF/Bush_Flowers.gltf`,
-`${BASE_URL}/Plants_and_trees/glTF/Bush_Large_Flowers.gltf`,
-`${BASE_URL}/Plants_and_trees/glTF/Bush_Small_Flowers.gltf`,
-];
-
-export const FOREST_GRASS = [
-`${BASE_URL}/Plants_and_trees/glTF/Grass_Large.gltf`,
-`${BASE_URL}/Plants_and_trees/glTF/Grass_Large_Extruded.gltf`,
-`${BASE_URL}/Plants_and_trees/glTF/Grass_Small.gltf`,
-];
-
-export const FOREST_FLOWERS = [
-`${BASE_URL}/Plants_and_trees/glTF/Flower_1.gltf`,
-`${BASE_URL}/Plants_and_trees/glTF/Flower_1_Clump.gltf`,
-`${BASE_URL}/Plants_and_trees/glTF/Flower_2.gltf`,
-`${BASE_URL}/Plants_and_trees/glTF/Flower_2_Clump.gltf`,
-`${BASE_URL}/Plants_and_trees/glTF/Flower_3_Clump.gltf`,
-`${BASE_URL}/Plants_and_trees/glTF/Flower_4_Clump.gltf`,
-`${BASE_URL}/Plants_and_trees/glTF/Flower_5_Clump.gltf`,
-];
+      chunks.delete(id);
+    }
+  }
+}
