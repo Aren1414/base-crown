@@ -14,6 +14,7 @@ import {
 
 import {
   spawnModel,
+  type SpawnedModel,
 } from "./AssetLoader";
 
 export const CITY_CHUNK_SIZE = 120;
@@ -29,15 +30,15 @@ const MOTORCYCLE_SIZE = 3.2;
 
 type RandomFunction = () => number;
 
-export type CityGenerationResult = {
-  colliders: THREE.Box3[];
-  occluders: THREE.Mesh[];
-};
-
 type Placement = {
   x: number;
   z: number;
   rotationY: number;
+};
+
+export type CityGenerationResult = {
+  colliders: THREE.Box3[];
+  occluders: THREE.Mesh[];
 };
 
 function createRandom(
@@ -45,14 +46,8 @@ function createRandom(
   chunkZ: number
 ): RandomFunction {
   let seed =
-    Math.imul(
-      chunkX + 10000,
-      374761393
-    ) ^
-    Math.imul(
-      chunkZ + 20000,
-      668265263
-    );
+    Math.imul(chunkX + 10000, 374761393) ^
+    Math.imul(chunkZ + 20000, 668265263);
 
   seed >>>= 0;
 
@@ -85,9 +80,7 @@ function pick<T>(
   random: RandomFunction
 ): T {
   return array[
-    Math.floor(
-      random() * array.length
-    )
+    Math.floor(random() * array.length)
   ];
 }
 
@@ -96,10 +89,7 @@ function randomRange(
   min: number,
   max: number
 ): number {
-  return (
-    min +
-    random() * (max - min)
-  );
+  return min + random() * (max - min);
 }
 
 function isVilla(
@@ -119,41 +109,41 @@ function isMotorcycle(
 }
 
 function modelFromUrl(
-  url: string,
-  scale: number
+  url: string
 ): ModelDef {
   return {
     url,
-    scale,
+    scale: 1,
   };
 }
 
-function collectResult(
-  result:
-    | Awaited<
-        ReturnType<
-          typeof spawnModel
-        >
-      >
-    | null,
+function collectSpawnedModels(
+  results: PromiseSettledResult<
+    SpawnedModel | null
+  >[],
   colliders: THREE.Box3[],
   occluders: THREE.Mesh[]
 ): void {
-  if (!result) {
-    return;
+  for (const result of results) {
+    if (
+      result.status !== "fulfilled" ||
+      !result.value
+    ) {
+      continue;
+    }
+
+    colliders.push(
+      ...result.value.colliders
+    );
+
+    occluders.push(
+      ...result.value.occluders
+    );
   }
-
-  colliders.push(
-    ...result.colliders
-  );
-
-  occluders.push(
-    ...result.occluders
-  );
 }
 
 function getRoadTiles(): Placement[] {
-  const result: Placement[] = [];
+  const tiles: Placement[] = [];
 
   const segmentPositions = [
     -45,
@@ -162,12 +152,10 @@ function getRoadTiles(): Placement[] {
     45,
   ];
 
-  /*
-   * دو خیابان افقی متصل
-   */
+  // دو خیابان افقی
   for (const z of [-30, 30]) {
     for (const x of segmentPositions) {
-      result.push({
+      tiles.push({
         x,
         z,
         rotationY: 0,
@@ -175,44 +163,39 @@ function getRoadTiles(): Placement[] {
     }
   }
 
-  /*
-   * دو خیابان عمودی متصل
-   */
+  // دو خیابان عمودی
   for (const x of [-30, 30]) {
     for (const z of segmentPositions) {
-      result.push({
+      tiles.push({
         x,
         z,
-        rotationY:
-          Math.PI / 2,
+        rotationY: Math.PI / 2,
       });
     }
   }
 
-  return result;
+  return tiles;
 }
 
 function getAlleyTiles(): Placement[] {
   return [
     {
       x: 0,
-      z: -48,
-      rotationY:
-        Math.PI / 2,
+      z: -49,
+      rotationY: Math.PI / 2,
     },
     {
       x: 0,
-      z: 48,
-      rotationY:
-        Math.PI / 2,
+      z: 49,
+      rotationY: Math.PI / 2,
     },
     {
-      x: -48,
+      x: -49,
       z: 0,
       rotationY: 0,
     },
     {
-      x: 48,
+      x: 49,
       z: 0,
       rotationY: 0,
     },
@@ -240,14 +223,12 @@ function getBuildingSlots(): Placement[] {
     {
       x: -49,
       z: 0,
-      rotationY:
-        -Math.PI / 2,
+      rotationY: -Math.PI / 2,
     },
     {
       x: 49,
       z: 0,
-      rotationY:
-        Math.PI / 2,
+      rotationY: Math.PI / 2,
     },
 
     {
@@ -294,87 +275,88 @@ function getVehicleSlots(): Placement[] {
     {
       x: -34,
       z: -44,
-      rotationY:
-        Math.PI / 2,
+      rotationY: Math.PI / 2,
     },
     {
       x: -26,
       z: 5,
-      rotationY:
-        -Math.PI / 2,
+      rotationY: -Math.PI / 2,
     },
     {
       x: 26,
       z: 44,
-      rotationY:
-        Math.PI / 2,
+      rotationY: Math.PI / 2,
     },
     {
       x: 34,
       z: -5,
-      rotationY:
-        -Math.PI / 2,
+      rotationY: -Math.PI / 2,
     },
   ];
 }
 
 async function spawnRoads(
-  chunk: THREE.Group,
-  colliders: THREE.Box3[]
+  chunk: THREE.Group
 ): Promise<void> {
   const tiles = getRoadTiles();
 
-  for (
-    let index = 0;
-    index < tiles.length;
-    index++
-  ) {
-    const tile = tiles[index];
+  /*
+   * یک مدل برای مسیرهای افقی و یک مدل برای
+   * مسیرهای عمودی انتخاب می‌شود تا خیابان‌ها
+   * منظم‌تر و هماهنگ‌تر باشند.
+   */
+  const horizontalStreet =
+    URBAN_STREETS[0];
 
-    const street =
-      URBAN_STREETS[
-        index %
-          URBAN_STREETS.length
-      ];
+  const verticalStreet =
+    URBAN_STREETS[
+      Math.min(
+        1,
+        URBAN_STREETS.length - 1
+      )
+    ];
 
-    const result =
-      await spawnModel(
-        street,
-        chunk,
-        {
-          x: tile.x,
-          y: 0.04,
-          z: tile.z,
+  const jobs = tiles.map((tile) => {
+    const horizontal =
+      Math.abs(tile.rotationY) < 0.01;
 
-          rotationY:
-            tile.rotationY,
+    return spawnModel(
+      horizontal
+        ? horizontalStreet
+        : verticalStreet,
+      chunk,
+      {
+        x: tile.x,
+        y: 0.04,
+        z: tile.z,
 
-          targetFootprint:
-            ROAD_TILE_SIZE,
+        rotationY: tile.rotationY,
 
-          verticalMode:
-            "center-surface",
+        targetFootprint:
+          ROAD_TILE_SIZE,
 
-          colliderMode: "mesh",
-          colliderPadding: 0.08,
+        verticalMode:
+          "center-surface",
 
-          castShadow: false,
-          receiveShadow: true,
-          cameraOccluder: false,
-        }
-      );
+        /*
+         * مهم:
+         * خیابان Collider ندارد.
+         * کاراکتر باید بتواند روی آن حرکت کند.
+         */
+        colliderMode: "none",
 
-    if (result) {
-      colliders.push(
-        ...result.colliders
-      );
-    }
-  }
+        castShadow: false,
+        receiveShadow: true,
+        cameraOccluder: false,
+      }
+    );
+  });
+
+  await Promise.allSettled(jobs);
 }
 
 async function spawnAlleys(
-  chunk: THREE.Group,
-  colliders: THREE.Box3[]
+  chunk: THREE.Group
 ): Promise<void> {
   if (URBAN_ALLEYS.length === 0) {
     return;
@@ -382,22 +364,13 @@ async function spawnAlleys(
 
   const tiles = getAlleyTiles();
 
-  for (
-    let index = 0;
-    index < tiles.length;
-    index++
-  ) {
-    const tile = tiles[index];
-
-    const alley =
-      URBAN_ALLEYS[
-        index %
-          URBAN_ALLEYS.length
-      ];
-
-    const result =
-      await spawnModel(
-        alley,
+  const jobs = tiles.map(
+    (tile, index) =>
+      spawnModel(
+        URBAN_ALLEYS[
+          index %
+            URBAN_ALLEYS.length
+        ],
         chunk,
         {
           x: tile.x,
@@ -413,21 +386,19 @@ async function spawnAlleys(
           verticalMode:
             "center-surface",
 
-          colliderMode: "mesh",
-          colliderPadding: 0.05,
+          /*
+           * کوچه هم سطح قابل حرکت است.
+           */
+          colliderMode: "none",
 
           castShadow: false,
           receiveShadow: true,
           cameraOccluder: false,
         }
-      );
+      )
+  );
 
-    if (result) {
-      colliders.push(
-        ...result.colliders
-      );
-    }
-  }
+  await Promise.allSettled(jobs);
 }
 
 async function spawnBuildings(
@@ -436,25 +407,18 @@ async function spawnBuildings(
   colliders: THREE.Box3[],
   occluders: THREE.Mesh[]
 ): Promise<void> {
-  const slots =
-    getBuildingSlots();
-
-  for (const slot of slots) {
-    if (random() < 0.08) {
-      continue;
-    }
-
-    const building =
-      pick(
+  const jobs = getBuildingSlots()
+    .filter(() => random() >= 0.08)
+    .map((slot) => {
+      const building = pick(
         URBAN_BUILDINGS,
         random
       );
 
-    const villa =
-      isVilla(building);
+      const villa =
+        isVilla(building);
 
-    const result =
-      await spawnModel(
+      return spawnModel(
         building,
         chunk,
         {
@@ -476,6 +440,7 @@ async function spawnBuildings(
           verticalMode: "ground",
 
           colliderMode: "mesh",
+
           colliderPadding:
             villa ? 0.15 : 0.2,
 
@@ -484,13 +449,16 @@ async function spawnBuildings(
           cameraOccluder: true,
         }
       );
+    });
 
-    collectResult(
-      result,
-      colliders,
-      occluders
-    );
-  }
+  const results =
+    await Promise.allSettled(jobs);
+
+  collectSpawnedModels(
+    results,
+    colliders,
+    occluders
+  );
 }
 
 async function spawnVehicles(
@@ -499,40 +467,30 @@ async function spawnVehicles(
   colliders: THREE.Box3[],
   occluders: THREE.Mesh[]
 ): Promise<void> {
-  const slots =
-    getVehicleSlots();
-
-  for (const slot of slots) {
-    if (random() > 0.48) {
-      continue;
-    }
-
-    const vehicle =
-      pick(
+  const jobs = getVehicleSlots()
+    .filter(() => random() <= 0.48)
+    .map((slot) => {
+      const vehicle = pick(
         URBAN_VEHICLES,
         random
       );
 
-    const motorcycle =
-      isMotorcycle(vehicle);
+      const motorcycle =
+        isMotorcycle(vehicle);
 
-    const result =
-      await spawnModel(
+      return spawnModel(
         vehicle,
         chunk,
         {
           x: slot.x,
           y: motorcycle
-            ? 0.15
-            : 0.1,
+            ? 0.12
+            : 0.08,
           z: slot.z,
 
           rotationY:
             slot.rotationY,
 
-          /*
-           * موتور به پهلو روی زمین قرار می‌گیرد.
-           */
           rotationZ:
             motorcycle
               ? Math.PI / 2
@@ -558,13 +516,16 @@ async function spawnVehicles(
           cameraOccluder: true,
         }
       );
+    });
 
-    collectResult(
-      result,
-      colliders,
-      occluders
-    );
-  }
+  const results =
+    await Promise.allSettled(jobs);
+
+  collectSpawnedModels(
+    results,
+    colliders,
+    occluders
+  );
 }
 
 async function spawnVegetation(
@@ -573,73 +534,69 @@ async function spawnVegetation(
   colliders: THREE.Box3[],
   occluders: THREE.Mesh[]
 ): Promise<void> {
-  const vegetationAreas = [
+  const areas = [
     {
-      centerX: 0,
-      centerZ: 0,
-      radius: 11,
+      x: 0,
+      z: 0,
+      radius: 10,
     },
     {
-      centerX: -50,
-      centerZ: 18,
-      radius: 7,
+      x: -50,
+      z: 18,
+      radius: 6,
     },
     {
-      centerX: 50,
-      centerZ: -18,
-      radius: 7,
+      x: 50,
+      z: -18,
+      radius: 6,
     },
     {
-      centerX: -18,
-      centerZ: 50,
-      radius: 7,
+      x: -18,
+      z: 50,
+      radius: 6,
     },
     {
-      centerX: 18,
-      centerZ: -50,
-      radius: 7,
+      x: 18,
+      z: -50,
+      radius: 6,
     },
   ];
 
-  /*
-   * درخت‌ها
-   */
-  for (let index = 0; index < 7; index++) {
-    const area =
-      pick(
-        vegetationAreas,
-        random
-      );
+  const treeJobs: Promise<
+    SpawnedModel | null
+  >[] = [];
+
+  for (let index = 0; index < 5; index++) {
+    const area = pick(
+      areas,
+      random
+    );
 
     const angle =
-      random() *
-      Math.PI *
-      2;
+      random() * Math.PI * 2;
 
     const distance =
-      random() *
-      area.radius;
+      random() * area.radius;
 
-    const result =
-      await spawnModel(
+    treeJobs.push(
+      spawnModel(
         modelFromUrl(
           pick(
             FOREST_TREES,
             random
-          ),
-          1
+          )
         ),
         chunk,
         {
           x:
-            area.centerX +
+            area.x +
             Math.cos(angle) *
               distance,
 
           y: 0.06,
 
           z:
-            area.centerZ +
+            area.z +
             Math.sin(angle) *
               distance,
 
@@ -652,73 +609,64 @@ async function spawnVegetation(
             randomRange(
               random,
               4,
-              6
+              5.5
             ),
 
           maxHeight:
             randomRange(
               random,
               10,
-              16
+              15
             ),
 
           verticalMode: "ground",
 
           colliderMode: "mesh",
-          colliderPadding: 0.2,
+          colliderPadding: 0.25,
 
           castShadow: true,
           receiveShadow: true,
           cameraOccluder: true,
         }
-      );
-
-    collectResult(
-      result,
-      colliders,
-      occluders
+      )
     );
   }
 
-  /*
-   * بوته‌ها
-   */
-  for (let index = 0; index < 12; index++) {
-    const area =
-      pick(
-        vegetationAreas,
-        random
-      );
+  const bushJobs: Promise<
+    SpawnedModel | null
+  >[] = [];
+
+  for (let index = 0; index < 8; index++) {
+    const area = pick(
+      areas,
+      random
+    );
 
     const angle =
-      random() *
-      Math.PI *
-      2;
+      random() * Math.PI * 2;
 
     const distance =
-      random() *
-      area.radius;
+      random() * area.radius;
 
-    const result =
-      await spawnModel(
+    bushJobs.push(
+      spawnModel(
         modelFromUrl(
           pick(
             FOREST_BUSHES,
             random
-          ),
-          1
+          )
         ),
         chunk,
         {
           x:
-            area.centerX +
+            area.x +
             Math.cos(angle) *
               distance,
 
           y: 0.05,
 
           z:
-            area.centerZ +
+            area.z +
             Math.sin(angle) *
               distance,
 
@@ -730,8 +678,8 @@ async function spawnVegetation(
           targetFootprint:
             randomRange(
               random,
-              1.5,
-              3
+              1.4,
+              2.6
             ),
 
           maxHeight: 3,
@@ -745,85 +693,109 @@ async function spawnVegetation(
           receiveShadow: true,
           cameraOccluder: false,
         }
-      );
-
-    collectResult(
-      result,
-      colliders,
-      occluders
+      )
     );
   }
 
-  /*
-   * چمن‌ها و گل‌ها Collision ندارند.
-   */
-  const decorations = [
+  const decorationUrls = [
     ...FOREST_GRASS,
     ...FOREST_FLOWERS,
   ];
 
-  for (let index = 0; index < 22; index++) {
-    const area =
-      pick(
-        vegetationAreas,
-        random
-      );
+  const decorationJobs: Promise<
+    SpawnedModel | null
+  >[] = [];
+
+  for (
+    let index = 0;
+    index < 14;
+    index++
+  ) {
+    const area = pick(
+      areas,
+      random
+    );
 
     const angle =
-      random() *
-      Math.PI *
-      2;
+      random() * Math.PI * 2;
 
     const distance =
-      random() *
-      area.radius;
+      random() * area.radius;
 
-    await spawnModel(
-      modelFromUrl(
-        pick(
-          decorations,
-          random
+    decorationJobs.push(
+      spawnModel(
+        modelFromUrl(
+          pick(
+            decorationUrls,
+            random
+          )
         ),
-        1
-      ),
-      chunk,
-      {
-        x:
-          area.centerX +
-          Math.cos(angle) *
-            distance,
+        chunk,
+        {
+          x:
+            area.x +
+            Math.cos(angle) *
+              distance,
 
-        y: 0.04,
+          y: 0.04,
 
-        z:
-          area.centerZ +
-          Math.sin(angle) *
-            distance,
+          z:
+            area.z +
+            Math.sin(angle) *
+              distance,
 
-        rotationY:
-          random() *
-          Math.PI *
-          2,
+          rotationY:
+            random() *
+            Math.PI *
+            2,
 
-        targetFootprint:
-          randomRange(
-            random,
-            0.6,
-            1.5
-          ),
+          targetFootprint:
+            randomRange(
+              random,
+              0.6,
+              1.4
+            ),
 
-        maxHeight: 1.8,
+          maxHeight: 1.8,
 
-        verticalMode: "ground",
+          verticalMode: "ground",
 
-        colliderMode: "none",
+          colliderMode: "none",
 
-        castShadow: false,
-        receiveShadow: true,
-        cameraOccluder: false,
-      }
+          castShadow: false,
+          receiveShadow: true,
+          cameraOccluder: false,
+        }
+      )
     );
   }
+
+  const [
+    treeResults,
+    bushResults,
+  ] = await Promise.all([
+    Promise.allSettled(
+      treeJobs
+    ),
+    Promise.allSettled(
+      bushJobs
+    ),
+    Promise.allSettled(
+      decorationJobs
+    ),
+  ]);
+
+  collectSpawnedModels(
+    treeResults,
+    colliders,
+    occluders
+  );
+
+  collectSpawnedModels(
+    bushResults,
+    colliders,
+    occluders
+  );
 }
 
 export async function generateCity(
@@ -831,11 +803,10 @@ export async function generateCity(
   chunkX: number,
   chunkZ: number
 ): Promise<CityGenerationResult> {
-  const random =
-    createRandom(
-      chunkX,
-      chunkZ
-    );
+  const random = createRandom(
+    chunkX,
+    chunkZ
+  );
 
   const colliders:
     THREE.Box3[] = [];
@@ -843,36 +814,36 @@ export async function generateCity(
   const occluders:
     THREE.Mesh[] = [];
 
-  await spawnRoads(
-    chunk,
-    colliders
-  );
+  /*
+   * همه گروه‌های مدل هم‌زمان شروع به دانلود و
+   * ساخته‌شدن می‌کنند، نه یکی‌یکی.
+   */
+  await Promise.all([
+    spawnRoads(chunk),
 
-  await spawnAlleys(
-    chunk,
-    colliders
-  );
+    spawnAlleys(chunk),
 
-  await spawnBuildings(
-    chunk,
-    random,
-    colliders,
-    occluders
-  );
+    spawnBuildings(
+      chunk,
+      random,
+      colliders,
+      occluders
+    ),
 
-  await spawnVehicles(
-    chunk,
-    random,
-    colliders,
-    occluders
-  );
+    spawnVehicles(
+      chunk,
+      random,
+      colliders,
+      occluders
+    ),
 
-  await spawnVegetation(
-    chunk,
-    random,
-    colliders,
-    occluders
-  );
+    spawnVegetation(
+      chunk,
+      random,
+      colliders,
+      occluders
+    ),
+  ]);
 
   return {
     colliders,
