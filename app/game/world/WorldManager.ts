@@ -5,15 +5,10 @@ import {
   generateCity,
 } from "./CityGenerator";
 
-export const CHUNK_SIZE =
-  CITY_CHUNK_SIZE;
-
+export const CHUNK_SIZE = CITY_CHUNK_SIZE;
 export const RENDER_DISTANCE = 1;
 
-export const chunks = new Map<
-  string,
-  THREE.Group
->();
+export const chunks = new Map<string, THREE.Group>();
 
 const chunkColliders = new Map<
   string,
@@ -40,25 +35,18 @@ export function getChunkCoord(
   cz: number;
 } {
   return {
-    cx: Math.floor(
-      x / CHUNK_SIZE
-    ),
-
-    cz: Math.floor(
-      z / CHUNK_SIZE
-    ),
+    cx: Math.floor(x / CHUNK_SIZE),
+    cz: Math.floor(z / CHUNK_SIZE),
   };
 }
 
 function createGround(): THREE.Mesh {
-  const geometry =
-    new THREE.PlaneGeometry(
-      CHUNK_SIZE,
-      CHUNK_SIZE
-    );
+  const geometry = new THREE.PlaneGeometry(
+    CHUNK_SIZE,
+    CHUNK_SIZE
+  );
 
-  geometry.userData.chunkOwned =
-    true;
+  geometry.userData.chunkOwned = true;
 
   const material =
     new THREE.MeshStandardMaterial({
@@ -67,22 +55,16 @@ function createGround(): THREE.Mesh {
       metalness: 0,
     });
 
-  material.userData.chunkOwned =
-    true;
+  material.userData.chunkOwned = true;
 
-  const ground =
-    new THREE.Mesh(
-      geometry,
-      material
-    );
+  const ground = new THREE.Mesh(
+    geometry,
+    material
+  );
 
   ground.name = "ChunkGround";
-
-  ground.rotation.x =
-    -Math.PI / 2;
-
+  ground.rotation.x = -Math.PI / 2;
   ground.position.y = -0.04;
-
   ground.receiveShadow = true;
 
   return ground;
@@ -102,8 +84,7 @@ function disposeChunkResources(
       return;
     }
 
-    const geometry =
-      object.geometry;
+    const geometry = object.geometry;
 
     if (
       geometry?.userData.chunkOwned &&
@@ -113,15 +94,13 @@ function disposeChunkResources(
       geometry.dispose();
     }
 
-    const objectMaterials =
-      Array.isArray(object.material)
-        ? object.material
-        : [object.material];
+    const objectMaterials = Array.isArray(
+      object.material
+    )
+      ? object.material
+      : [object.material];
 
-    for (
-      const material
-      of objectMaterials
-    ) {
+    for (const material of objectMaterials) {
       if (
         material?.userData.chunkOwned &&
         !materials.has(material)
@@ -138,13 +117,19 @@ export async function generateChunk(
   chunkX: number,
   chunkZ: number
 ): Promise<void> {
-  const key =
-    getChunkKey(
-      chunkX,
-      chunkZ
-    );
+  const key = getChunkKey(
+    chunkX,
+    chunkZ
+  );
 
   if (chunks.has(key)) {
+    const activeJob =
+      generatingChunks.get(key);
+
+    if (activeJob) {
+      await activeJob;
+    }
+
     return;
   }
 
@@ -152,15 +137,14 @@ export async function generateChunk(
     generatingChunks.get(key);
 
   if (existingJob) {
-    return existingJob;
+    await existingJob;
+    return;
   }
 
   const job = (async () => {
-    const chunk =
-      new THREE.Group();
+    const chunk = new THREE.Group();
 
-    chunk.name =
-      `CityChunk_${key}`;
+    chunk.name = `CityChunk_${key}`;
 
     chunk.position.set(
       chunkX * CHUNK_SIZE,
@@ -168,28 +152,21 @@ export async function generateChunk(
       chunkZ * CHUNK_SIZE
     );
 
-    chunk.userData.destroyed =
-      false;
+    chunk.userData.destroyed = false;
 
     chunks.set(key, chunk);
-
     scene.add(chunk);
 
-    chunk.add(
-      createGround()
-    );
+    chunk.add(createGround());
 
     try {
-      const result =
-        await generateCity(
-          chunk,
-          chunkX,
-          chunkZ
-        );
+      const result = await generateCity(
+        chunk,
+        chunkX,
+        chunkZ
+      );
 
-      if (
-        chunk.userData.destroyed
-      ) {
+      if (chunk.userData.destroyed) {
         return;
       }
 
@@ -199,7 +176,7 @@ export async function generateChunk(
       );
     } catch (error) {
       console.error(
-        `Failed to generate chunk ${key}`,
+        `Failed to generate chunk ${key}:`,
         error
       );
     } finally {
@@ -207,12 +184,9 @@ export async function generateChunk(
     }
   })();
 
-  generatingChunks.set(
-    key,
-    job
-  );
+  generatingChunks.set(key, job);
 
-  return job;
+  await job;
 }
 
 export async function updateChunks(
@@ -220,42 +194,30 @@ export async function updateChunks(
   playerX: number,
   playerZ: number
 ): Promise<void> {
-  const { cx, cz } =
-    getChunkCoord(
-      playerX,
-      playerZ
-    );
+  const { cx, cz } = getChunkCoord(
+    playerX,
+    playerZ
+  );
 
-  const jobs:
-    Promise<void>[] = [];
+  const jobs: Promise<void>[] = [];
 
   for (
-    let x =
-      cx - RENDER_DISTANCE;
-    x <=
-      cx + RENDER_DISTANCE;
+    let x = cx - RENDER_DISTANCE;
+    x <= cx + RENDER_DISTANCE;
     x++
   ) {
     for (
-      let z =
-        cz - RENDER_DISTANCE;
-      z <=
-        cz + RENDER_DISTANCE;
+      let z = cz - RENDER_DISTANCE;
+      z <= cz + RENDER_DISTANCE;
       z++
     ) {
       jobs.push(
-        generateChunk(
-          scene,
-          x,
-          z
-        )
+        generateChunk(scene, x, z)
       );
     }
   }
 
-  await Promise.allSettled(
-    jobs
-  );
+  await Promise.allSettled(jobs);
 
   destroyFarChunks(
     playerX,
@@ -267,45 +229,31 @@ export function destroyFarChunks(
   playerX: number,
   playerZ: number
 ): void {
-  const { cx, cz } =
-    getChunkCoord(
-      playerX,
-      playerZ
-    );
+  const { cx, cz } = getChunkCoord(
+    playerX,
+    playerZ
+  );
 
-  for (
-    const [key, chunk]
-    of chunks
-  ) {
-    const [
-      chunkX,
-      chunkZ,
-    ] = key
+  for (const [key, chunk] of chunks) {
+    const [chunkX, chunkZ] = key
       .split(",")
       .map(Number);
 
     const far =
-      Math.abs(
-        chunkX - cx
-      ) > RENDER_DISTANCE ||
-      Math.abs(
-        chunkZ - cz
-      ) > RENDER_DISTANCE;
+      Math.abs(chunkX - cx) >
+        RENDER_DISTANCE ||
+      Math.abs(chunkZ - cz) >
+        RENDER_DISTANCE;
 
     if (!far) {
       continue;
     }
 
-    chunk.userData.destroyed =
-      true;
+    chunk.userData.destroyed = true;
 
-    chunkColliders.delete(
-      key
-    );
+    chunkColliders.delete(key);
 
-    disposeChunkResources(
-      chunk
-    );
+    disposeChunkResources(chunk);
 
     chunk.clear();
     chunk.removeFromParent();
@@ -320,29 +268,18 @@ function circleIntersectsBox(
   radius: number,
   box: THREE.Box3
 ): boolean {
-  const closestX =
-    Math.max(
-      box.min.x,
-      Math.min(
-        x,
-        box.max.x
-      )
-    );
+  const closestX = Math.max(
+    box.min.x,
+    Math.min(x, box.max.x)
+  );
 
-  const closestZ =
-    Math.max(
-      box.min.z,
-      Math.min(
-        z,
-        box.max.z
-      )
-    );
+  const closestZ = Math.max(
+    box.min.z,
+    Math.min(z, box.max.z)
+  );
 
-  const deltaX =
-    x - closestX;
-
-  const deltaZ =
-    z - closestZ;
+  const deltaX = x - closestX;
+  const deltaZ = z - closestZ;
 
   return (
     deltaX * deltaX +
@@ -354,16 +291,10 @@ function circleIntersectsBox(
 export function collidesWithWorld(
   x: number,
   z: number,
-  radius = 0.65
+  radius = 0.7
 ): boolean {
-  for (
-    const colliders
-    of chunkColliders.values()
-  ) {
-    for (
-      const collider
-      of colliders
-    ) {
+  for (const colliders of chunkColliders.values()) {
+    for (const collider of colliders) {
       if (
         circleIntersectsBox(
           x,
@@ -384,17 +315,11 @@ export function resolveWorldCollision(
   player: THREE.Object3D,
   previousX: number,
   previousZ: number,
-  radius = 0.65
+  radius = 0.7
 ): void {
-  const nextX =
-    player.position.x;
+  const nextX = player.position.x;
+  const nextZ = player.position.z;
 
-  const nextZ =
-    player.position.z;
-
-  /*
-   * First test horizontal movement.
-   */
   if (
     collidesWithWorld(
       nextX,
@@ -402,14 +327,9 @@ export function resolveWorldCollision(
       radius
     )
   ) {
-    player.position.x =
-      previousX;
+    player.position.x = previousX;
   }
 
-  /*
-   * Then test vertical movement.
-   * This allows the player to slide along walls.
-   */
   if (
     collidesWithWorld(
       player.position.x,
@@ -417,13 +337,9 @@ export function resolveWorldCollision(
       radius
     )
   ) {
-    player.position.z =
-      previousZ;
+    player.position.z = previousZ;
   }
 
-  /*
-   * Final safety check.
-   */
   if (
     collidesWithWorld(
       player.position.x,
@@ -431,25 +347,159 @@ export function resolveWorldCollision(
       radius
     )
   ) {
-    player.position.x =
-      previousX;
-
-    player.position.z =
-      previousZ;
+    player.position.x = previousX;
+    player.position.z = previousZ;
   }
 }
 
-export function destroyAllChunks(): void {
-  for (
-    const [, chunk]
-    of chunks
-  ) {
-    chunk.userData.destroyed =
-      true;
+/*
+ * این تابع فقط نقاطی را بررسی می‌کند که روی
+ * خیابان‌های اصلی شهر قرار دارند.
+ */
+export function findSafeSpawnPosition(
+  chunkX = 0,
+  chunkZ = 0,
+  playerRadius = 0.9
+): THREE.Vector3 {
+  const originX =
+    chunkX * CHUNK_SIZE;
 
-    disposeChunkResources(
-      chunk
-    );
+  const originZ =
+    chunkZ * CHUNK_SIZE;
+
+  /*
+   * خیابان‌های شهر در x = -30 و x = 30
+   * و همچنین z = -30 و z = 30 قرار دارند.
+   *
+   * این نقاط وسط خیابان‌ها هستند و از محل
+   * ساختمان‌ها فاصله دارند.
+   */
+  const streetCandidates = [
+    { x: 0, z: -30 },
+    { x: 0, z: 30 },
+    { x: -30, z: 0 },
+    { x: 30, z: 0 },
+
+    { x: -15, z: -30 },
+    { x: 15, z: -30 },
+    { x: -15, z: 30 },
+    { x: 15, z: 30 },
+
+    { x: -30, z: -15 },
+    { x: -30, z: 15 },
+    { x: 30, z: -15 },
+    { x: 30, z: 15 },
+
+    { x: -45, z: -30 },
+    { x: 45, z: -30 },
+    { x: -45, z: 30 },
+    { x: 45, z: 30 },
+
+    { x: -30, z: -45 },
+    { x: -30, z: 45 },
+    { x: 30, z: -45 },
+    { x: 30, z: 45 },
+  ];
+
+  for (const candidate of streetCandidates) {
+    const worldX =
+      originX + candidate.x;
+
+    const worldZ =
+      originZ + candidate.z;
+
+    if (
+      !collidesWithWorld(
+        worldX,
+        worldZ,
+        playerRadius
+      )
+    ) {
+      return new THREE.Vector3(
+        worldX,
+        0,
+        worldZ
+      );
+    }
+  }
+
+  /*
+   * اگر خودرو یا مدل دیگری تمام نقاط اولیه را
+   * اشغال کرده باشد، در طول خیابان‌ها جست‌وجو می‌کند.
+   */
+  const roadLines = [-30, 30];
+
+  for (const roadZ of roadLines) {
+    for (
+      let localX = -50;
+      localX <= 50;
+      localX += 5
+    ) {
+      const worldX =
+        originX + localX;
+
+      const worldZ =
+        originZ + roadZ;
+
+      if (
+        !collidesWithWorld(
+          worldX,
+          worldZ,
+          playerRadius
+        )
+      ) {
+        return new THREE.Vector3(
+          worldX,
+          0,
+          worldZ
+        );
+      }
+    }
+  }
+
+  for (const roadX of roadLines) {
+    for (
+      let localZ = -50;
+      localZ <= 50;
+      localZ += 5
+    ) {
+      const worldX =
+        originX + roadX;
+
+      const worldZ =
+        originZ + localZ;
+
+      if (
+        !collidesWithWorld(
+          worldX,
+          worldZ,
+          playerRadius
+        )
+      ) {
+        return new THREE.Vector3(
+          worldX,
+          0,
+          worldZ
+        );
+      }
+    }
+  }
+
+  /*
+   * موقعیت اضطراری؛ وسط یکی از خیابان‌ها.
+   */
+  return new THREE.Vector3(
+    originX,
+    0,
+    originZ - 30
+  );
+}
+
+export function destroyAllChunks(): void {
+  for (const [, chunk] of chunks) {
+    chunk.userData.destroyed = true;
+
+    disposeChunkResources(chunk);
 
     chunk.clear();
     chunk.removeFromParent();
@@ -458,4 +508,4 @@ export function destroyAllChunks(): void {
   chunks.clear();
   chunkColliders.clear();
   generatingChunks.clear();
-                 }
+  }
