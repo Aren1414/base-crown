@@ -1,63 +1,101 @@
 'use client';
 
-import { useEffect, useRef } from "react";
+import {
+  useEffect,
+  useRef,
+} from "react";
+
 import * as THREE from "three";
 
-import { loadPlayerModel } from "@/app/game/core/PlayerModel";
-import { createGameLogic } from "@/app/game/core/GameLogic";
+import {
+  loadPlayerModel,
+} from "@/app/game/core/PlayerModel";
 
 import {
-  CHUNK_SIZE,
+  createGameLogic,
+} from "@/app/game/core/GameLogic";
+
+import {
   getChunkCoord,
   updateChunks,
+  resolveWorldCollision,
   destroyAllChunks,
 } from "@/app/game/world/WorldManager";
 
 export default function ChaosLane3D() {
-  const mountRef = useRef<HTMLDivElement | null>(null);
+  const mountRef =
+    useRef<HTMLDivElement | null>(
+      null
+    );
 
-  const joyRef = useRef({
-    x: 0,
-    y: 0,
-  });
+  const joyRef =
+    useRef({
+      x: 0,
+      y: 0,
+    });
 
   const playerRef =
-    useRef<THREE.Object3D | null>(null);
+    useRef<THREE.Object3D | null>(
+      null
+    );
 
   const mixerRef =
-    useRef<THREE.AnimationMixer | null>(null);
+    useRef<THREE.AnimationMixer | null>(
+      null
+    );
 
   const setMoveBySpeedRef =
-    useRef<(speed: number) => void>(() => {});
+    useRef<
+      (speed: number) => void
+    >(() => {});
 
   const playAnimOnceRef =
-    useRef<(file: string) => void>(() => {});
+    useRef<
+      (file: string) => void
+    >(() => {});
 
   const gameLogicRef =
-    useRef<ReturnType<
-      typeof createGameLogic
-    > | null>(null);
+    useRef<
+      ReturnType<
+        typeof createGameLogic
+      > | null
+    >(null);
 
   useEffect(() => {
-    const mount = mountRef.current;
+    const mount =
+      mountRef.current;
 
     if (!mount) {
       return;
     }
 
     let disposed = false;
+
     let animationFrameId = 0;
 
-    const scene = new THREE.Scene();
+    let currentChunkX =
+      Number.NaN;
+
+    let currentChunkZ =
+      Number.NaN;
+
+    let chunkUpdateRunning =
+      false;
+
+    const scene =
+      new THREE.Scene();
 
     scene.background =
-      new THREE.Color(0x181a19);
+      new THREE.Color(
+        0x161817
+      );
 
-    scene.fog = new THREE.Fog(
-      0x181a19,
-      90,
-      260
-    );
+    scene.fog =
+      new THREE.Fog(
+        0x161817,
+        100,
+        280
+      );
 
     const camera =
       new THREE.PerspectiveCamera(
@@ -74,18 +112,17 @@ export default function ChaosLane3D() {
       11
     );
 
-    camera.lookAt(
-      0,
-      1.5,
-      0
-    );
-
     const renderer =
       new THREE.WebGLRenderer({
         antialias: true,
         powerPreference:
           "high-performance",
       });
+
+    renderer.setSize(
+      window.innerWidth,
+      window.innerHeight
+    );
 
     renderer.setPixelRatio(
       Math.min(
@@ -101,17 +138,13 @@ export default function ChaosLane3D() {
       THREE.ACESFilmicToneMapping;
 
     renderer.toneMappingExposure =
-      1.3;
+      1.35;
 
-    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.enabled =
+      true;
 
     renderer.shadowMap.type =
       THREE.PCFSoftShadowMap;
-
-    renderer.setSize(
-      window.innerWidth,
-      window.innerHeight
-    );
 
     mount.appendChild(
       renderer.domElement
@@ -119,9 +152,9 @@ export default function ChaosLane3D() {
 
     const hemisphereLight =
       new THREE.HemisphereLight(
-        0xdde7ff,
-        0x35362f,
-        1.45
+        0xdde6ff,
+        0x30332d,
+        1.5
       );
 
     scene.add(
@@ -130,8 +163,8 @@ export default function ChaosLane3D() {
 
     const directionalLight =
       new THREE.DirectionalLight(
-        0xfff2dc,
-        2.2
+        0xffeed8,
+        2.1
       );
 
     directionalLight.position.set(
@@ -140,7 +173,8 @@ export default function ChaosLane3D() {
       25
     );
 
-    directionalLight.castShadow = true;
+    directionalLight.castShadow =
+      true;
 
     directionalLight.shadow.mapSize.set(
       1024,
@@ -148,16 +182,16 @@ export default function ChaosLane3D() {
     );
 
     directionalLight.shadow.camera.left =
-      -85;
+      -80;
 
     directionalLight.shadow.camera.right =
-      85;
+      80;
 
     directionalLight.shadow.camera.top =
-      85;
+      80;
 
     directionalLight.shadow.camera.bottom =
-      -85;
+      -80;
 
     directionalLight.shadow.camera.near =
       1;
@@ -176,93 +210,64 @@ export default function ChaosLane3D() {
     const clock =
       new THREE.Clock();
 
-    const cameraTarget =
-      new THREE.Vector3();
-
     const desiredCameraPosition =
       new THREE.Vector3();
 
-    let loadedChunkX =
-      Number.NaN;
+    const cameraTarget =
+      new THREE.Vector3();
 
-    let loadedChunkZ =
-      Number.NaN;
-
-    let requestedChunkX =
-      Number.NaN;
-
-    let requestedChunkZ =
-      Number.NaN;
-
-    let worldUpdateRunning = false;
-
-    const updateWorld = async (
-      playerX: number,
-      playerZ: number
-    ): Promise<void> => {
-      const { cx, cz } =
-        getChunkCoord(
-          playerX,
-          playerZ
-        );
-
-      requestedChunkX = cx;
-      requestedChunkZ = cz;
-
-      if (
-        loadedChunkX === cx &&
-        loadedChunkZ === cz
-      ) {
-        return;
-      }
-
-      if (worldUpdateRunning) {
-        return;
-      }
-
-      worldUpdateRunning = true;
-
-      try {
-        while (
-          !disposed &&
-          (
-            loadedChunkX !==
-              requestedChunkX ||
-            loadedChunkZ !==
-              requestedChunkZ
-          )
-        ) {
-          const targetChunkX =
-            requestedChunkX;
-
-          const targetChunkZ =
-            requestedChunkZ;
-
-          await updateChunks(
-            scene,
-            targetChunkX *
-              CHUNK_SIZE +
-              CHUNK_SIZE / 2,
-            targetChunkZ *
-              CHUNK_SIZE +
-              CHUNK_SIZE / 2
+    const updateWorldIfNeeded =
+      async (
+        playerX: number,
+        playerZ: number
+      ): Promise<void> => {
+        const { cx, cz } =
+          getChunkCoord(
+            playerX,
+            playerZ
           );
 
-          loadedChunkX =
-            targetChunkX;
-
-          loadedChunkZ =
-            targetChunkZ;
+        if (
+          cx === currentChunkX &&
+          cz === currentChunkZ
+        ) {
+          return;
         }
-      } catch (error) {
-        console.error(
-          "Failed to update world chunks:",
-          error
-        );
-      } finally {
-        worldUpdateRunning = false;
-      }
-    };
+
+        if (
+          chunkUpdateRunning
+        ) {
+          return;
+        }
+
+        chunkUpdateRunning =
+          true;
+
+        try {
+          await updateChunks(
+            scene,
+            playerX,
+            playerZ
+          );
+
+          currentChunkX = cx;
+          currentChunkZ = cz;
+        } catch (error) {
+          console.error(
+            "World update failed:",
+            error
+          );
+        } finally {
+          chunkUpdateRunning =
+            false;
+        }
+      };
+
+    const buttonHandlers:
+      Array<{
+        element: HTMLElement;
+        handler: () => void;
+      }> = [];
 
     const handleResize = () => {
       camera.aspect =
@@ -289,220 +294,266 @@ export default function ChaosLane3D() {
       handleResize
     );
 
-    const buttonHandlers: Array<{
-      element: HTMLElement;
-      handler: () => void;
-    }> = [];
-
-    const startGame = async () => {
-      try {
-        const {
-          player,
-          mixer,
-          setMoveBySpeed,
-          playAnimOnce,
-        } = await loadPlayerModel(
-          scene
-        );
-
-        if (disposed) {
-          player.removeFromParent();
-          return;
-        }
-
-        playerRef.current =
-          player;
-
-        mixerRef.current =
-          mixer;
-
-        setMoveBySpeedRef.current =
-          setMoveBySpeed;
-
-        playAnimOnceRef.current =
-          playAnimOnce;
-
-        player.scale.setScalar(
-          1.4
-        );
-
-        player.position.set(
-          0,
-          player.position.y,
-          0
-        );
-
-        const gameLogic =
-          createGameLogic(player);
-
-        gameLogicRef.current =
-          gameLogic;
-
-        const actionButtons = [
-          {
-            id: "btn-punch",
-            file: "Combo Punch.glb",
-          },
-          {
-            id: "btn-kick",
-            file: "Mma Kick.glb",
-          },
-          {
-            id: "btn-jump",
-            file: "Jumping.glb",
-          },
-        ];
-
-        for (const action of actionButtons) {
-          const button =
-            document.getElementById(
-              action.id
+    const startGame =
+      async () => {
+        try {
+          const {
+            player,
+            mixer,
+            setMoveBySpeed,
+            playAnimOnce,
+          } =
+            await loadPlayerModel(
+              scene
             );
 
-          if (!button) {
-            continue;
-          }
-
-          const handler = () => {
-            playAnimOnceRef.current(
-              action.file
-            );
-          };
-
-          button.addEventListener(
-            "touchstart",
-            handler,
-            {
-              passive: true,
-            }
-          );
-
-          button.addEventListener(
-            "mousedown",
-            handler
-          );
-
-          buttonHandlers.push({
-            element: button,
-            handler,
-          });
-        }
-
-        await updateWorld(
-          player.position.x,
-          player.position.z
-        );
-
-        const animate = () => {
           if (disposed) {
+            player.removeFromParent();
             return;
           }
 
-          animationFrameId =
-            requestAnimationFrame(
-              animate
-            );
+          playerRef.current =
+            player;
 
-          const delta = Math.min(
-            clock.getDelta(),
-            0.05
+          mixerRef.current =
+            mixer;
+
+          setMoveBySpeedRef.current =
+            setMoveBySpeed;
+
+          playAnimOnceRef.current =
+            playAnimOnce;
+
+          player.scale.setScalar(
+            1.4
           );
-
-          mixerRef.current?.update(
-            delta
-          );
-
-          const joystick =
-            joyRef.current;
-
-          const movementSpeed =
-            Math.min(
-              1,
-              Math.sqrt(
-                joystick.x *
-                  joystick.x +
-                  joystick.y *
-                  joystick.y
-              )
-            );
-
-          setMoveBySpeedRef.current(
-            movementSpeed
-          );
-
-          const currentPlayer =
-            playerRef.current;
 
           const gameLogic =
-            gameLogicRef.current;
+            createGameLogic(
+              player
+            );
 
-          if (
-            currentPlayer &&
-            gameLogic
+          gameLogicRef.current =
+            gameLogic;
+
+          const actionButtons = [
+            {
+              id: "btn-punch",
+              file:
+                "Combo Punch.glb",
+            },
+            {
+              id: "btn-kick",
+              file:
+                "Mma Kick.glb",
+            },
+            {
+              id: "btn-jump",
+              file:
+                "Jumping.glb",
+            },
+          ];
+
+          for (
+            const action
+            of actionButtons
           ) {
-            gameLogic.update(
-              delta,
-              joystick
+            const button =
+              document.getElementById(
+                action.id
+              );
+
+            if (!button) {
+              continue;
+            }
+
+            const handler = () => {
+              playAnimOnceRef.current(
+                action.file
+              );
+            };
+
+            button.addEventListener(
+              "touchstart",
+              handler,
+              {
+                passive: true,
+              }
             );
 
-            const position =
-              currentPlayer.position;
-
-            void updateWorld(
-              position.x,
-              position.z
+            button.addEventListener(
+              "mousedown",
+              handler
             );
 
-            desiredCameraPosition.set(
-              position.x + 12,
-              position.y + 17,
-              position.z + 12
-            );
-
-            camera.position.lerp(
-              desiredCameraPosition,
-              0.08
-            );
-
-            cameraTarget.set(
-              position.x,
-              position.y + 2,
-              position.z
-            );
-
-            camera.lookAt(
-              cameraTarget
-            );
-
-            directionalLight.position.set(
-              position.x + 35,
-              position.y + 55,
-              position.z + 25
-            );
-
-            directionalLight.target.position.set(
-              position.x,
-              position.y,
-              position.z
-            );
-
-            directionalLight.target.updateMatrixWorld();
+            buttonHandlers.push({
+              element: button,
+              handler,
+            });
           }
 
-          renderer.render(
-            scene,
-            camera
+          await updateWorldIfNeeded(
+            player.position.x,
+            player.position.z
           );
-        };
 
-        animate();
-      } catch (error) {
-        console.error(
-          "Failed to start game:",
-          error
-        );
-      }
-    };
+          const animate = () => {
+            if (disposed) {
+              return;
+            }
+
+            animationFrameId =
+              requestAnimationFrame(
+                animate
+              );
+
+            const delta =
+              Math.min(
+                clock.getDelta(),
+                0.05
+              );
+
+            mixerRef.current?.update(
+              delta
+            );
+
+            const joystick =
+              joyRef.current;
+
+            const movementSpeed =
+              Math.min(
+                1,
+                Math.sqrt(
+                  joystick.x *
+                    joystick.x +
+                    joystick.y *
+                    joystick.y
+                )
+              );
+
+            setMoveBySpeedRef.current(
+              movementSpeed
+            );
+
+            const currentPlayer =
+              playerRef.current;
+
+            const gameLogic =
+              gameLogicRef.current;
+
+            if (
+              currentPlayer &&
+              gameLogic
+            ) {
+              const previousX =
+                currentPlayer
+                  .position.x;
+
+              const previousZ =
+                currentPlayer
+                  .position.z;
+
+              gameLogic.update(
+                delta,
+                joystick
+              );
+
+              resolveWorldCollision(
+                currentPlayer,
+                previousX,
+                previousZ,
+                0.7
+              );
+
+              void updateWorldIfNeeded(
+                currentPlayer
+                  .position.x,
+                currentPlayer
+                  .position.z
+              );
+
+              desiredCameraPosition.set(
+                currentPlayer
+                  .position.x +
+                  12,
+
+                currentPlayer
+                  .position.y +
+                  17,
+
+                currentPlayer
+                  .position.z +
+                  12
+              );
+
+              camera.position.lerp(
+                desiredCameraPosition,
+                0.08
+              );
+
+              cameraTarget.set(
+                currentPlayer
+                  .position.x,
+
+                currentPlayer
+                  .position.y +
+                  2,
+
+                currentPlayer
+                  .position.z
+              );
+
+              camera.lookAt(
+                cameraTarget
+              );
+
+              directionalLight.position.set(
+                currentPlayer
+                  .position.x +
+                  35,
+
+                currentPlayer
+                  .position.y +
+                  55,
+
+                currentPlayer
+                  .position.z +
+                  25
+              );
+
+              directionalLight
+                .target
+                .position
+                .set(
+                  currentPlayer
+                    .position.x,
+
+                  currentPlayer
+                    .position.y,
+
+                  currentPlayer
+                    .position.z
+                );
+
+              directionalLight
+                .target
+                .updateMatrixWorld();
+            }
+
+            renderer.render(
+              scene,
+              camera
+            );
+          };
+
+          animate();
+        } catch (error) {
+          console.error(
+            "Game startup failed:",
+            error
+          );
+        }
+      };
 
     void startGame();
 
@@ -518,24 +569,27 @@ export default function ChaosLane3D() {
         handleResize
       );
 
-      for (const {
-        element,
-        handler,
-      } of buttonHandlers) {
-        element.removeEventListener(
-          "touchstart",
-          handler
-        );
+      for (
+        const item
+        of buttonHandlers
+      ) {
+        item.element
+          .removeEventListener(
+            "touchstart",
+            item.handler
+          );
 
-        element.removeEventListener(
-          "mousedown",
-          handler
-        );
+        item.element
+          .removeEventListener(
+            "mousedown",
+            item.handler
+          );
       }
 
-      destroyAllChunks();
+      mixerRef.current
+        ?.stopAllAction();
 
-      mixerRef.current?.stopAllAction();
+      destroyAllChunks();
 
       playerRef.current =
         null;
@@ -551,8 +605,8 @@ export default function ChaosLane3D() {
       renderer.dispose();
 
       if (
-        renderer.domElement.parentNode ===
-        mount
+        renderer.domElement
+          .parentNode === mount
       ) {
         mount.removeChild(
           renderer.domElement
@@ -562,7 +616,8 @@ export default function ChaosLane3D() {
   }, []);
 
   const handleJoy = (
-    event: React.TouchEvent<HTMLDivElement>
+    event:
+      React.TouchEvent<HTMLDivElement>
   ) => {
     event.preventDefault();
 
@@ -574,7 +629,8 @@ export default function ChaosLane3D() {
     }
 
     const rect =
-      event.currentTarget.getBoundingClientRect();
+      event.currentTarget
+        .getBoundingClientRect();
 
     const x =
       touch.clientX -
@@ -625,10 +681,10 @@ export default function ChaosLane3D() {
 
       <div
         className="absolute bottom-8 left-8 flex h-28 w-28 touch-none items-center justify-center rounded-full border border-white/10 bg-black/30 shadow-[0_0_20px_rgba(0,0,0,.45)] backdrop-blur-xl"
+        onTouchStart={handleJoy}
         onTouchMove={handleJoy}
         onTouchEnd={resetJoy}
         onTouchCancel={resetJoy}
-        onTouchStart={handleJoy}
       >
         <div className="h-12 w-12 rounded-full bg-zinc-300/60 shadow-xl" />
       </div>
