@@ -19,6 +19,7 @@ import {
   getChunkCoord,
   updateChunks,
   resolveWorldCollision,
+  findSafeSpawnPosition,
   destroyAllChunks,
 } from "@/app/game/world/WorldManager";
 
@@ -28,11 +29,10 @@ export default function ChaosLane3D() {
       null
     );
 
-  const joyRef =
-    useRef({
-      x: 0,
-      y: 0,
-    });
+  const joyRef = useRef({
+    x: 0,
+    y: 0,
+  });
 
   const playerRef =
     useRef<THREE.Object3D | null>(
@@ -62,15 +62,13 @@ export default function ChaosLane3D() {
     >(null);
 
   useEffect(() => {
-    const mount =
-      mountRef.current;
+    const mount = mountRef.current;
 
     if (!mount) {
       return;
     }
 
     let disposed = false;
-
     let animationFrameId = 0;
 
     let currentChunkX =
@@ -79,23 +77,26 @@ export default function ChaosLane3D() {
     let currentChunkZ =
       Number.NaN;
 
-    let chunkUpdateRunning =
-      false;
+    let requestedChunkX =
+      Number.NaN;
 
-    const scene =
-      new THREE.Scene();
+    let requestedChunkZ =
+      Number.NaN;
+
+    let chunkUpdateRunning = false;
+
+    const scene = new THREE.Scene();
 
     scene.background =
       new THREE.Color(
         0x161817
       );
 
-    scene.fog =
-      new THREE.Fog(
-        0x161817,
-        100,
-        280
-      );
+    scene.fog = new THREE.Fog(
+      0x161817,
+      100,
+      280
+    );
 
     const camera =
       new THREE.PerspectiveCamera(
@@ -140,8 +141,7 @@ export default function ChaosLane3D() {
     renderer.toneMappingExposure =
       1.35;
 
-    renderer.shadowMap.enabled =
-      true;
+    renderer.shadowMap.enabled = true;
 
     renderer.shadowMap.type =
       THREE.PCFSoftShadowMap;
@@ -173,8 +173,7 @@ export default function ChaosLane3D() {
       25
     );
 
-    directionalLight.castShadow =
-      true;
+    directionalLight.castShadow = true;
 
     directionalLight.shadow.mapSize.set(
       1024,
@@ -227,39 +226,54 @@ export default function ChaosLane3D() {
             playerZ
           );
 
+        requestedChunkX = cx;
+        requestedChunkZ = cz;
+
         if (
-          cx === currentChunkX &&
-          cz === currentChunkZ
+          currentChunkX === cx &&
+          currentChunkZ === cz
         ) {
           return;
         }
 
-        if (
-          chunkUpdateRunning
-        ) {
+        if (chunkUpdateRunning) {
           return;
         }
 
-        chunkUpdateRunning =
-          true;
+        chunkUpdateRunning = true;
 
         try {
-          await updateChunks(
-            scene,
-            playerX,
-            playerZ
-          );
+          while (
+            !disposed &&
+            (
+              currentChunkX !==
+                requestedChunkX ||
+              currentChunkZ !==
+                requestedChunkZ
+            )
+          ) {
+            const targetX =
+              requestedChunkX;
 
-          currentChunkX = cx;
-          currentChunkZ = cz;
+            const targetZ =
+              requestedChunkZ;
+
+            await updateChunks(
+              scene,
+              playerX,
+              playerZ
+            );
+
+            currentChunkX = targetX;
+            currentChunkZ = targetZ;
+          }
         } catch (error) {
           console.error(
             "World update failed:",
             error
           );
         } finally {
-          chunkUpdateRunning =
-            false;
+          chunkUpdateRunning = false;
         }
       };
 
@@ -294,266 +308,302 @@ export default function ChaosLane3D() {
       handleResize
     );
 
-    const startGame =
-      async () => {
-        try {
-          const {
-            player,
-            mixer,
-            setMoveBySpeed,
-            playAnimOnce,
-          } =
-            await loadPlayerModel(
-              scene
-            );
+    const startGame = async () => {
+      try {
+        const {
+          player,
+          mixer,
+          setMoveBySpeed,
+          playAnimOnce,
+        } = await loadPlayerModel(
+          scene
+        );
 
-          if (disposed) {
-            player.removeFromParent();
-            return;
-          }
+        if (disposed) {
+          player.removeFromParent();
+          return;
+        }
 
-          playerRef.current =
-            player;
+        playerRef.current = player;
+        mixerRef.current = mixer;
 
-          mixerRef.current =
-            mixer;
+        setMoveBySpeedRef.current =
+          setMoveBySpeed;
 
-          setMoveBySpeedRef.current =
-            setMoveBySpeed;
+        playAnimOnceRef.current =
+          playAnimOnce;
 
-          playAnimOnceRef.current =
-            playAnimOnce;
+        player.scale.setScalar(1.4);
 
-          player.scale.setScalar(
-            1.4
+        /*
+         * اول کاراکتر موقتاً دور از دید قرار می‌گیرد.
+         * بعد شهر و Colliderها کامل ساخته می‌شوند.
+         */
+        player.visible = false;
+
+        player.position.set(
+          0,
+          player.position.y,
+          0
+        );
+
+        /*
+         * شهر مرکزی و تمام Colliderها باید قبل از
+         * انتخاب محل شروع آماده باشند.
+         */
+        await updateChunks(
+          scene,
+          0,
+          0
+        );
+
+        if (disposed) {
+          return;
+        }
+
+        /*
+         * یک نقطه آزاد روی خیابان مرکزی پیدا می‌شود.
+         */
+        const safeSpawn =
+          findSafeSpawnPosition(
+            0,
+            0,
+            0.9
           );
 
-          const gameLogic =
-            createGameLogic(
-              player
-            );
+        player.position.x =
+          safeSpawn.x;
 
-          gameLogicRef.current =
-            gameLogic;
+        player.position.z =
+          safeSpawn.z;
 
-          const actionButtons = [
-            {
-              id: "btn-punch",
-              file:
-                "Combo Punch.glb",
-            },
-            {
-              id: "btn-kick",
-              file:
-                "Mma Kick.glb",
-            },
-            {
-              id: "btn-jump",
-              file:
-                "Jumping.glb",
-            },
-          ];
+        /*
+         * مقدار Y خود کاراکتر دست‌نخورده می‌ماند.
+         */
+        player.visible = true;
 
-          for (
-            const action
-            of actionButtons
-          ) {
-            const button =
-              document.getElementById(
-                action.id
-              );
-
-            if (!button) {
-              continue;
-            }
-
-            const handler = () => {
-              playAnimOnceRef.current(
-                action.file
-              );
-            };
-
-            button.addEventListener(
-              "touchstart",
-              handler,
-              {
-                passive: true,
-              }
-            );
-
-            button.addEventListener(
-              "mousedown",
-              handler
-            );
-
-            buttonHandlers.push({
-              element: button,
-              handler,
-            });
-          }
-
-          await updateWorldIfNeeded(
+        const spawnChunk =
+          getChunkCoord(
             player.position.x,
             player.position.z
           );
 
-          const animate = () => {
-            if (disposed) {
-              return;
-            }
+        currentChunkX =
+          spawnChunk.cx;
 
-            animationFrameId =
-              requestAnimationFrame(
-                animate
-              );
+        currentChunkZ =
+          spawnChunk.cz;
 
-            const delta =
-              Math.min(
-                clock.getDelta(),
-                0.05
-              );
+        requestedChunkX =
+          spawnChunk.cx;
 
-            mixerRef.current?.update(
-              delta
+        requestedChunkZ =
+          spawnChunk.cz;
+
+        const gameLogic =
+          createGameLogic(
+            player
+          );
+
+        gameLogicRef.current =
+          gameLogic;
+
+        const actionButtons = [
+          {
+            id: "btn-punch",
+            file:
+              "Combo Punch.glb",
+          },
+          {
+            id: "btn-kick",
+            file:
+              "Mma Kick.glb",
+          },
+          {
+            id: "btn-jump",
+            file:
+              "Jumping.glb",
+          },
+        ];
+
+        for (const action of actionButtons) {
+          const button =
+            document.getElementById(
+              action.id
             );
 
-            const joystick =
-              joyRef.current;
+          if (!button) {
+            continue;
+          }
 
-            const movementSpeed =
-              Math.min(
-                1,
-                Math.sqrt(
-                  joystick.x *
-                    joystick.x +
-                    joystick.y *
-                    joystick.y
-                )
-              );
-
-            setMoveBySpeedRef.current(
-              movementSpeed
-            );
-
-            const currentPlayer =
-              playerRef.current;
-
-            const gameLogic =
-              gameLogicRef.current;
-
-            if (
-              currentPlayer &&
-              gameLogic
-            ) {
-              const previousX =
-                currentPlayer
-                  .position.x;
-
-              const previousZ =
-                currentPlayer
-                  .position.z;
-
-              gameLogic.update(
-                delta,
-                joystick
-              );
-
-              resolveWorldCollision(
-                currentPlayer,
-                previousX,
-                previousZ,
-                0.7
-              );
-
-              void updateWorldIfNeeded(
-                currentPlayer
-                  .position.x,
-                currentPlayer
-                  .position.z
-              );
-
-              desiredCameraPosition.set(
-                currentPlayer
-                  .position.x +
-                  12,
-
-                currentPlayer
-                  .position.y +
-                  17,
-
-                currentPlayer
-                  .position.z +
-                  12
-              );
-
-              camera.position.lerp(
-                desiredCameraPosition,
-                0.08
-              );
-
-              cameraTarget.set(
-                currentPlayer
-                  .position.x,
-
-                currentPlayer
-                  .position.y +
-                  2,
-
-                currentPlayer
-                  .position.z
-              );
-
-              camera.lookAt(
-                cameraTarget
-              );
-
-              directionalLight.position.set(
-                currentPlayer
-                  .position.x +
-                  35,
-
-                currentPlayer
-                  .position.y +
-                  55,
-
-                currentPlayer
-                  .position.z +
-                  25
-              );
-
-              directionalLight
-                .target
-                .position
-                .set(
-                  currentPlayer
-                    .position.x,
-
-                  currentPlayer
-                    .position.y,
-
-                  currentPlayer
-                    .position.z
-                );
-
-              directionalLight
-                .target
-                .updateMatrixWorld();
-            }
-
-            renderer.render(
-              scene,
-              camera
+          const handler = () => {
+            playAnimOnceRef.current(
+              action.file
             );
           };
 
-          animate();
-        } catch (error) {
-          console.error(
-            "Game startup failed:",
-            error
+          button.addEventListener(
+            "touchstart",
+            handler,
+            {
+              passive: true,
+            }
           );
+
+          button.addEventListener(
+            "mousedown",
+            handler
+          );
+
+          buttonHandlers.push({
+            element: button,
+            handler,
+          });
         }
-      };
+
+        /*
+         * دوربین از همان فریم اول روی کاراکتر قرار می‌گیرد.
+         */
+        camera.position.set(
+          player.position.x + 12,
+          player.position.y + 17,
+          player.position.z + 12
+        );
+
+        camera.lookAt(
+          player.position.x,
+          player.position.y + 2,
+          player.position.z
+        );
+
+        const animate = () => {
+          if (disposed) {
+            return;
+          }
+
+          animationFrameId =
+            requestAnimationFrame(
+              animate
+            );
+
+          const delta = Math.min(
+            clock.getDelta(),
+            0.05
+          );
+
+          mixerRef.current?.update(
+            delta
+          );
+
+          const joystick =
+            joyRef.current;
+
+          const movementSpeed =
+            Math.min(
+              1,
+              Math.sqrt(
+                joystick.x *
+                  joystick.x +
+                  joystick.y *
+                  joystick.y
+              )
+            );
+
+          setMoveBySpeedRef.current(
+            movementSpeed
+          );
+
+          const currentPlayer =
+            playerRef.current;
+
+          const gameLogic =
+            gameLogicRef.current;
+
+          if (
+            currentPlayer &&
+            gameLogic
+          ) {
+            const previousX =
+              currentPlayer.position.x;
+
+            const previousZ =
+              currentPlayer.position.z;
+
+            gameLogic.update(
+              delta,
+              joystick
+            );
+
+            resolveWorldCollision(
+              currentPlayer,
+              previousX,
+              previousZ,
+              0.7
+            );
+
+            void updateWorldIfNeeded(
+              currentPlayer.position.x,
+              currentPlayer.position.z
+            );
+
+            desiredCameraPosition.set(
+              currentPlayer.position.x +
+                12,
+              currentPlayer.position.y +
+                17,
+              currentPlayer.position.z +
+                12
+            );
+
+            camera.position.lerp(
+              desiredCameraPosition,
+              0.08
+            );
+
+            cameraTarget.set(
+              currentPlayer.position.x,
+              currentPlayer.position.y +
+                2,
+              currentPlayer.position.z
+            );
+
+            camera.lookAt(
+              cameraTarget
+            );
+
+            directionalLight.position.set(
+              currentPlayer.position.x +
+                35,
+              currentPlayer.position.y +
+                55,
+              currentPlayer.position.z +
+                25
+            );
+
+            directionalLight.target.position.set(
+              currentPlayer.position.x,
+              currentPlayer.position.y,
+              currentPlayer.position.z
+            );
+
+            directionalLight.target
+              .updateMatrixWorld();
+          }
+
+          renderer.render(
+            scene,
+            camera
+          );
+        };
+
+        animate();
+      } catch (error) {
+        console.error(
+          "Game startup failed:",
+          error
+        );
+      }
+    };
 
     void startGame();
 
@@ -569,44 +619,32 @@ export default function ChaosLane3D() {
         handleResize
       );
 
-      for (
-        const item
-        of buttonHandlers
-      ) {
-        item.element
-          .removeEventListener(
-            "touchstart",
-            item.handler
-          );
+      for (const item of buttonHandlers) {
+        item.element.removeEventListener(
+          "touchstart",
+          item.handler
+        );
 
-        item.element
-          .removeEventListener(
-            "mousedown",
-            item.handler
-          );
+        item.element.removeEventListener(
+          "mousedown",
+          item.handler
+        );
       }
 
-      mixerRef.current
-        ?.stopAllAction();
+      mixerRef.current?.stopAllAction();
 
       destroyAllChunks();
 
-      playerRef.current =
-        null;
-
-      mixerRef.current =
-        null;
-
-      gameLogicRef.current =
-        null;
+      playerRef.current = null;
+      mixerRef.current = null;
+      gameLogicRef.current = null;
 
       scene.clear();
-
       renderer.dispose();
 
       if (
-        renderer.domElement
-          .parentNode === mount
+        renderer.domElement.parentNode ===
+        mount
       ) {
         mount.removeChild(
           renderer.domElement
@@ -621,8 +659,7 @@ export default function ChaosLane3D() {
   ) => {
     event.preventDefault();
 
-    const touch =
-      event.touches[0];
+    const touch = event.touches[0];
 
     if (!touch) {
       return;
@@ -739,4 +776,4 @@ export default function ChaosLane3D() {
       </div>
     </div>
   );
-      }
+          }
