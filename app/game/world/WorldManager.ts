@@ -5,10 +5,25 @@ import {
   generateCity,
 } from "./CityGenerator";
 
-export const CHUNK_SIZE =
-  CITY_CHUNK_SIZE;
+export const CHUNK_SIZE = CITY_CHUNK_SIZE;
 
+/*
+ * مقدار ۱ یعنی Chunk فعلی به‌همراه ۸ Chunk اطراف.
+ * برای موبایل مناسب‌تر است.
+ */
 export const RENDER_DISTANCE = 1;
+
+/*
+ * یک Chunk اضافه بیرون محدوده نگه داشته می‌شود تا هنگام
+ * حرکت نزدیک مرز Chunk، ساخت و حذف مداوم اتفاق نیفتد.
+ */
+const DESTROY_DISTANCE =
+  RENDER_DISTANCE + 1;
+
+const GENERATION_BATCH_SIZE = 2;
+const PLAYER_COLLISION_HEIGHT = 2.2;
+const COLLISION_STEP_HEIGHT = 0.45;
+const CAMERA_FADE_OPACITY = 0.15;
 
 export const chunks = new Map<
   string,
@@ -25,12 +40,29 @@ const chunkOccluders = new Map<
   THREE.Mesh[]
 >();
 
+const chunkWalkableSurfaces = new Map<
+  string,
+  THREE.Object3D[]
+>();
+
 const generatingChunks = new Map<
   string,
   Promise<void>
 >();
 
+/*
+ * برای جلوگیری از اینکه یک Job قدیمی، Job جدید همان Chunk
+ * را از Map حذف کند.
+ */
+const generationTokens = new Map<
+  string,
+  symbol
+>();
+
 const raycaster =
+  new THREE.Raycaster();
+
+const surfaceRaycaster =
   new THREE.Raycaster();
 
 const cameraDirection =
@@ -39,8 +71,17 @@ const cameraDirection =
 const cameraRayOrigin =
   new THREE.Vector3();
 
+const surfaceRayOrigin =
+  new THREE.Vector3();
+
+const downDirection =
+  new THREE.Vector3(0, -1, 0);
+
 const fadedMaterials =
   new Set<THREE.Material>();
+
+const nearbyColliderKeys: string[] =
+  [];
 
 function getChunkKey(
   chunkX: number,
@@ -49,6 +90,43 @@ function getChunkKey(
   return `${chunkX},${chunkZ}`;
 }
 
+function parseChunkKey(
+  key: string
+): {
+  x: number;
+  z: number;
+} {
+  const separatorIndex =
+    key.indexOf(",");
+
+  if (separatorIndex < 0) {
+    return {
+      x: 0,
+      z: 0,
+    };
+  }
+
+  return {
+    x: Number(
+      key.slice(
+        0,
+        separatorIndex
+      )
+    ),
+
+    z: Number(
+      key.slice(
+        separatorIndex + 1
+      )
+    ),
+  };
+}
+
+/*
+ * Chunkها از مرکز مختصات خود ساخته می‌شوند.
+ * بنابراین مرز Chunk صفر از -CHUNK_SIZE/2 تا
+ * +CHUNK_SIZE/2 است.
+ */
 export function getChunkCoord(
   x: number,
   z: number
@@ -56,15 +134,29 @@ export function getChunkCoord(
   cx: number;
   cz: number;
 } {
+  const halfChunk =
+    CHUNK_SIZE * 0.5;
+
   return {
     cx: Math.floor(
-      x / CHUNK_SIZE
+      (x + halfChunk) /
+        CHUNK_SIZE
     ),
 
     cz: Math.floor(
-      z / CHUNK_SIZE
+      (z + halfChunk) /
+        CHUNK_SIZE
     ),
   };
+}
+
+function markChunkOwned(
+  resource:
+    | THREE.BufferGeometry
+    | THREE.Material
+): void {
+  resource.userData.chunkOwned =
+    true;
 }
 
 function createGround(): THREE.Mesh {
@@ -74,18 +166,16 @@ function createGround(): THREE.Mesh {
       CHUNK_SIZE
     );
 
-  geometry.userData.chunkOwned =
-    true;
+  markChunkOwned(geometry);
 
   const material =
     new THREE.MeshStandardMaterial({
-      color: 0x252825,
-      roughness: 1,
+      color: 0x394139,
+      roughness: 0.96,
       metalness: 0,
     });
 
-  material.userData.chunkOwned =
-    true;
+  markChunkOwned(material);
 
   const ground =
     new THREE.Mesh(
@@ -99,40 +189,74 @@ function createGround(): THREE.Mesh {
   ground.rotation.x =
     -Math.PI / 2;
 
-  ground.position.y = -0.06;
+  ground.position.y =
+    -0.08;
 
   ground.receiveShadow = true;
+  ground.castShadow = false;
+  ground.frustumCulled = true;
+
+  ground.userData.walkableSurface =
+    true;
+
+  ground.userData.surfacePriority =
+    -100;
 
   return ground;
+}
+
+function collectChunkWalkableSurfaces(
+  chunk: THREE.Group
+): THREE.Object3D[] {
+  const surfaces:
+    THREE.Object3D[] = [];
+
+  chunk.traverse((object) => {
+    if (
+      object.userData
+        .walkableSurface === true ||
+      object.userData
+        .walkableSurfaceData ||
+      object.userData
+        .walkableSurface
+          ?.enabled === true
+    ) {
+      surfaces.push(object);
+    }
+  });
+
+  return surfaces;
 }
 
 function disposeChunkResources(
   chunk: THREE.Group
 ): void {
   const geometries =
-    new Set<THREE.BufferGeometry>();
+    new Set<
+      THREE.BufferGeometry
+    >();
 
   const materials =
     new Set<THREE.Material>();
 
   chunk.traverse((object) => {
-    if (!(object instanceof THREE.Mesh)) {
+    if (
+      !(object instanceof THREE.Mesh)
+    ) {
       return;
     }
 
-    if (
-      object.geometry
-        ?.userData
-        .chunkOwned &&
-      !geometries.has(
-        object.geometry
-      )
-    ) {
-      geometries.add(
-        object.geometry
-      );
+    const geometry =
+      object.geometry;
 
-      object.geometry.dispose();
+    if (
+      geometry &&
+      geometry.userData
+        .chunkOwned === true &&
+      !geometries.has(geometry)
+    ) {
+      geometries.add(geometry);
+      geometry.dispose();
     }
 
     const objectMaterials =
@@ -142,18 +266,46 @@ function disposeChunkResources(
         ? object.material
         : [object.material];
 
-    for (const material of objectMaterials) {
+    for (
+      const material of
+      objectMaterials
+    ) {
       if (
-        material
-          ?.userData
-          .chunkOwned &&
-        !materials.has(material)
+        !material ||
+        material.userData
+          .chunkOwned !== true ||
+        materials.has(material)
       ) {
-        materials.add(material);
-        material.dispose();
+        continue;
       }
+
+      materials.add(material);
+      material.dispose();
     }
   });
+}
+
+function removeChunk(
+  key: string,
+  chunk: THREE.Group
+): void {
+  chunk.userData.destroyed =
+    true;
+
+  chunk.visible = false;
+
+  chunkColliders.delete(key);
+  chunkOccluders.delete(key);
+  chunkWalkableSurfaces.delete(
+    key
+  );
+
+  disposeChunkResources(chunk);
+
+  chunk.removeFromParent();
+  chunk.clear();
+
+  chunks.delete(key);
 }
 
 export async function generateChunk(
@@ -161,12 +313,20 @@ export async function generateChunk(
   chunkX: number,
   chunkZ: number
 ): Promise<void> {
-  const key = getChunkKey(
-    chunkX,
-    chunkZ
-  );
+  const key =
+    getChunkKey(
+      chunkX,
+      chunkZ
+    );
 
-  if (chunks.has(key)) {
+  const currentChunk =
+    chunks.get(key);
+
+  if (
+    currentChunk &&
+    currentChunk.userData
+      .destroyed !== true
+  ) {
     const activeJob =
       generatingChunks.get(key);
 
@@ -185,6 +345,13 @@ export async function generateChunk(
     return;
   }
 
+  const token = Symbol(key);
+
+  generationTokens.set(
+    key,
+    token
+  );
+
   const job = (async () => {
     const chunk =
       new THREE.Group();
@@ -198,18 +365,28 @@ export async function generateChunk(
       chunkZ * CHUNK_SIZE
     );
 
+    chunk.userData.chunkX =
+      chunkX;
+
+    chunk.userData.chunkZ =
+      chunkZ;
+
+    chunk.userData.chunkKey =
+      key;
+
     chunk.userData.destroyed =
       false;
 
+    chunk.userData.generating =
+      true;
+
     /*
-     * Chunk تا زمانی که تمام مدل‌هایش آماده نشده‌اند
-     * مخفی می‌ماند؛ در نتیجه آبجکت‌ها یکی‌یکی جلوی
-     * بازیکن ظاهر نمی‌شوند.
+     * تا پایان ساخت مخفی می‌ماند تا مدل‌ها یکی‌یکی
+     * جلوی بازیکن ظاهر نشوند.
      */
     chunk.visible = false;
 
     chunks.set(key, chunk);
-
     scene.add(chunk);
 
     chunk.add(createGround());
@@ -223,7 +400,10 @@ export async function generateChunk(
         );
 
       if (
-        chunk.userData.destroyed
+        chunk.userData
+          .destroyed === true ||
+        chunks.get(key) !==
+          chunk
       ) {
         return;
       }
@@ -238,19 +418,73 @@ export async function generateChunk(
         result.occluders
       );
 
-      /*
-       * کل شهر این Chunk یک‌جا نمایش داده می‌شود.
-       */
+      chunkWalkableSurfaces.set(
+        key,
+        collectChunkWalkableSurfaces(
+          chunk
+        )
+      );
+
+      chunk.userData.generating =
+        false;
+
       chunk.visible = true;
+
+      chunk.updateMatrixWorld(
+        true
+      );
     } catch (error) {
       console.error(
         `Failed to generate chunk ${key}:`,
         error
       );
 
-      chunk.visible = true;
+      if (
+        chunk.userData
+          .destroyed !== true &&
+        chunks.get(key) ===
+          chunk
+      ) {
+        /*
+         * در صورت خطای بخشی از مدل‌ها، زمین Chunk
+         * همچنان قابل نمایش باقی می‌ماند.
+         */
+        chunkColliders.set(
+          key,
+          []
+        );
+
+        chunkOccluders.set(
+          key,
+          []
+        );
+
+        chunkWalkableSurfaces.set(
+          key,
+          collectChunkWalkableSurfaces(
+            chunk
+          )
+        );
+
+        chunk.userData.generating =
+          false;
+
+        chunk.visible = true;
+      }
     } finally {
-      generatingChunks.delete(key);
+      if (
+        generationTokens.get(
+          key
+        ) === token
+      ) {
+        generationTokens.delete(
+          key
+        );
+
+        generatingChunks.delete(
+          key
+        );
+      }
     }
   })();
 
@@ -276,16 +510,20 @@ function getNearbyChunkCoordinates(
 
   for (
     let x =
-      centerX - RENDER_DISTANCE;
+      centerX -
+      RENDER_DISTANCE;
     x <=
-      centerX + RENDER_DISTANCE;
+      centerX +
+      RENDER_DISTANCE;
     x++
   ) {
     for (
       let z =
-        centerZ - RENDER_DISTANCE;
+        centerZ -
+        RENDER_DISTANCE;
       z <=
-        centerZ + RENDER_DISTANCE;
+        centerZ +
+        RENDER_DISTANCE;
       z++
     ) {
       if (
@@ -304,19 +542,50 @@ function getNearbyChunkCoordinates(
 
   coordinates.sort(
     (a, b) => {
+      const ax =
+        a.x - centerX;
+
+      const az =
+        a.z - centerZ;
+
+      const bx =
+        b.x - centerX;
+
+      const bz =
+        b.z - centerZ;
+
       const distanceA =
-        Math.abs(a.x - centerX) +
-        Math.abs(a.z - centerZ);
+        ax * ax + az * az;
 
       const distanceB =
-        Math.abs(b.x - centerX) +
-        Math.abs(b.z - centerZ);
+        bx * bx + bz * bz;
 
-      return distanceA - distanceB;
+      return (
+        distanceA -
+        distanceB
+      );
     }
   );
 
   return coordinates;
+}
+
+function isStillInChunk(
+  playerX: number,
+  playerZ: number,
+  chunkX: number,
+  chunkZ: number
+): boolean {
+  const current =
+    getChunkCoord(
+      playerX,
+      playerZ
+    );
+
+  return (
+    current.cx === chunkX &&
+    current.cz === chunkZ
+  );
 }
 
 export async function updateChunks(
@@ -331,7 +600,7 @@ export async function updateChunks(
     );
 
   /*
-   * ابتدا Chunk فعلی کامل می‌شود.
+   * ابتدا Chunk فعلی ساخته می‌شود.
    */
   await generateChunk(
     scene,
@@ -344,31 +613,29 @@ export async function updateChunks(
     playerZ
   );
 
-  /*
-   * Chunkهای اطراف دو‌تا‌دو‌تا ساخته می‌شوند تا
-   * مرورگر موبایل با تعداد زیادی درخواست هم‌زمان
-   * قفل نشود.
-   */
   const nearby =
     getNearbyChunkCoordinates(
       cx,
       cz
     );
 
+  /*
+   * ساخت دو Chunk در هر Batch برای جلوگیری از فشار
+   * ناگهانی روی حافظه و CPU موبایل.
+   */
   for (
     let index = 0;
     index < nearby.length;
-    index += 2
+    index +=
+      GENERATION_BATCH_SIZE
   ) {
     if (
-      getChunkCoord(
+      !isStillInChunk(
         playerX,
-        playerZ
-      ).cx !== cx ||
-      getChunkCoord(
-        playerX,
-        playerZ
-      ).cz !== cz
+        playerZ,
+        cx,
+        cz
+      )
     ) {
       break;
     }
@@ -376,7 +643,8 @@ export async function updateChunks(
     const batch =
       nearby.slice(
         index,
-        index + 2
+        index +
+          GENERATION_BATCH_SIZE
       );
 
     await Promise.allSettled(
@@ -404,41 +672,29 @@ export function destroyFarChunks(
 
   for (
     const [key, chunk]
-    of chunks
+    of Array.from(
+      chunks.entries()
+    )
   ) {
-    const [
-      chunkX,
-      chunkZ,
-    ] = key
-      .split(",")
-      .map(Number);
+    const coordinates =
+      parseChunkKey(key);
 
     const far =
       Math.abs(
-        chunkX - cx
-      ) > RENDER_DISTANCE ||
+        coordinates.x - cx
+      ) > DESTROY_DISTANCE ||
       Math.abs(
-        chunkZ - cz
-      ) > RENDER_DISTANCE;
+        coordinates.z - cz
+      ) > DESTROY_DISTANCE;
 
     if (!far) {
       continue;
     }
 
-    chunk.userData.destroyed =
-      true;
-
-    chunkColliders.delete(key);
-    chunkOccluders.delete(key);
-
-    disposeChunkResources(
+    removeChunk(
+      key,
       chunk
     );
-
-    chunk.clear();
-    chunk.removeFromParent();
-
-    chunks.delete(key);
   }
 }
 
@@ -449,21 +705,17 @@ function circleIntersectsBox(
   box: THREE.Box3
 ): boolean {
   const closestX =
-    Math.max(
+    THREE.MathUtils.clamp(
+      x,
       box.min.x,
-      Math.min(
-        x,
-        box.max.x
-      )
+      box.max.x
     );
 
   const closestZ =
-    Math.max(
+    THREE.MathUtils.clamp(
+      z,
       box.min.z,
-      Math.min(
-        z,
-        box.max.z
-      )
+      box.max.z
     );
 
   const deltaX =
@@ -479,19 +731,110 @@ function circleIntersectsBox(
   );
 }
 
+function verticalRangesOverlap(
+  playerY: number,
+  playerHeight: number,
+  box: THREE.Box3
+): boolean {
+  const playerMinY =
+    playerY +
+    COLLISION_STEP_HEIGHT;
+
+  const playerMaxY =
+    playerY +
+    playerHeight;
+
+  return (
+    box.max.y >
+      playerMinY &&
+    box.min.y <
+      playerMaxY
+  );
+}
+
+function collectNearbyColliderKeys(
+  x: number,
+  z: number,
+  radius: number
+): string[] {
+  nearbyColliderKeys.length =
+    0;
+
+  const minChunk =
+    getChunkCoord(
+      x - radius,
+      z - radius
+    );
+
+  const maxChunk =
+    getChunkCoord(
+      x + radius,
+      z + radius
+    );
+
+  for (
+    let chunkX =
+      minChunk.cx;
+    chunkX <=
+      maxChunk.cx;
+    chunkX++
+  ) {
+    for (
+      let chunkZ =
+        minChunk.cz;
+      chunkZ <=
+        maxChunk.cz;
+      chunkZ++
+    ) {
+      nearbyColliderKeys.push(
+        getChunkKey(
+          chunkX,
+          chunkZ
+        )
+      );
+    }
+  }
+
+  return nearbyColliderKeys;
+}
+
 export function collidesWithWorld(
   x: number,
   z: number,
-  radius = 0.55
+  radius = 0.55,
+  playerY = 0,
+  playerHeight =
+    PLAYER_COLLISION_HEIGHT
 ): boolean {
-  for (
-    const colliders
-    of chunkColliders.values()
-  ) {
+  const keys =
+    collectNearbyColliderKeys(
+      x,
+      z,
+      radius
+    );
+
+  for (const key of keys) {
+    const colliders =
+      chunkColliders.get(key);
+
+    if (!colliders) {
+      continue;
+    }
+
     for (
-      const collider
-      of colliders
+      const collider of
+      colliders
     ) {
+      if (
+        !verticalRangesOverlap(
+          playerY,
+          playerHeight,
+          collider
+        )
+      ) {
+        continue;
+      }
+
       if (
         circleIntersectsBox(
           x,
@@ -520,40 +863,57 @@ export function resolveWorldCollision(
   const nextZ =
     player.position.z;
 
-  /*
-   * اگر خود موقعیت قبلی داخل Collider است،
-   * Collision را موقتاً اعمال نمی‌کنیم تا کاراکتر
-   * بتواند از محل گیرکرده خارج شود.
-   */
+  const playerY =
+    player.position.y;
+
   const previousBlocked =
     collidesWithWorld(
       previousX,
       previousZ,
-      radius
+      radius,
+      playerY
     );
 
+  /*
+   * اگر موقعیت قبلی داخل Collider باشد، بازیکن باید بتواند
+   * از آن خارج شود و نباید دائماً به همان نقطه بازگردد.
+   */
   if (previousBlocked) {
-    return;
+    const currentBlocked =
+      collidesWithWorld(
+        nextX,
+        nextZ,
+        radius,
+        playerY
+      );
+
+    if (!currentBlocked) {
+      return;
+    }
   }
 
-  if (
+  const blockedX =
     collidesWithWorld(
       nextX,
       previousZ,
-      radius
-    )
-  ) {
+      radius,
+      playerY
+    );
+
+  if (blockedX) {
     player.position.x =
       previousX;
   }
 
-  if (
+  const blockedZ =
     collidesWithWorld(
       player.position.x,
       nextZ,
-      radius
-    )
-  ) {
+      radius,
+      playerY
+    );
+
+  if (blockedZ) {
     player.position.z =
       previousZ;
   }
@@ -562,7 +922,8 @@ export function resolveWorldCollision(
     collidesWithWorld(
       player.position.x,
       player.position.z,
-      radius
+      radius,
+      playerY
     )
   ) {
     player.position.x =
@@ -571,6 +932,160 @@ export function resolveWorldCollision(
     player.position.z =
       previousZ;
   }
+}
+
+function getSurfaceObjectsNearPosition(
+  x: number,
+  z: number
+): THREE.Object3D[] {
+  const { cx, cz } =
+    getChunkCoord(x, z);
+
+  const result:
+    THREE.Object3D[] = [];
+
+  for (
+    let chunkX = cx - 1;
+    chunkX <= cx + 1;
+    chunkX++
+  ) {
+    for (
+      let chunkZ = cz - 1;
+      chunkZ <= cz + 1;
+      chunkZ++
+    ) {
+      const surfaces =
+        chunkWalkableSurfaces.get(
+          getChunkKey(
+            chunkX,
+            chunkZ
+          )
+        );
+
+      if (!surfaces) {
+        continue;
+      }
+
+      for (
+        const surface of
+        surfaces
+      ) {
+        if (
+          surface.parent &&
+          surface.visible
+        ) {
+          result.push(surface);
+        }
+      }
+    }
+  }
+
+  return result;
+}
+
+/*
+ * ارتفاع سطح قابل راه‌رفتن را پیدا می‌کند.
+ * روی پل، رمپ و زمین از بالاترین سطح معتبر زیر بازیکن
+ * استفاده می‌شود.
+ */
+export function getWorldSurfaceHeight(
+  x: number,
+  z: number,
+  currentY = 0,
+  maxStepUp = 1.25,
+  rayHeight = 40
+): number {
+  const surfaces =
+    getSurfaceObjectsNearPosition(
+      x,
+      z
+    );
+
+  if (surfaces.length === 0) {
+    return 0;
+  }
+
+  surfaceRayOrigin.set(
+    x,
+    Math.max(
+      currentY +
+        maxStepUp,
+      rayHeight
+    ),
+    z
+  );
+
+  surfaceRaycaster.set(
+    surfaceRayOrigin,
+    downDirection
+  );
+
+  surfaceRaycaster.near = 0;
+  surfaceRaycaster.far =
+    rayHeight * 2 +
+    Math.abs(currentY);
+
+  const intersections =
+    surfaceRaycaster.intersectObjects(
+      surfaces,
+      true
+    );
+
+  if (
+    intersections.length === 0
+  ) {
+    return 0;
+  }
+
+  const maximumAllowedY =
+    currentY + maxStepUp;
+
+  let fallbackHeight:
+    number | null = null;
+
+  for (
+    const intersection of
+    intersections
+  ) {
+    const surfaceY =
+      intersection.point.y;
+
+    if (
+      fallbackHeight === null
+    ) {
+      fallbackHeight =
+        surfaceY;
+    }
+
+    if (
+      surfaceY <=
+      maximumAllowedY
+    ) {
+      return surfaceY;
+    }
+  }
+
+  return fallbackHeight ?? 0;
+}
+
+export function snapObjectToWorldSurface(
+  object: THREE.Object3D,
+  maxStepUp = 1.25,
+  verticalOffset = 0
+): number {
+  const surfaceHeight =
+    getWorldSurfaceHeight(
+      object.position.x,
+      object.position.z,
+      object.position.y,
+      maxStepUp
+    );
+
+  object.position.y =
+    surfaceHeight +
+    verticalOffset;
+
+  return surfaceHeight;
 }
 
 export function findSafeSpawnPosition(
@@ -584,7 +1099,9 @@ export function findSafeSpawnPosition(
   const originZ =
     chunkZ * CHUNK_SIZE;
 
-  const candidates = [
+  const candidates: ReadonlyArray<
+    readonly [number, number]
+  > = [
     [0, -30],
     [0, 30],
     [-30, 0],
@@ -599,11 +1116,15 @@ export function findSafeSpawnPosition(
     [-30, 15],
     [30, -15],
     [30, 15],
+
+    [0, 0],
   ];
 
   for (
-    const [localX, localZ]
-    of candidates
+    const [
+      localX,
+      localZ,
+    ] of candidates
   ) {
     const x =
       originX + localX;
@@ -611,42 +1132,70 @@ export function findSafeSpawnPosition(
     const z =
       originZ + localZ;
 
+    const y =
+      getWorldSurfaceHeight(
+        x,
+        z,
+        0,
+        2
+      );
+
     if (
       !collidesWithWorld(
         x,
         z,
-        radius
+        radius,
+        y
       )
     ) {
       return new THREE.Vector3(
         x,
-        0,
+        y,
         z
       );
     }
   }
 
+  const fallbackX =
+    originX;
+
+  const fallbackZ =
+    originZ - 30;
+
   return new THREE.Vector3(
-    originX,
-    0,
-    originZ - 30
+    fallbackX,
+    getWorldSurfaceHeight(
+      fallbackX,
+      fallbackZ,
+      0,
+      2
+    ),
+    fallbackZ
   );
 }
 
 function getAllOccluders(): THREE.Mesh[] {
-  const result: THREE.Mesh[] = [];
+  const result:
+    THREE.Mesh[] = [];
 
   for (
-    const meshes
-    of chunkOccluders.values()
+    const meshes of
+    chunkOccluders.values()
   ) {
-    for (const mesh of meshes) {
+    for (
+      const mesh of meshes
+    ) {
       if (
-        mesh.parent &&
-        mesh.visible
+        !mesh.parent ||
+        !mesh.visible ||
+        mesh.userData
+          .cameraOccluder !==
+          true
       ) {
-        result.push(mesh);
+        continue;
       }
+
+      result.push(mesh);
     }
   }
 
@@ -654,7 +1203,10 @@ function getAllOccluders(): THREE.Mesh[] {
 }
 
 function restoreCameraMaterials(): void {
-  for (const material of fadedMaterials) {
+  for (
+    const material of
+    fadedMaterials
+  ) {
     const opacity =
       material.userData
         .cameraOriginalOpacity;
@@ -667,10 +1219,16 @@ function restoreCameraMaterials(): void {
       material.userData
         .cameraOriginalDepthWrite;
 
+    const alphaTest =
+      material.userData
+        .cameraOriginalAlphaTest;
+
     if (
-      typeof opacity === "number"
+      typeof opacity ===
+      "number"
     ) {
-      material.opacity = opacity;
+      material.opacity =
+        opacity;
     }
 
     if (
@@ -687,6 +1245,14 @@ function restoreCameraMaterials(): void {
     ) {
       material.depthWrite =
         depthWrite;
+    }
+
+    if (
+      typeof alphaTest ===
+      "number"
+    ) {
+      material.alphaTest =
+        alphaTest;
     }
 
     material.needsUpdate = true;
@@ -714,11 +1280,19 @@ function fadeMaterial(
     material.userData
       .cameraOriginalDepthWrite =
       material.depthWrite;
+
+    material.userData
+      .cameraOriginalAlphaTest =
+      material.alphaTest;
   }
 
   material.transparent = true;
-  material.opacity = 0.15;
+  material.opacity =
+    CAMERA_FADE_OPACITY;
+
   material.depthWrite = false;
+  material.alphaTest = 0;
+
   material.needsUpdate = true;
 
   fadedMaterials.add(material);
@@ -733,11 +1307,16 @@ export function updateCameraOcclusion(
   const occluders =
     getAllOccluders();
 
-  if (occluders.length === 0) {
+  if (
+    occluders.length === 0
+  ) {
     return;
   }
 
-  cameraRayOrigin.copy(target);
+  cameraRayOrigin.copy(
+    target
+  );
+
   cameraRayOrigin.y += 1.3;
 
   cameraDirection
@@ -747,7 +1326,9 @@ export function updateCameraOcclusion(
   const distance =
     cameraDirection.length();
 
-  if (distance <= 0.01) {
+  if (
+    distance <= 0.01
+  ) {
     return;
   }
 
@@ -758,8 +1339,17 @@ export function updateCameraOcclusion(
     cameraDirection
   );
 
-  raycaster.near = 0.1;
-  raycaster.far = distance;
+  raycaster.near = 0.05;
+
+  /*
+   * کمی قبل از دوربین متوقف می‌شود تا Mesh پشت دوربین
+   * یا خود دوربین به‌اشتباه محو نشود.
+   */
+  raycaster.far =
+    Math.max(
+      distance - 0.1,
+      0
+    );
 
   const intersections =
     raycaster.intersectObjects(
@@ -767,21 +1357,39 @@ export function updateCameraOcclusion(
       false
     );
 
-  for (const intersection of intersections) {
+  const processedMeshes =
+    new Set<THREE.Mesh>();
+
+  for (
+    const intersection of
+    intersections
+  ) {
     const mesh =
       intersection.object;
 
-    if (!(mesh instanceof THREE.Mesh)) {
+    if (
+      !(mesh instanceof THREE.Mesh) ||
+      processedMeshes.has(mesh)
+    ) {
       continue;
     }
 
+    processedMeshes.add(mesh);
+
     const materials =
-      Array.isArray(mesh.material)
+      Array.isArray(
+        mesh.material
+      )
         ? mesh.material
         : [mesh.material];
 
-    for (const material of materials) {
-      fadeMaterial(material);
+    for (
+      const material of
+      materials
+    ) {
+      if (material) {
+        fadeMaterial(material);
+      }
     }
   }
 }
@@ -790,22 +1398,27 @@ export function destroyAllChunks(): void {
   restoreCameraMaterials();
 
   for (
-    const [, chunk]
-    of chunks
+    const [key, chunk]
+    of Array.from(
+      chunks.entries()
+    )
   ) {
-    chunk.userData.destroyed =
-      true;
-
-    disposeChunkResources(
+    removeChunk(
+      key,
       chunk
     );
-
-    chunk.clear();
-    chunk.removeFromParent();
   }
 
   chunks.clear();
   chunkColliders.clear();
   chunkOccluders.clear();
+  chunkWalkableSurfaces.clear();
+
+  /*
+   * Promiseهای در حال اجرا لغو نمی‌شوند، اما به دلیل
+   * destroyed بودن Parent دیگر مدل‌ها به صحنه اضافه
+   * نخواهند شد.
+   */
   generatingChunks.clear();
-        }
+  generationTokens.clear();
+    }
