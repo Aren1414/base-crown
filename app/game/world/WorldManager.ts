@@ -15,39 +15,32 @@ import {
   type ModelDef,
 } from "../assets/Models";
 
-export const CHUNK_SIZE = 120;
+export const CHUNK_SIZE = 140;
 
-const ROAD_WIDTH = 12;
-const ALLEY_WIDTH = 5;
-const SIDEWALK_WIDTH = 2.5;
+const ROAD_WIDTH = 11;
+const SIDEWALK_WIDTH = 2.4;
+const ALLEY_WIDTH = 4.5;
+const PLAYER_BASE_Y = 0.05;
 
-const ROAD_POSITIONS = [-30, 30];
-const ALLEY_POSITIONS = [-49, 0, 49];
+type ChunkKind =
+  | "city"
+  | "park"
+  | "river-x"
+  | "river-z"
+  | "tunnel-x"
+  | "tunnel-z";
 
-type ChunkType =
-  | "urban"
-  | "river-horizontal"
-  | "river-vertical"
-  | "tunnel-horizontal"
-  | "tunnel-vertical";
-
-type RoadDirection =
-  | "horizontal"
-  | "vertical";
+type Direction = "x" | "z";
 
 type RoadPoint = {
   x: number;
   z: number;
-  direction: RoadDirection;
+  direction: Direction;
 };
 
-type WalkableRect = {
-  x: number;
-  z: number;
-  width: number;
-  depth: number;
-  y: number;
-  type: "ground" | "road" | "alley" | "sidewalk" | "bridge";
+type Collider = {
+  box: THREE.Box3;
+  chunk: THREE.Group;
 };
 
 export const chunks =
@@ -58,62 +51,103 @@ const loader = new GLTFLoader();
 const modelCache =
   new Map<string, Promise<THREE.Group>>();
 
+const colliders: Collider[] = [];
+const heightMeshes: THREE.Object3D[] = [];
+const occlusionMeshes: THREE.Object3D[] = [];
+const animatedWaterMaterials =
+  new Set<THREE.Material>();
+
+const raycaster =
+  new THREE.Raycaster();
+
+const rayOrigin =
+  new THREE.Vector3();
+
+const rayDirection =
+  new THREE.Vector3(0, -1, 0);
+
+const groundGeometry =
+  new THREE.PlaneGeometry(
+    CHUNK_SIZE,
+    CHUNK_SIZE
+  );
+
+const mainRoadXGeometry =
+  new THREE.PlaneGeometry(
+    CHUNK_SIZE,
+    ROAD_WIDTH
+  );
+
+const mainRoadZGeometry =
+  new THREE.PlaneGeometry(
+    ROAD_WIDTH,
+    CHUNK_SIZE
+  );
+
+const alleyXGeometry =
+  new THREE.PlaneGeometry(
+    CHUNK_SIZE,
+    ALLEY_WIDTH
+  );
+
+const alleyZGeometry =
+  new THREE.PlaneGeometry(
+    ALLEY_WIDTH,
+    CHUNK_SIZE
+  );
+
+const sidewalkXGeometry =
+  new THREE.PlaneGeometry(
+    CHUNK_SIZE,
+    SIDEWALK_WIDTH
+  );
+
+const sidewalkZGeometry =
+  new THREE.PlaneGeometry(
+    SIDEWALK_WIDTH,
+    CHUNK_SIZE
+  );
+
 const groundMaterial =
   new THREE.MeshStandardMaterial({
-    color: 0x696b5b,
+    color: 0x53604e,
     roughness: 1,
     metalness: 0,
   });
 
 const roadMaterial =
   new THREE.MeshStandardMaterial({
-    color: 0x30322f,
-    roughness: 0.96,
+    color: 0x292c2c,
+    roughness: 0.95,
     metalness: 0,
   });
 
 const alleyMaterial =
   new THREE.MeshStandardMaterial({
-    color: 0x41433d,
+    color: 0x3b3d39,
     roughness: 1,
     metalness: 0,
   });
 
 const sidewalkMaterial =
   new THREE.MeshStandardMaterial({
-    color: 0x77776d,
+    color: 0x74766f,
     roughness: 1,
     metalness: 0,
   });
 
-const lineMaterial =
+const markingMaterial =
   new THREE.MeshBasicMaterial({
-    color: 0xb3aa76,
+    color: 0xb8ad78,
     transparent: true,
-    opacity: 0.45,
+    opacity: 0.55,
     depthWrite: false,
     polygonOffset: true,
     polygonOffsetFactor: -2,
     polygonOffsetUnits: -2,
   });
 
-function createSeed(
-  cx: number,
-  cz: number
-): number {
-  let value =
-    Math.imul(cx, 374761393) +
-    Math.imul(cz, 668265263);
-
-  value =
-    (value ^ (value >>> 13)) >>> 0;
-
-  return value;
-}
-
-function createRandom(
-  seed: number
-): () => number {
+function seededRandom(seed: number) {
   let state = seed >>> 0;
 
   return () => {
@@ -139,12 +173,24 @@ function createRandom(
   };
 }
 
+function chunkSeed(
+  cx: number,
+  cz: number
+) {
+  return (
+    Math.imul(cx, 73856093) ^
+    Math.imul(cz, 19349663)
+  ) >>> 0;
+}
+
 function pick<T>(
-  items: readonly T[],
+  array: readonly T[],
   random: () => number
 ): T {
-  return items[
-    Math.floor(random() * items.length)
+  return array[
+    Math.floor(
+      random() * array.length
+    )
   ];
 }
 
@@ -152,27 +198,91 @@ function randomRange(
   random: () => number,
   min: number,
   max: number
-): number {
-  return min + random() * (max - min);
+) {
+  return min +
+    random() * (max - min);
+}
+
+function createSurface(
+  geometry: THREE.PlaneGeometry,
+  material: THREE.Material,
+  x: number,
+  z: number,
+  y: number
+) {
+  const mesh =
+    new THREE.Mesh(
+      geometry,
+      material
+    );
+
+  mesh.rotation.x =
+    -Math.PI / 2;
+
+  mesh.position.set(
+    x,
+    y,
+    z
+  );
+
+  mesh.receiveShadow = true;
+
+  return mesh;
 }
 
 export function getChunkCoord(
   x: number,
   z: number
-): {
-  cx: number;
-  cz: number;
-} {
+) {
   return {
-    cx: Math.floor(x / CHUNK_SIZE),
-    cz: Math.floor(z / CHUNK_SIZE),
+    cx: Math.floor(
+      (x + CHUNK_SIZE / 2) /
+        CHUNK_SIZE
+    ),
+    cz: Math.floor(
+      (z + CHUNK_SIZE / 2) /
+        CHUNK_SIZE
+    ),
   };
 }
 
-function loadCachedModel(
+function getChunkKind(
+  cx: number,
+  cz: number
+): ChunkKind {
+  if (cx === 0 && cz === 0) {
+    return "city";
+  }
+
+  const value =
+    Math.abs(
+      cx * 17 + cz * 31
+    );
+
+  if (value % 13 === 0) {
+    return cx % 2 === 0
+      ? "river-x"
+      : "river-z";
+  }
+
+  if (value % 11 === 0) {
+    return cz % 2 === 0
+      ? "tunnel-x"
+      : "tunnel-z";
+  }
+
+  if (value % 7 === 0) {
+    return "park";
+  }
+
+  return "city";
+}
+
+function loadSource(
   url: string
-): Promise<THREE.Group> {
-  const cached = modelCache.get(url);
+) {
+  const cached =
+    modelCache.get(url);
 
   if (cached) {
     return cached;
@@ -192,23 +302,111 @@ function loadCachedModel(
       }
     );
 
-  modelCache.set(url, promise);
+  modelCache.set(
+    url,
+    promise
+  );
 
   return promise;
 }
 
-function prepareModel(
+function configureModel(
   object: THREE.Object3D
-): void {
+) {
   object.traverse((child) => {
-    if (!(child instanceof THREE.Mesh)) {
+    if (
+      !(child instanceof THREE.Mesh)
+    ) {
       return;
     }
 
     child.castShadow = true;
     child.receiveShadow = true;
-
     child.frustumCulled = true;
+  });
+}
+
+function registerCollider(
+  object: THREE.Object3D,
+  chunk: THREE.Group,
+  shrink = 0.5
+) {
+  object.updateMatrixWorld(true);
+
+  const box =
+    new THREE.Box3().setFromObject(
+      object
+    );
+
+  if (box.isEmpty()) {
+    return;
+  }
+
+  const size =
+    new THREE.Vector3();
+
+  box.getSize(size);
+
+  box.expandByScalar(
+    -Math.min(
+      shrink,
+      size.x * 0.08,
+      size.z * 0.08
+    )
+  );
+
+  colliders.push({
+    box,
+    chunk,
+  });
+}
+
+function registerModelMeshes(
+  object: THREE.Object3D,
+  options: {
+    collision?: boolean;
+    height?: boolean;
+    occlusion?: boolean;
+    water?: boolean;
+  },
+  chunk: THREE.Group
+) {
+  if (options.collision) {
+    registerCollider(
+      object,
+      chunk
+    );
+  }
+
+  object.traverse((child) => {
+    if (
+      !(child instanceof THREE.Mesh)
+    ) {
+      return;
+    }
+
+    if (options.height) {
+      heightMeshes.push(child);
+    }
+
+    if (options.occlusion) {
+      occlusionMeshes.push(child);
+    }
+
+    if (options.water) {
+      const materials =
+        Array.isArray(
+          child.material
+        )
+          ? child.material
+          : [child.material];
+
+      for (const material of materials) {
+        animatedWaterMaterials.add(
+          material
+        );
+      }
+    }
   });
 }
 
@@ -218,9 +416,17 @@ function placeModel(
   x: number,
   z: number,
   rotationY = 0,
-  y = 0
-): void {
-  loadCachedModel(definition.url)
+  options: {
+    y?: number;
+    collision?: boolean;
+    height?: boolean;
+    occlusion?: boolean;
+    water?: boolean;
+  } = {}
+) {
+  void loadSource(
+    definition.url
+  )
     .then((source) => {
       if (
         chunk.userData.destroyed ||
@@ -236,16 +442,17 @@ function placeModel(
         definition.scale
       );
 
-      object.rotation.y = rotationY;
+      object.rotation.y =
+        rotationY;
 
-      object.position.set(x, y, z);
+      object.position.set(
+        x,
+        options.y ?? 0,
+        z
+      );
 
-      prepareModel(object);
+      configureModel(object);
 
-      /*
-       * مدل روی سطح زمین قرار می‌گیرد؛ حتی اگر Origin
-       * فایل GLB دقیقاً پایین مدل نباشد.
-       */
       object.updateMatrixWorld(true);
 
       const bounds =
@@ -254,128 +461,114 @@ function placeModel(
         );
 
       if (
-        Number.isFinite(bounds.min.y)
+        Number.isFinite(
+          bounds.min.y
+        )
       ) {
         object.position.y +=
-          y - bounds.min.y;
+          (options.y ?? 0) -
+          bounds.min.y;
       }
 
       chunk.add(object);
+
+      object.updateMatrixWorld(true);
+
+      registerModelMeshes(
+        object,
+        options,
+        chunk
+      );
     })
     .catch((error) => {
       console.error(
-        `Unable to load model: ${definition.url}`,
+        `Model load failed: ${definition.url}`,
         error
       );
     });
 }
 
-function createPlane(
-  width: number,
-  depth: number,
-  material: THREE.Material,
-  x: number,
-  z: number,
-  y: number
-): THREE.Mesh {
-  const mesh =
-    new THREE.Mesh(
-      new THREE.PlaneGeometry(
-        width,
-        depth
-      ),
-      material
-    );
-
-  mesh.rotation.x =
-    -Math.PI / 2;
-
-  mesh.position.set(x, y, z);
-
-  mesh.receiveShadow = true;
-
-  return mesh;
-}
-
-function addWalkableRect(
-  chunk: THREE.Group,
-  rectangle: WalkableRect
-): void {
-  const walkable =
-    chunk.userData.walkableRects as
-      | WalkableRect[]
-      | undefined;
-
-  if (walkable) {
-    walkable.push(rectangle);
-  }
-}
-
 function addGround(
   chunk: THREE.Group
-): void {
+) {
   const ground =
-    createPlane(
-      CHUNK_SIZE,
-      CHUNK_SIZE,
+    createSurface(
+      groundGeometry,
       groundMaterial,
       0,
       0,
       0
     );
 
-  ground.name = "CityGround";
+  ground.name = "Ground";
 
   chunk.add(ground);
+  heightMeshes.push(ground);
+}
 
-  addWalkableRect(chunk, {
-    x: 0,
-    z: 0,
-    width: CHUNK_SIZE,
-    depth: CHUNK_SIZE,
-    y: 0,
-    type: "ground",
-  });
+function addMarkings(
+  chunk: THREE.Group,
+  direction: Direction,
+  position: number
+) {
+  for (
+    let offset = -62;
+    offset <= 62;
+    offset += 12
+  ) {
+    const geometry =
+      direction === "x"
+        ? new THREE.PlaneGeometry(
+            5,
+            0.16
+          )
+        : new THREE.PlaneGeometry(
+            0.16,
+            5
+          );
+
+    const mark =
+      createSurface(
+        geometry,
+        markingMaterial,
+        direction === "x"
+          ? offset
+          : position,
+        direction === "x"
+          ? position
+          : offset,
+        0.04
+      );
+
+    mark.userData.temporaryGeometry =
+      true;
+
+    chunk.add(mark);
+  }
 }
 
 function addRoad(
   chunk: THREE.Group,
-  direction: RoadDirection,
+  direction: Direction,
   position: number
-): void {
-  const horizontal =
-    direction === "horizontal";
-
+) {
   const road =
-    createPlane(
-      horizontal
-        ? CHUNK_SIZE
-        : ROAD_WIDTH,
-      horizontal
-        ? ROAD_WIDTH
-        : CHUNK_SIZE,
+    createSurface(
+      direction === "x"
+        ? mainRoadXGeometry
+        : mainRoadZGeometry,
       roadMaterial,
-      horizontal ? 0 : position,
-      horizontal ? position : 0,
-      0.03
+      direction === "x"
+        ? 0
+        : position,
+      direction === "x"
+        ? position
+        : 0,
+      0.02
     );
 
-  road.name = "ProceduralRoad";
-
   chunk.add(road);
-
-  addWalkableRect(chunk, {
-    x: horizontal ? 0 : position,
-    z: horizontal ? position : 0,
-    width: horizontal
-      ? CHUNK_SIZE
-      : ROAD_WIDTH,
-    depth: horizontal
-      ? ROAD_WIDTH
-      : CHUNK_SIZE,
-    y: 0.03,
-    type: "road",
-  });
+  heightMeshes.push(road);
 
   const sidewalkOffset =
     ROAD_WIDTH / 2 +
@@ -383,295 +576,191 @@ function addRoad(
 
   for (const side of [-1, 1]) {
     const sidewalk =
-      createPlane(
-        horizontal
-          ? CHUNK_SIZE
-          : SIDEWALK_WIDTH,
-        horizontal
-          ? SIDEWALK_WIDTH
-          : CHUNK_SIZE,
+      createSurface(
+        direction === "x"
+          ? sidewalkXGeometry
+          : sidewalkZGeometry,
         sidewalkMaterial,
-        horizontal
+        direction === "x"
           ? 0
           : position +
             sidewalkOffset * side,
-        horizontal
+        direction === "x"
           ? position +
             sidewalkOffset * side
           : 0,
-        0.055
+        0.045
       );
 
-    sidewalk.name =
-      "ProceduralSidewalk";
-
     chunk.add(sidewalk);
-
-    addWalkableRect(chunk, {
-      x: sidewalk.position.x,
-      z: sidewalk.position.z,
-      width: horizontal
-        ? CHUNK_SIZE
-        : SIDEWALK_WIDTH,
-      depth: horizontal
-        ? SIDEWALK_WIDTH
-        : CHUNK_SIZE,
-      y: 0.055,
-      type: "sidewalk",
-    });
+    heightMeshes.push(sidewalk);
   }
 
-  addRoadMarkings(
+  addMarkings(
     chunk,
     direction,
     position
   );
 }
 
-function addRoadMarkings(
-  chunk: THREE.Group,
-  direction: RoadDirection,
-  position: number
-): void {
-  const horizontal =
-    direction === "horizontal";
-
-  for (
-    let offset = -52;
-    offset <= 52;
-    offset += 10
-  ) {
-    const marking =
-      createPlane(
-        horizontal ? 4.8 : 0.18,
-        horizontal ? 0.18 : 4.8,
-        lineMaterial,
-        horizontal ? offset : position,
-        horizontal ? position : offset,
-        0.072
-      );
-
-    marking.name = "RoadMarking";
-
-    chunk.add(marking);
-  }
-}
-
 function addAlley(
   chunk: THREE.Group,
-  direction: RoadDirection,
+  direction: Direction,
   position: number
-): void {
-  const horizontal =
-    direction === "horizontal";
-
+) {
   const alley =
-    createPlane(
-      horizontal
-        ? CHUNK_SIZE
-        : ALLEY_WIDTH,
-      horizontal
-        ? ALLEY_WIDTH
-        : CHUNK_SIZE,
+    createSurface(
+      direction === "x"
+        ? alleyXGeometry
+        : alleyZGeometry,
       alleyMaterial,
-      horizontal ? 0 : position,
-      horizontal ? position : 0,
-      0.04
+      direction === "x"
+        ? 0
+        : position,
+      direction === "x"
+        ? position
+        : 0,
+      0.025
     );
 
-  alley.name = "ProceduralAlley";
-
   chunk.add(alley);
-
-  addWalkableRect(chunk, {
-    x: alley.position.x,
-    z: alley.position.z,
-    width: horizontal
-      ? CHUNK_SIZE
-      : ALLEY_WIDTH,
-    depth: horizontal
-      ? ALLEY_WIDTH
-      : CHUNK_SIZE,
-    y: 0.04,
-    type: "alley",
-  });
+  heightMeshes.push(alley);
 }
 
-function getChunkType(
-  random: () => number
-): ChunkType {
-  const value = random();
-
-  if (value < 0.08) {
-    return random() < 0.5
-      ? "river-horizontal"
-      : "river-vertical";
-  }
-
-  if (value < 0.14) {
-    return random() < 0.5
-      ? "tunnel-horizontal"
-      : "tunnel-vertical";
-  }
-
-  return "urban";
-}
-
-function buildRoadLayout(
+function buildRoads(
   chunk: THREE.Group,
-  chunkType: ChunkType
+  kind: ChunkKind,
+  random: () => number
 ): RoadPoint[] {
   const roadPoints: RoadPoint[] = [];
 
-  let horizontalRoads =
-    [...ROAD_POSITIONS];
-
-  let verticalRoads =
-    [...ROAD_POSITIONS];
+  let mainDirection: Direction =
+    random() < 0.5 ? "x" : "z";
 
   if (
-    chunkType === "river-horizontal"
+    kind === "river-x" ||
+    kind === "tunnel-x"
   ) {
-    horizontalRoads = [-38, 38];
+    mainDirection = "z";
   }
 
   if (
-    chunkType === "river-vertical"
+    kind === "river-z" ||
+    kind === "tunnel-z"
   ) {
-    verticalRoads = [-38, 38];
+    mainDirection = "x";
   }
 
-  for (const z of horizontalRoads) {
-    addRoad(chunk, "horizontal", z);
+  addRoad(
+    chunk,
+    mainDirection,
+    0
+  );
 
-    for (
-      let x = -50;
-      x <= 50;
-      x += 20
-    ) {
-      roadPoints.push({
-        x,
-        z,
-        direction: "horizontal",
-      });
-    }
+  for (
+    let offset = -58;
+    offset <= 58;
+    offset += 18
+  ) {
+    roadPoints.push({
+      x:
+        mainDirection === "x"
+          ? offset
+          : 0,
+      z:
+        mainDirection === "x"
+          ? 0
+          : offset,
+      direction: mainDirection,
+    });
   }
 
-  for (const x of verticalRoads) {
-    addRoad(chunk, "vertical", x);
+  if (
+    kind === "city" &&
+    random() < 0.45
+  ) {
+    const alleyDirection: Direction =
+      mainDirection === "x"
+        ? "z"
+        : "x";
 
-    for (
-      let z = -50;
-      z <= 50;
-      z += 20
-    ) {
-      roadPoints.push({
-        x,
-        z,
-        direction: "vertical",
-      });
-    }
-  }
+    const alleyPosition =
+      random() < 0.5
+        ? -38
+        : 38;
 
-  for (const z of ALLEY_POSITIONS) {
-    if (
-      chunkType ===
-        "river-horizontal" &&
-      Math.abs(z) < 10
-    ) {
-      continue;
-    }
-
-    addAlley(chunk, "horizontal", z);
-  }
-
-  for (const x of ALLEY_POSITIONS) {
-    if (
-      chunkType ===
-        "river-vertical" &&
-      Math.abs(x) < 10
-    ) {
-      continue;
-    }
-
-    addAlley(chunk, "vertical", x);
+    addAlley(
+      chunk,
+      alleyDirection,
+      alleyPosition
+    );
   }
 
   return roadPoints;
 }
 
-function createBuildingSlots(
-  chunkType: ChunkType
-): Array<{
-  x: number;
-  z: number;
-  rotation: number;
-}> {
-  const slots = [
-    { x: -45, z: -45, rotation: 0 },
-    { x: -15, z: -45, rotation: 0 },
-    { x: 15, z: -45, rotation: 0 },
-    { x: 45, z: -45, rotation: 0 },
-
-    {
-      x: -45,
-      z: -15,
-      rotation: Math.PI / 2,
-    },
-    {
-      x: 45,
-      z: -15,
-      rotation: -Math.PI / 2,
-    },
-
-    {
-      x: -45,
-      z: 15,
-      rotation: Math.PI / 2,
-    },
-    {
-      x: 45,
-      z: 15,
-      rotation: -Math.PI / 2,
-    },
-
-    {
-      x: -45,
-      z: 45,
-      rotation: Math.PI,
-    },
-    {
-      x: -15,
-      z: 45,
-      rotation: Math.PI,
-    },
-    {
-      x: 15,
-      z: 45,
-      rotation: Math.PI,
-    },
-    {
-      x: 45,
-      z: 45,
-      rotation: Math.PI,
-    },
+function buildingSlots(
+  mainDirection: Direction,
+  kind: ChunkKind
+) {
+  const positions = [
+    -52,
+    -18,
+    18,
+    52,
   ];
 
+  const slots: Array<{
+    x: number;
+    z: number;
+    rotation: number;
+  }> = [];
+
+  if (mainDirection === "x") {
+    for (const x of positions) {
+      slots.push({
+        x,
+        z: -36,
+        rotation: 0,
+      });
+
+      slots.push({
+        x,
+        z: 36,
+        rotation: Math.PI,
+      });
+    }
+  } else {
+    for (const z of positions) {
+      slots.push({
+        x: -36,
+        z,
+        rotation: Math.PI / 2,
+      });
+
+      slots.push({
+        x: 36,
+        z,
+        rotation: -Math.PI / 2,
+      });
+    }
+  }
+
   if (
-    chunkType === "river-horizontal"
+    kind === "river-x"
   ) {
     return slots.filter(
       (slot) =>
-        Math.abs(slot.z) > 20
+        Math.abs(slot.z) > 28
     );
   }
 
   if (
-    chunkType === "river-vertical"
+    kind === "river-z"
   ) {
     return slots.filter(
       (slot) =>
-        Math.abs(slot.x) > 20
+        Math.abs(slot.x) > 28
     );
   }
 
@@ -681,39 +770,52 @@ function createBuildingSlots(
 function spawnBuildings(
   chunk: THREE.Group,
   random: () => number,
-  chunkType: ChunkType
-): void {
+  kind: ChunkKind,
+  mainDirection: Direction
+) {
+  if (kind === "park") {
+    return;
+  }
+
   const slots =
-    createBuildingSlots(chunkType);
+    buildingSlots(
+      mainDirection,
+      kind
+    );
 
   for (const slot of slots) {
-    if (random() > 0.76) {
+    if (random() > 0.88) {
       continue;
     }
 
-    const building =
+    placeModel(
       pick(
         URBAN_BUILDINGS,
         random
-      );
-
-    const jitterX =
-      randomRange(random, -2, 2);
-
-    const jitterZ =
-      randomRange(random, -2, 2);
-
-    placeModel(
-      building,
+      ),
       chunk,
-      slot.x + jitterX,
-      slot.z + jitterZ,
+      slot.x +
+        randomRange(
+          random,
+          -2,
+          2
+        ),
+      slot.z +
+        randomRange(
+          random,
+          -2,
+          2
+        ),
       slot.rotation +
         randomRange(
           random,
-          -0.04,
-          0.04
-        )
+          -0.035,
+          0.035
+        ),
+      {
+        collision: true,
+        occlusion: true,
+      }
     );
   }
 }
@@ -721,26 +823,48 @@ function spawnBuildings(
 function spawnVehicles(
   chunk: THREE.Group,
   random: () => number,
-  roads: RoadPoint[]
-): void {
-  let vehicleCount = 0;
+  roadPoints: RoadPoint[]
+) {
+  const shuffled =
+    [...roadPoints].sort(
+      () => random() - 0.5
+    );
 
-  for (const road of roads) {
-    if (
-      vehicleCount >= 5 ||
-      random() > 0.12
-    ) {
-      continue;
-    }
+  const count =
+    2 +
+    Math.floor(
+      random() * 3
+    );
 
-    const vehicle =
-      pick(
-        URBAN_VEHICLES,
-        random
+  for (
+    let index = 0;
+    index <
+      Math.min(
+        count,
+        shuffled.length
       );
+    index++
+  ) {
+    const point =
+      shuffled[index];
+
+    const lane =
+      random() < 0.5
+        ? -2.3
+        : 2.3;
+
+    const x =
+      point.direction === "x"
+        ? point.x
+        : point.x + lane;
+
+    const z =
+      point.direction === "x"
+        ? point.z + lane
+        : point.z;
 
     const rotation =
-      road.direction === "horizontal"
+      point.direction === "x"
         ? random() < 0.5
           ? 0
           : Math.PI
@@ -748,212 +872,249 @@ function spawnVehicles(
           ? Math.PI / 2
           : -Math.PI / 2;
 
-    const laneOffset =
-      random() < 0.5 ? -2.2 : 2.2;
-
     placeModel(
-      vehicle,
+      pick(
+        URBAN_VEHICLES,
+        random
+      ),
       chunk,
-      road.direction === "vertical"
-        ? road.x + laneOffset
-        : road.x,
-      road.direction === "horizontal"
-        ? road.z + laneOffset
-        : road.z,
+      x,
+      z,
       rotation,
-      0.04
+      {
+        collision: true,
+      }
     );
-
-    vehicleCount++;
   }
 }
 
-function spawnRiver(
+function spawnRiverAndBridge(
   chunk: THREE.Group,
   random: () => number,
-  chunkType: ChunkType
-): void {
+  kind: ChunkKind
+) {
   if (
-    chunkType !== "river-horizontal" &&
-    chunkType !== "river-vertical"
+    kind !== "river-x" &&
+    kind !== "river-z"
   ) {
     return;
   }
 
-  const horizontal =
-    chunkType === "river-horizontal";
-
-  const river =
-    pick(URBAN_RIVER, random);
+  const riverAlongX =
+    kind === "river-x";
 
   placeModel(
-    river,
+    pick(
+      URBAN_RIVER,
+      random
+    ),
     chunk,
     0,
     0,
-    horizontal
+    riverAlongX
       ? 0
       : Math.PI / 2,
-    -0.2
+    {
+      y: -0.35,
+      water: true,
+    }
   );
-
-  const bridge =
-    pick(URBAN_BRIDGES, random);
 
   placeModel(
-    bridge,
+    pick(
+      URBAN_BRIDGES,
+      random
+    ),
     chunk,
-    horizontal ? 30 : 0,
-    horizontal ? 0 : 30,
-    horizontal
-      ? 0
-      : Math.PI / 2,
-    0.02
+    0,
+    0,
+    riverAlongX
+      ? Math.PI / 2
+      : 0,
+    {
+      collision: false,
+      height: true,
+      occlusion: true,
+    }
   );
-
-  addWalkableRect(chunk, {
-    x: horizontal ? 30 : 0,
-    z: horizontal ? 0 : 30,
-    width: horizontal
-      ? ROAD_WIDTH
-      : 32,
-    depth: horizontal
-      ? 32
-      : ROAD_WIDTH,
-    y: 0.5,
-    type: "bridge",
-  });
 }
 
 function spawnTunnel(
   chunk: THREE.Group,
   random: () => number,
-  chunkType: ChunkType
-): void {
+  kind: ChunkKind
+) {
   if (
-    chunkType !== "tunnel-horizontal" &&
-    chunkType !== "tunnel-vertical"
+    kind !== "tunnel-x" &&
+    kind !== "tunnel-z"
   ) {
     return;
   }
 
-  const horizontal =
-    chunkType === "tunnel-horizontal";
-
-  const tunnel =
-    pick(URBAN_TUNNEL, random);
+  const alongX =
+    kind === "tunnel-x";
 
   const tunnelX =
-    horizontal ? 52 : 30;
+    alongX ? 52 : 0;
 
   const tunnelZ =
-    horizontal ? -30 : -52;
+    alongX ? 0 : 52;
 
   const rotation =
-    horizontal ? Math.PI / 2 : 0;
+    alongX
+      ? Math.PI / 2
+      : 0;
 
   placeModel(
-    tunnel,
+    pick(
+      URBAN_TUNNEL,
+      random
+    ),
     chunk,
     tunnelX,
     tunnelZ,
-    rotation
+    rotation,
+    {
+      height: true,
+      occlusion: true,
+    }
   );
 
-  /*
-   * فقط دو دیواره استفاده می‌شود تا چانک بی‌دلیل
-   * سنگین نشود.
-   */
-  for (let index = 0; index < 2; index++) {
-    const wall =
+  const wallOffsets =
+    [-12, 12];
+
+  for (
+    let index = 0;
+    index <
+      wallOffsets.length;
+    index++
+  ) {
+    const offset =
+      wallOffsets[index];
+
+    placeModel(
       URBAN_TUNNEL_WALLS[
         index %
           URBAN_TUNNEL_WALLS.length
-      ];
-
-    placeModel(
-      wall,
+      ],
       chunk,
-      horizontal
+      alongX
         ? tunnelX
-        : tunnelX +
-          (index === 0 ? -7 : 7),
-      horizontal
-        ? tunnelZ +
-          (index === 0 ? -7 : 7)
+        : tunnelX + offset,
+      alongX
+        ? tunnelZ + offset
         : tunnelZ,
-      rotation
+      rotation,
+      {
+        collision: true,
+        occlusion: true,
+      }
     );
   }
 }
 
-function isNearRoad(
+function positionBlockedByRoad(
   x: number,
-  z: number
-): boolean {
+  z: number,
+  mainDirection: Direction
+) {
+  if (mainDirection === "x") {
+    return (
+      Math.abs(z) <
+      ROAD_WIDTH / 2 + 5
+    );
+  }
+
   return (
-    ROAD_POSITIONS.some(
-      (roadX) =>
-        Math.abs(x - roadX) <
-        ROAD_WIDTH
-    ) ||
-    ROAD_POSITIONS.some(
-      (roadZ) =>
-        Math.abs(z - roadZ) <
-        ROAD_WIDTH
-    ) ||
-    ALLEY_POSITIONS.some(
-      (alleyX) =>
-        Math.abs(x - alleyX) <
-        ALLEY_WIDTH
-    ) ||
-    ALLEY_POSITIONS.some(
-      (alleyZ) =>
-        Math.abs(z - alleyZ) <
-        ALLEY_WIDTH
-    )
+    Math.abs(x) <
+    ROAD_WIDTH / 2 + 5
   );
 }
 
 function spawnVegetation(
   chunk: THREE.Group,
   random: () => number,
-  chunkType: ChunkType
-): void {
-  const vegetationCount =
-    chunkType === "urban" ? 14 : 20;
+  kind: ChunkKind,
+  mainDirection: Direction
+) {
+  const count =
+    kind === "park"
+      ? 34
+      : kind === "city"
+        ? 16
+        : 20;
 
-  for (
-    let index = 0;
-    index < vegetationCount;
-    index++
+  let created = 0;
+  let attempts = 0;
+
+  while (
+    created < count &&
+    attempts < count * 4
   ) {
+    attempts++;
+
     const x =
-      randomRange(random, -56, 56);
+      randomRange(
+        random,
+        -64,
+        64
+      );
 
     const z =
-      randomRange(random, -56, 56);
+      randomRange(
+        random,
+        -64,
+        64
+      );
 
-    if (isNearRoad(x, z)) {
+    if (
+      positionBlockedByRoad(
+        x,
+        z,
+        mainDirection
+      )
+    ) {
       continue;
     }
 
-    const value = random();
+    const value =
+      random();
 
     let definition: ModelDef;
 
-    if (value < 0.34) {
+    if (
+      kind === "park" &&
+      value < 0.48
+    ) {
       definition =
-        pick(FOREST_TREES, random);
-    } else if (value < 0.62) {
+        pick(
+          FOREST_TREES,
+          random
+        );
+    } else if (value < 0.28) {
       definition =
-        pick(FOREST_BUSHES, random);
-    } else if (value < 0.84) {
+        pick(
+          FOREST_TREES,
+          random
+        );
+    } else if (value < 0.58) {
       definition =
-        pick(FOREST_GRASS, random);
+        pick(
+          FOREST_BUSHES,
+          random
+        );
+    } else if (value < 0.82) {
+      definition =
+        pick(
+          FOREST_GRASS,
+          random
+        );
     } else {
       definition =
-        pick(FOREST_FLOWERS, random);
+        pick(
+          FOREST_FLOWERS,
+          random
+        );
     }
 
     placeModel(
@@ -963,8 +1124,14 @@ function spawnVegetation(
       z,
       random() *
         Math.PI *
-        2
+        2,
+      {
+        collision:
+          definition.scale >= 3.5,
+      }
     );
+
+    created++;
   }
 }
 
@@ -972,33 +1139,54 @@ function buildChunk(
   chunk: THREE.Group,
   cx: number,
   cz: number
-): void {
+) {
   const random =
-    createRandom(
-      createSeed(cx, cz)
+    seededRandom(
+      chunkSeed(cx, cz)
     );
 
-  const chunkType =
-    getChunkType(random);
+  const kind =
+    getChunkKind(
+      cx,
+      cz
+    );
 
-  chunk.userData.chunkType =
-    chunkType;
-
-  chunk.userData.walkableRects =
-    [] as WalkableRect[];
+  chunk.userData.kind =
+    kind;
 
   addGround(chunk);
 
+  let mainDirection: Direction =
+    random() < 0.5
+      ? "x"
+      : "z";
+
+  if (
+    kind === "river-x" ||
+    kind === "tunnel-x"
+  ) {
+    mainDirection = "z";
+  }
+
+  if (
+    kind === "river-z" ||
+    kind === "tunnel-z"
+  ) {
+    mainDirection = "x";
+  }
+
   const roads =
-    buildRoadLayout(
+    buildRoads(
       chunk,
-      chunkType
+      kind,
+      random
     );
 
   spawnBuildings(
     chunk,
     random,
-    chunkType
+    kind,
+    mainDirection
   );
 
   spawnVehicles(
@@ -1007,22 +1195,23 @@ function buildChunk(
     roads
   );
 
-  spawnRiver(
+  spawnRiverAndBridge(
     chunk,
     random,
-    chunkType
+    kind
   );
 
   spawnTunnel(
     chunk,
     random,
-    chunkType
+    kind
   );
 
   spawnVegetation(
     chunk,
     random,
-    chunkType
+    kind,
+    mainDirection
   );
 }
 
@@ -1030,8 +1219,9 @@ export function generateChunk(
   scene: THREE.Scene,
   cx: number,
   cz: number
-): THREE.Group {
-  const key = `${cx},${cz}`;
+) {
+  const key =
+    `${cx},${cz}`;
 
   const existing =
     chunks.get(key);
@@ -1043,7 +1233,8 @@ export function generateChunk(
   const chunk =
     new THREE.Group();
 
-  chunk.name = `WorldChunk_${key}`;
+  chunk.name =
+    `Chunk_${key}`;
 
   chunk.position.set(
     cx * CHUNK_SIZE,
@@ -1051,23 +1242,27 @@ export function generateChunk(
     cz * CHUNK_SIZE
   );
 
-  chunk.userData.destroyed = false;
-
-  buildChunk(chunk, cx, cz);
+  chunk.userData.destroyed =
+    false;
 
   scene.add(chunk);
-
   chunks.set(key, chunk);
+
+  buildChunk(
+    chunk,
+    cx,
+    cz
+  );
 
   return chunk;
 }
 
-export function updateWorldChunks(
+export async function updateChunks(
   scene: THREE.Scene,
   playerX: number,
   playerZ: number,
   renderDistance = 1
-): void {
+) {
   const { cx, cz } =
     getChunkCoord(
       playerX,
@@ -1075,64 +1270,382 @@ export function updateWorldChunks(
     );
 
   for (
-    let x = cx - renderDistance;
-    x <= cx + renderDistance;
+    let x =
+      cx - renderDistance;
+    x <=
+      cx + renderDistance;
     x++
   ) {
     for (
-      let z = cz - renderDistance;
-      z <= cz + renderDistance;
+      let z =
+        cz - renderDistance;
+      z <=
+        cz + renderDistance;
       z++
     ) {
-      generateChunk(scene, x, z);
+      generateChunk(
+        scene,
+        x,
+        z
+      );
     }
   }
 
   destroyFarChunks(
-    playerX,
-    playerZ,
+    cx,
+    cz,
     renderDistance
   );
 }
 
-export function destroyFarChunks(
-  playerX: number,
-  playerZ: number,
-  renderDistance = 1
-): void {
-  const { cx, cz } =
-    getChunkCoord(
-      playerX,
-      playerZ
-    );
+function destroyFarChunks(
+  centerX: number,
+  centerZ: number,
+  renderDistance: number
+) {
+  for (
+    const [key, chunk]
+    of chunks
+  ) {
+    const [cx, cz] =
+      key
+        .split(",")
+        .map(Number);
 
-  for (const [key, chunk] of chunks) {
-    const [chunkX, chunkZ] =
-      key.split(",").map(Number);
-
-    const tooFar =
-      Math.abs(chunkX - cx) >
-        renderDistance ||
-      Math.abs(chunkZ - cz) >
-        renderDistance;
-
-    if (!tooFar) {
+    if (
+      Math.abs(
+        cx - centerX
+      ) <= renderDistance &&
+      Math.abs(
+        cz - centerZ
+      ) <= renderDistance
+    ) {
       continue;
     }
 
-    chunk.userData.destroyed = true;
-
-    chunk.removeFromParent();
-
-    chunks.delete(key);
+    removeChunk(
+      key,
+      chunk
+    );
   }
 }
 
-export function clearWorld(): void {
-  for (const chunk of chunks.values()) {
-    chunk.userData.destroyed = true;
-    chunk.removeFromParent();
+function removeChunk(
+  key: string,
+  chunk: THREE.Group
+) {
+  chunk.userData.destroyed =
+    true;
+
+  colliders.splice(
+    0,
+    colliders.length,
+    ...colliders.filter(
+      (item) =>
+        item.chunk !== chunk
+    )
+  );
+
+  const chunkObjects =
+    new Set<THREE.Object3D>();
+
+  chunk.traverse((object) => {
+    chunkObjects.add(object);
+
+    if (
+      object instanceof THREE.Mesh &&
+      object.userData
+        .temporaryGeometry
+    ) {
+      object.geometry.dispose();
+    }
+  });
+
+  for (
+    let index =
+      heightMeshes.length - 1;
+    index >= 0;
+    index--
+  ) {
+    if (
+      chunkObjects.has(
+        heightMeshes[index]
+      )
+    ) {
+      heightMeshes.splice(
+        index,
+        1
+      );
+    }
+  }
+
+  for (
+    let index =
+      occlusionMeshes.length - 1;
+    index >= 0;
+    index--
+  ) {
+    if (
+      chunkObjects.has(
+        occlusionMeshes[index]
+      )
+    ) {
+      occlusionMeshes.splice(
+        index,
+        1
+      );
+    }
+  }
+
+  chunk.removeFromParent();
+  chunks.delete(key);
+}
+
+export function resolveWorldCollision(
+  player: THREE.Object3D,
+  previousX: number,
+  previousZ: number,
+  radius = 0.55
+) {
+  const playerY =
+    player.position.y;
+
+  const playerBox =
+    new THREE.Box3(
+      new THREE.Vector3(
+        player.position.x -
+          radius,
+        playerY,
+        player.position.z -
+          radius
+      ),
+      new THREE.Vector3(
+        player.position.x +
+          radius,
+        playerY + 2.5,
+        player.position.z +
+          radius
+      )
+    );
+
+  for (const item of colliders) {
+    if (
+      playerBox.intersectsBox(
+        item.box
+      )
+    ) {
+      player.position.x =
+        previousX;
+
+      player.position.z =
+        previousZ;
+
+      return;
+    }
+  }
+}
+
+export function findSafeSpawnPosition(
+  x = 0,
+  z = 0,
+  radius = 0.75
+) {
+  const candidates = [
+    [x, z],
+    [x + 6, z],
+    [x - 6, z],
+    [x, z + 6],
+    [x, z - 6],
+    [x + 10, z + 10],
+    [x - 10, z - 10],
+  ];
+
+  for (
+    const candidate
+    of candidates
+  ) {
+    const candidateBox =
+      new THREE.Box3(
+        new THREE.Vector3(
+          candidate[0] - radius,
+          0,
+          candidate[1] - radius
+        ),
+        new THREE.Vector3(
+          candidate[0] + radius,
+          3,
+          candidate[1] + radius
+        )
+      );
+
+    const blocked =
+      colliders.some(
+        (item) =>
+          candidateBox.intersectsBox(
+            item.box
+          )
+      );
+
+    if (!blocked) {
+      return new THREE.Vector3(
+        candidate[0],
+        PLAYER_BASE_Y,
+        candidate[1]
+      );
+    }
+  }
+
+  return new THREE.Vector3(
+    x,
+    PLAYER_BASE_Y,
+    z
+  );
+}
+
+export function updatePlayerWorldHeight(
+  player: THREE.Object3D,
+  delta: number
+) {
+  rayOrigin.set(
+    player.position.x,
+    player.position.y + 12,
+    player.position.z
+  );
+
+  raycaster.set(
+    rayOrigin,
+    rayDirection
+  );
+
+  raycaster.far = 30;
+
+  const intersections =
+    raycaster.intersectObjects(
+      heightMeshes,
+      false
+    );
+
+  let targetY =
+    PLAYER_BASE_Y;
+
+  if (
+    intersections.length > 0
+  ) {
+    targetY =
+      intersections[0].point.y +
+      PLAYER_BASE_Y;
+  }
+
+  const lerp =
+    1 -
+    Math.exp(
+      -12 * delta
+    );
+
+  player.position.y =
+    THREE.MathUtils.lerp(
+      player.position.y,
+      targetY,
+      lerp
+    );
+}
+
+export function updateCameraOcclusion(
+  camera: THREE.PerspectiveCamera,
+  target: THREE.Vector3
+) {
+  const direction =
+    camera.position
+      .clone()
+      .sub(target);
+
+  const distance =
+    direction.length();
+
+  if (distance <= 0.1) {
+    return;
+  }
+
+  direction.normalize();
+
+  raycaster.set(
+    target,
+    direction
+  );
+
+  raycaster.far =
+    distance;
+
+  const intersections =
+    raycaster.intersectObjects(
+      occlusionMeshes,
+      false
+    );
+
+  if (
+    intersections.length === 0
+  ) {
+    return;
+  }
+
+  const safeDistance =
+    Math.max(
+      3,
+      intersections[0].distance -
+        0.8
+    );
+
+  camera.position.copy(
+    target
+  );
+
+  camera.position.addScaledVector(
+    direction,
+    safeDistance
+  );
+}
+
+export function updateWorldAnimations(
+  elapsedTime: number
+) {
+  const pulse =
+    0.86 +
+    Math.sin(
+      elapsedTime * 0.9
+    ) * 0.06;
+
+  for (
+    const material
+    of animatedWaterMaterials
+  ) {
+    if (
+      "opacity" in material &&
+      typeof material.opacity ===
+        "number"
+    ) {
+      material.transparent =
+        true;
+
+      material.opacity =
+        pulse;
+    }
+  }
+}
+
+export function destroyAllChunks() {
+  for (
+    const [key, chunk]
+    of [...chunks]
+  ) {
+    removeChunk(
+      key,
+      chunk
+    );
   }
 
   chunks.clear();
-  }
+  colliders.length = 0;
+  heightMeshes.length = 0;
+  occlusionMeshes.length = 0;
+  animatedWaterMaterials.clear();
+    }
