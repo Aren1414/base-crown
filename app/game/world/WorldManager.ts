@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import {
+  EARTH_TEXTURE,
   FOREST_BUSHES,
   FOREST_FLOWERS,
   FOREST_GRASS,
@@ -63,6 +64,7 @@ type LinearModelOptions = ModelOptions & {
 export const chunks = new Map<string, THREE.Group>();
 
 const loader = new GLTFLoader();
+const textureLoader = new THREE.TextureLoader();
 const modelCache = new Map<string, Promise<THREE.Group>>();
 const simpleColliders: SimpleCollider[] = [];
 const preciseCollisionMeshes: PreciseCollisionMesh[] = [];
@@ -85,12 +87,46 @@ const upAxis = new THREE.Vector3(0, 1, 0);
 let cameraOcclusionDistance = 0;
 let cameraOcclusionReady = false;
 
-const cityGroundMaterial = new THREE.MeshStandardMaterial({ color: 0x202522, roughness: 1, metalness: 0 });
-const parkGroundMaterial = new THREE.MeshStandardMaterial({ color: 0x233526, roughness: 1, metalness: 0 });
-const riverGroundMaterial = new THREE.MeshStandardMaterial({ color: 0x101718, roughness: 1, metalness: 0 });
-const riverBankMaterial = new THREE.MeshStandardMaterial({ color: 0x31382f, roughness: 1, metalness: 0 });
-const foundationMaterial = new THREE.MeshStandardMaterial({ color: 0x2a2e2b, roughness: 1, metalness: 0 });
-const foundationEdgeMaterial = new THREE.MeshStandardMaterial({ color: 0x202421, roughness: 1, metalness: 0 });
+const earthTexture = textureLoader.load(
+  EARTH_TEXTURE,
+  (texture) => {
+    texture.colorSpace = THREE.SRGBColorSpace;
+    texture.wrapS = THREE.RepeatWrapping;
+    texture.wrapT = THREE.RepeatWrapping;
+    texture.repeat.set(4, 4);
+    texture.anisotropy = 2;
+    texture.minFilter = THREE.LinearMipmapLinearFilter;
+    texture.magFilter = THREE.LinearFilter;
+    texture.generateMipmaps = true;
+    texture.needsUpdate = true;
+  },
+  undefined,
+  (error) => console.error(`Earth texture failed: ${EARTH_TEXTURE}`, error)
+);
+
+earthTexture.colorSpace = THREE.SRGBColorSpace;
+earthTexture.wrapS = THREE.RepeatWrapping;
+earthTexture.wrapT = THREE.RepeatWrapping;
+earthTexture.repeat.set(4, 4);
+earthTexture.anisotropy = 2;
+earthTexture.minFilter = THREE.LinearMipmapLinearFilter;
+earthTexture.magFilter = THREE.LinearFilter;
+earthTexture.generateMipmaps = true;
+
+// ØªÙ…Ø§Ù… Ø³Ø·ÙˆØ­ Ø²Ù…ÛŒÙ† Ø§Ø² ÛŒÚ© ØªÚ©Ø³Ú†Ø± Ùˆ ÛŒÚ© Ù…ØªØ±ÛŒØ§Ù„ Ù…Ø´ØªØ±Ú© Ø§Ø³ØªÙØ§Ø¯Ù‡ Ù…ÛŒâ€ŒÚ©Ù†Ù†Ø¯.
+const earthGroundMaterial = new THREE.MeshStandardMaterial({
+  map: earthTexture,
+  color: 0xffffff,
+  roughness: 0.98,
+  metalness: 0,
+  envMapIntensity: 0.2,
+});
+const cityGroundMaterial = earthGroundMaterial;
+const parkGroundMaterial = earthGroundMaterial;
+const riverGroundMaterial = earthGroundMaterial;
+const riverBankMaterial = earthGroundMaterial;
+const foundationMaterial = earthGroundMaterial;
+const foundationEdgeMaterial = earthGroundMaterial;
 const rubbleMaterial = new THREE.MeshStandardMaterial({ color: 0x464740, roughness: 1, metalness: 0 });
 const grassBladeMaterial = new THREE.MeshStandardMaterial({ color: 0x45683b, roughness: 1, metalness: 0, side: THREE.DoubleSide });
 const groundGeometry = new THREE.PlaneGeometry(CHUNK_SIZE, CHUNK_SIZE);
