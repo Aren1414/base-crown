@@ -1,8 +1,6 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
-
 import {
-  EARTH_TEXTURE,
   FOREST_BUSHES,
   FOREST_FLOWERS,
   FOREST_GRASS,
@@ -31,271 +29,74 @@ const TUNNEL_LENGTH = 64;
 const PLAYER_BASE_Y = 0.055;
 
 type Direction = "x" | "z";
-
-type ChunkKind =
-  | "city"
-  | "park"
-  | "river"
-  | "tunnel-x"
-  | "tunnel-z";
-
-type ColliderType =
-  | "tree"
-  | "vehicle"
-  | "wall"
-  | "rail";
-
-type SimpleCollider = {
-  box: THREE.Box3;
-  chunk: THREE.Group;
-};
-
-type PreciseCollisionMesh = {
-  mesh: THREE.Mesh;
-  chunk: THREE.Group;
-};
-
-type RoadPoint = {
-  x: number;
-  z: number;
-  direction: Direction;
-};
-
+type ChunkKind = "city" | "park" | "river" | "tunnel-x" | "tunnel-z";
+type ColliderType = "tree" | "vehicle" | "wall" | "rail";
+type SimpleCollider = { box: THREE.Box3; chunk: THREE.Group };
+type PreciseCollisionMesh = { mesh: THREE.Mesh; chunk: THREE.Group };
+type RoadPoint = { x: number; z: number; direction: Direction };
 type ModelOptions = {
   y?: number;
-
   collision?: boolean;
   preciseCollision?: boolean;
   colliderType?: ColliderType;
-
   height?: boolean;
   occlusion?: boolean;
   water?: boolean;
   foundation?: boolean;
-
   targetWidth?: number;
   targetHeight?: number;
   maxHeight?: number;
-
   brightness?: number;
   castShadow?: boolean;
-
   rotationX?: number;
   rotationY?: number;
   rotationZ?: number;
-
   sinkIntoGround?: number;
   flattenSurface?: boolean;
 };
-
 type LinearModelOptions = ModelOptions & {
   direction: Direction;
   targetLength: number;
   targetCrossSize: number;
 };
 
-export const chunks =
-  new Map<string, THREE.Group>();
+export const chunks = new Map<string, THREE.Group>();
 
 const loader = new GLTFLoader();
-const textureLoader = new THREE.TextureLoader();
-
-const modelCache =
-  new Map<string, Promise<THREE.Group>>();
-
+const modelCache = new Map<string, Promise<THREE.Group>>();
 const simpleColliders: SimpleCollider[] = [];
-
-const preciseCollisionMeshes:
-  PreciseCollisionMesh[] = [];
-
+const preciseCollisionMeshes: PreciseCollisionMesh[] = [];
 const heightMeshes: THREE.Object3D[] = [];
 const occlusionMeshes: THREE.Object3D[] = [];
-
-const waterMaterials =
-  new Set<THREE.Material>();
-
-const waterTextures =
-  new Set<THREE.Texture>();
-
+const waterMaterials = new Set<THREE.Material>();
+const waterTextures = new Set<THREE.Texture>();
 const raycaster = new THREE.Raycaster();
-
 const rayOrigin = new THREE.Vector3();
 const rayDirection = new THREE.Vector3();
-
-const downDirection =
-  new THREE.Vector3(0, -1, 0);
-
+const downDirection = new THREE.Vector3(0, -1, 0);
 const tempBox = new THREE.Box3();
 const tempSize = new THREE.Vector3();
 const tempCenter = new THREE.Vector3();
-
 const tempVector = new THREE.Vector3();
 const tempVectorB = new THREE.Vector3();
-
-const tempQuaternion =
-  new THREE.Quaternion();
-
-const upAxis =
-  new THREE.Vector3(0, 1, 0);
+const tempQuaternion = new THREE.Quaternion();
+const upAxis = new THREE.Vector3(0, 1, 0);
 
 let cameraOcclusionDistance = 0;
 let cameraOcclusionReady = false;
 
-/*
- * تکسچر مشترک سطح زمین.
- * این فایل فقط یک‌بار دانلود و بین تمام چانک‌ها استفاده می‌شود.
- */
-const cityGroundTexture =
-  textureLoader.load(
-    EARTH_TEXTURE,
-    (texture) => {
-      texture.colorSpace =
-        THREE.SRGBColorSpace;
+const cityGroundMaterial = new THREE.MeshStandardMaterial({ color: 0x202522, roughness: 1, metalness: 0 });
+const parkGroundMaterial = new THREE.MeshStandardMaterial({ color: 0x233526, roughness: 1, metalness: 0 });
+const riverGroundMaterial = new THREE.MeshStandardMaterial({ color: 0x101718, roughness: 1, metalness: 0 });
+const riverBankMaterial = new THREE.MeshStandardMaterial({ color: 0x31382f, roughness: 1, metalness: 0 });
+const foundationMaterial = new THREE.MeshStandardMaterial({ color: 0x2a2e2b, roughness: 1, metalness: 0 });
+const foundationEdgeMaterial = new THREE.MeshStandardMaterial({ color: 0x202421, roughness: 1, metalness: 0 });
+const rubbleMaterial = new THREE.MeshStandardMaterial({ color: 0x464740, roughness: 1, metalness: 0 });
+const grassBladeMaterial = new THREE.MeshStandardMaterial({ color: 0x45683b, roughness: 1, metalness: 0, side: THREE.DoubleSide });
+const groundGeometry = new THREE.PlaneGeometry(CHUNK_SIZE, CHUNK_SIZE);
+const grassBladeGeometry = new THREE.PlaneGeometry(0.055, 0.24);
 
-      texture.wrapS =
-        THREE.RepeatWrapping;
-
-      texture.wrapT =
-        THREE.RepeatWrapping;
-
-      /*
-       * تکسچر در هر چانک 88×88 چهار بار
-       * در هر محور تکرار می‌شود.
-       */
-      texture.repeat.set(4, 4);
-
-      /*
-       * مقدار سبک و مناسب موبایل.
-       */
-      texture.anisotropy = 4;
-
-      texture.minFilter =
-        THREE.LinearMipmapLinearFilter;
-
-      texture.magFilter =
-        THREE.LinearFilter;
-
-      texture.generateMipmaps = true;
-      texture.needsUpdate = true;
-    },
-    undefined,
-    (error) => {
-      console.error(
-        `Earth texture failed: ${EARTH_TEXTURE}`,
-        error
-      );
-    }
-  );
-
-/*
- * تنظیمات اولیه فوراً اعمال می‌شوند تا قبل از
- * اتمام Callback هم تکسچر پیکربندی شده باشد.
- */
-cityGroundTexture.colorSpace =
-  THREE.SRGBColorSpace;
-
-cityGroundTexture.wrapS =
-  THREE.RepeatWrapping;
-
-cityGroundTexture.wrapT =
-  THREE.RepeatWrapping;
-
-cityGroundTexture.repeat.set(4, 4);
-cityGroundTexture.anisotropy = 4;
-
-cityGroundTexture.minFilter =
-  THREE.LinearMipmapLinearFilter;
-
-cityGroundTexture.magFilter =
-  THREE.LinearFilter;
-
-cityGroundTexture.generateMipmaps = true;
-
-const cityGroundMaterial =
-  new THREE.MeshStandardMaterial({
-    map: cityGroundTexture,
-
-    /*
-     * رنگ سفید، رنگ اصلی تصویر را حفظ می‌کند.
-     */
-    color: 0xffffff,
-
-    roughness: 0.96,
-    metalness: 0,
-
-    /*
-     * از براق و پلاستیکی دیده‌شدن زمین جلوگیری می‌کند.
-     */
-    envMapIntensity: 0.25,
-  });
-
-const parkGroundMaterial =
-  new THREE.MeshStandardMaterial({
-    color: 0x233526,
-    roughness: 1,
-    metalness: 0,
-  });
-
-const riverGroundMaterial =
-  new THREE.MeshStandardMaterial({
-    color: 0x101718,
-    roughness: 1,
-    metalness: 0,
-  });
-
-const riverBankMaterial =
-  new THREE.MeshStandardMaterial({
-    color: 0x31382f,
-    roughness: 1,
-    metalness: 0,
-  });
-
-const foundationMaterial =
-  new THREE.MeshStandardMaterial({
-    color: 0x2a2e2b,
-    roughness: 1,
-    metalness: 0,
-  });
-
-const foundationEdgeMaterial =
-  new THREE.MeshStandardMaterial({
-    color: 0x202421,
-    roughness: 1,
-    metalness: 0,
-  });
-
-const rubbleMaterial =
-  new THREE.MeshStandardMaterial({
-    color: 0x464740,
-    roughness: 1,
-    metalness: 0,
-  });
-
-const grassBladeMaterial =
-  new THREE.MeshStandardMaterial({
-    color: 0x45683b,
-    roughness: 1,
-    metalness: 0,
-    side: THREE.DoubleSide,
-  });
-
-const groundGeometry =
-  new THREE.PlaneGeometry(
-    CHUNK_SIZE,
-    CHUNK_SIZE
-  );
-
-const grassBladeGeometry =
-  new THREE.PlaneGeometry(
-    0.055,
-    0.24
-  );
-
-grassBladeGeometry.translate(
-  0,
-  0.12,
-  0
-);
+grassBladeGeometry.translate(0, 0.12, 0);
 
 function seededRandom(seed: number) {
   let state = seed >>> 0;
