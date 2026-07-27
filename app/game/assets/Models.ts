@@ -341,3 +341,5 @@ export const FOREST_FLOWERS: ModelDef[] = [
     scale: 1.2,
   },
 ];
+
+export const EARTH_TEXTURE = `${BASE_URL}/Earth.webp`;
