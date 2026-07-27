@@ -7,31 +7,22 @@ import {
   FOREST_GRASS,
   FOREST_TREES,
   URBAN_ALLEYS,
-  URBAN_BRIDGES,
   URBAN_BUILDINGS,
   URBAN_STREETS,
-  URBAN_TUNNEL,
-  URBAN_TUNNEL_WALLS,
   URBAN_VEHICLES,
   type ModelDef,
 } from "../assets/Models";
 
-export const CHUNK_SIZE = 64;
+export const CHUNK_SIZE = 56;
 
 const HALF_CHUNK = CHUNK_SIZE / 2;
 const ROAD_WIDTH = 8.2;
-const ALLEY_WIDTH = 3.4;
-const RIVER_WIDTH = 22;
-const RIVER_BANK_WIDTH = 5;
-const BRIDGE_LENGTH = 31;
-const BRIDGE_WIDTH = 9;
-const TUNNEL_WIDTH = 9.4;
-const TUNNEL_LENGTH = 54;
+const ALLEY_WIDTH = 3.5;
 const PLAYER_BASE_Y = 0.055;
 const CHUNKS_PER_BATCH = 2;
 
 type Direction = "x" | "z";
-type ChunkKind = "city" | "park" | "river" | "tunnel-x" | "tunnel-z";
+type ChunkKind = "city" | "park";
 type ColliderType = "tree" | "vehicle" | "wall" | "rail";
 type SimpleCollider = { box: THREE.Box3; chunk: THREE.Group };
 type PreciseCollisionMesh = { mesh: THREE.Mesh; chunk: THREE.Group };
@@ -43,7 +34,6 @@ type ModelOptions = {
   colliderType?: ColliderType;
   height?: boolean;
   occlusion?: boolean;
-  water?: boolean;
   foundation?: boolean;
   targetWidth?: number;
   targetHeight?: number;
@@ -75,8 +65,6 @@ const simpleColliders: SimpleCollider[] = [];
 const preciseCollisionMeshes: PreciseCollisionMesh[] = [];
 const heightMeshes: THREE.Object3D[] = [];
 const occlusionMeshes: THREE.Object3D[] = [];
-const waterMaterials = new Set<THREE.Material>();
-const waterTextures = new Set<THREE.Texture>();
 const raycaster = new THREE.Raycaster();
 const rayOrigin = new THREE.Vector3();
 const rayDirection = new THREE.Vector3();
@@ -127,8 +115,6 @@ const earthGroundMaterial = new THREE.MeshStandardMaterial({
 });
 const cityGroundMaterial = earthGroundMaterial;
 const parkGroundMaterial = earthGroundMaterial;
-const riverGroundMaterial = earthGroundMaterial;
-const riverBankMaterial = earthGroundMaterial;
 const foundationMaterial = earthGroundMaterial;
 const foundationEdgeMaterial = earthGroundMaterial;
 const rubbleMaterial = new THREE.MeshStandardMaterial({ color: 0x464740, roughness: 1, metalness: 0 });
@@ -180,25 +166,12 @@ export function getChunkCoord(x: number, z: number) {
   };
 }
 
-function isRiverColumn(cx: number) {
-  return modulo(cx - 1, 12) === 0;
-}
-
-function isBridgeCrossing(cz: number) {
-  return modulo(cz, 4) === 0;
-}
-
 function getChunkKind(cx: number, cz: number): ChunkKind {
-  if (isRiverColumn(cx)) return "river";
-  if (cx === -1 && cz === 0) return "tunnel-x";
   const value = Math.abs(cx * 37 + cz * 61);
-  if (value > 0 && value % 23 === 0) return "park";
-  return "city";
+  return value > 0 && value % 29 === 0 ? "park" : "city";
 }
 
-function getRoadDirection(cx: number, cz: number, kind: ChunkKind): Direction {
-  if (kind === "tunnel-z") return "z";
-  if (kind === "tunnel-x") return "x";
+function getRoadDirection(cx: number, cz: number): Direction {
   return modulo(cx + cz, 2) === 0 ? "x" : "z";
 }
 
@@ -269,10 +242,6 @@ function registerModel(object: THREE.Object3D, chunk: THREE.Group, options: Mode
     if (!(child instanceof THREE.Mesh)) return;
     if (options.height) heightMeshes.push(child);
     if (options.occlusion) occlusionMeshes.push(child);
-    if (options.water) {
-      const materials = Array.isArray(child.material) ? child.material : [child.material];
-      for (const material of materials) waterMaterials.add(material);
-    }
   });
 }
 
@@ -429,24 +398,6 @@ function registerSimpleCollider(object: THREE.Object3D, chunk: THREE.Group, type
   });
 }
 
-function registerStaticCollider(
-  chunk: THREE.Group,
-  centerX: number,
-  centerY: number,
-  centerZ: number,
-  width: number,
-  height: number,
-  depth: number
-) {
-  simpleColliders.push({
-    chunk,
-    box: new THREE.Box3().setFromCenterAndSize(
-      new THREE.Vector3(centerX + chunk.position.x, centerY, centerZ + chunk.position.z),
-      new THREE.Vector3(width, height, depth)
-    ),
-  });
-}
-
 function registerPreciseCollision(object: THREE.Object3D, chunk: THREE.Group) {
   object.traverse((child) => {
     if (!(child instanceof THREE.Mesh)) return;
@@ -539,7 +490,7 @@ function addAlleyTiles(
 
 function getRoadPoints(direction: Direction): RoadPoint[] {
   const result: RoadPoint[] = [];
-  for (let offset = -27; offset <= 27; offset += 9) result.push({ x: direction === "x" ? offset : 0, z: direction === "x" ? 0 : offset, direction });
+  for (let offset = -23; offset <= 23; offset += 8) result.push({ x: direction === "x" ? offset : 0, z: direction === "x" ? 0 : offset, direction });
   return result;
 }
 
@@ -549,14 +500,24 @@ function isVilla(definition: ModelDef) {
 }
 
 function getBuildingSlots(direction: Direction) {
-  const alongPositions = [-24, -8, 8, 24];
-  const rowOffsets = [11.4, 24];
+  const alongPositions = [-20, -6.7, 6.7, 20];
   const slots: Array<{ x: number; z: number; rotation: number; outer: boolean }> = [];
-  for (const rowOffset of rowOffsets) {
-    for (const value of alongPositions) {
-      const outer = rowOffset > 20;
-      if (direction === "x") { slots.push({ x: value, z: -rowOffset, rotation: 0, outer }); slots.push({ x: value, z: rowOffset, rotation: Math.PI, outer }); }
-      else { slots.push({ x: -rowOffset, z: value, rotation: Math.PI / 2, outer }); slots.push({ x: rowOffset, z: value, rotation: -Math.PI / 2, outer }); }
+  for (const value of alongPositions) {
+    if (direction === "x") {
+      slots.push({ x: value, z: -11.5, rotation: 0, outer: false });
+      slots.push({ x: value, z: 11.5, rotation: Math.PI, outer: false });
+    } else {
+      slots.push({ x: -11.5, z: value, rotation: Math.PI / 2, outer: false });
+      slots.push({ x: 11.5, z: value, rotation: -Math.PI / 2, outer: false });
+    }
+  }
+  for (const value of [-19.5, 19.5]) {
+    if (direction === "x") {
+      slots.push({ x: value, z: -22.5, rotation: 0, outer: true });
+      slots.push({ x: value, z: 22.5, rotation: Math.PI, outer: true });
+    } else {
+      slots.push({ x: -22.5, z: value, rotation: Math.PI / 2, outer: true });
+      slots.push({ x: 22.5, z: value, rotation: -Math.PI / 2, outer: true });
     }
   }
   return slots;
@@ -570,8 +531,8 @@ function spawnBuildings(chunk: THREE.Group, random: () => number, direction: Dir
     const slot = slots[index], definition = pick(URBAN_BUILDINGS, random), villa = isVilla(definition);
     placeModel(definition, chunk, slot.x + randomRange(random, -0.18, 0.18), slot.z + randomRange(random, -0.18, 0.18), slot.rotation + randomRange(random, -0.009, 0.009), {
       preciseCollision: true, foundation: true, sinkIntoGround: randomRange(random, 0.1, 0.16), occlusion: !slot.outer && random() < 0.3, castShadow: !slot.outer,
-      targetWidth: slot.outer ? randomRange(random, 8.8, 10) : villa ? randomRange(random, 9.2, 10.5) : randomRange(random, 9.5, 10.8),
-      maxHeight: villa ? randomRange(random, 7.5, 9.5) : randomRange(random, 11, 16), brightness: 0.22,
+      targetWidth: slot.outer ? randomRange(random, 10.2, 11.2) : villa ? randomRange(random, 10.8, 11.8) : randomRange(random, 11.1, 12.1),
+      maxHeight: villa ? randomRange(random, 8.2, 10.2) : randomRange(random, 12, 17), brightness: 0.22,
     });
   }
 }
@@ -584,7 +545,7 @@ function isMotorcycle(definition: ModelDef) {
 function spawnVehicles(chunk: THREE.Group, random: () => number, points: RoadPoint[]) {
   if (!URBAN_VEHICLES.length) return;
   const available = shuffle([...points], random);
-  const count = Math.min(available.length, 3 + Math.floor(random() * 2));
+  const count = Math.min(available.length, 2 + Math.floor(random() * 2));
   for (let index = 0; index < count; index++) {
     const point = available[index];
     const definition = pick(URBAN_VEHICLES, random);
@@ -620,13 +581,13 @@ function spawnVehicles(chunk: THREE.Group, random: () => number, points: RoadPoi
 }
 
 function addFineGrass(chunk: THREE.Group, random: () => number) {
-  const count = 520;
+  const count = 700;
   const grass = new THREE.InstancedMesh(grassBladeGeometry, grassBladeMaterial, count);
   const matrix = new THREE.Matrix4();
   const position = new THREE.Vector3();
   const scale = new THREE.Vector3();
   for (let index = 0; index < count; index++) {
-    position.set(randomRange(random, -30, 30), 0.02, randomRange(random, -30, 30));
+    position.set(randomRange(random, -26, 26), 0.02, randomRange(random, -26, 26));
     tempQuaternion.setFromAxisAngle(upAxis, random() * Math.PI * 2);
     scale.set(randomRange(random, 0.7, 1.1), randomRange(random, 0.5, 1), 1);
     matrix.compose(position, tempQuaternion, scale);
@@ -640,17 +601,42 @@ function addFineGrass(chunk: THREE.Group, random: () => number) {
 
 function spawnCityVegetation(chunk: THREE.Group, random: () => number, direction: Direction) {
   if (FOREST_TREES.length) {
-    for (const value of [-26, -17, -8, 8, 17, 26]) {
-      if (random() < 0.32) continue;
-      const sideOffset = randomRange(random, 7.2, 9.2) * (random() < 0.5 ? -1 : 1);
-      placeModel(pick(FOREST_TREES, random), chunk, direction === "x" ? value + randomRange(random, -0.7, 0.7) : sideOffset, direction === "x" ? sideOffset : value + randomRange(random, -0.7, 0.7), random() * Math.PI * 2, { collision: true, colliderType: "tree", targetHeight: randomRange(random, 3.9, 5.5), brightness: 0.03, castShadow: random() < 0.55 });
+    const positions = [-23, -16, -9, 9, 16, 23];
+    for (const value of positions) {
+      for (const side of [-1, 1] as const) {
+        if (random() < 0.28) continue;
+        const sideOffset = randomRange(random, 7.1, 9.3) * side;
+        placeModel(
+          pick(FOREST_TREES, random),
+          chunk,
+          direction === "x" ? value + randomRange(random, -0.6, 0.6) : sideOffset,
+          direction === "x" ? sideOffset : value + randomRange(random, -0.6, 0.6),
+          random() * Math.PI * 2,
+          {
+            collision: true,
+            colliderType: "tree",
+            targetHeight: randomRange(random, 3.8, 5.8),
+            brightness: 0.03,
+            castShadow: random() < 0.5,
+          }
+        );
+      }
     }
   }
-  const sources = [...FOREST_BUSHES, ...FOREST_FLOWERS];
+  const sources = [...FOREST_BUSHES, ...FOREST_FLOWERS, ...FOREST_GRASS];
   if (!sources.length) return;
-  for (let index = 0; index < 12; index++) {
-    const side = random() < 0.5 ? -1 : 1, along = randomRange(random, -29, 29), across = randomRange(random, 7, 9.5) * side;
-    placeModel(pick(sources, random), chunk, direction === "x" ? along : across, direction === "x" ? across : along, random() * Math.PI * 2, { targetWidth: randomRange(random, 0.5, 1.2), brightness: 0.01, castShadow: false });
+  for (let index = 0; index < 24; index++) {
+    const side = random() < 0.5 ? -1 : 1;
+    const along = randomRange(random, -25, 25);
+    const across = randomRange(random, 7, 10.2) * side;
+    placeModel(
+      pick(sources, random),
+      chunk,
+      direction === "x" ? along : across,
+      direction === "x" ? across : along,
+      random() * Math.PI * 2,
+      { targetWidth: randomRange(random, 0.5, 1.35), brightness: 0.01, castShadow: false }
+    );
   }
 }
 
@@ -658,12 +644,12 @@ function buildPark(chunk: THREE.Group, random: () => number) {
   addGround(chunk, parkGroundMaterial);
   addFineGrass(chunk, random);
   if (FOREST_TREES.length) {
-    for (let index = 0; index < 18; index++) {
+    for (let index = 0; index < 22; index++) {
       placeModel(
         pick(FOREST_TREES, random),
         chunk,
-        randomRange(random, -29, 29),
-        randomRange(random, -29, 29),
+        randomRange(random, -25, 25),
+        randomRange(random, -25, 25),
         random() * Math.PI * 2,
         {
           collision: true,
@@ -676,12 +662,12 @@ function buildPark(chunk: THREE.Group, random: () => number) {
   }
   const sources = [...FOREST_BUSHES, ...FOREST_FLOWERS, ...FOREST_GRASS];
   if (!sources.length) return;
-  for (let index = 0; index < 30; index++) {
+  for (let index = 0; index < 42; index++) {
     placeModel(
       pick(sources, random),
       chunk,
-      randomRange(random, -30, 30),
-      randomRange(random, -30, 30),
+      randomRange(random, -26, 26),
+      randomRange(random, -26, 26),
       random() * Math.PI * 2,
       {
         targetWidth: randomRange(random, 0.45, 1.7),
@@ -692,213 +678,32 @@ function buildPark(chunk: THREE.Group, random: () => number) {
   }
 }
 
-function createWaterTexture() {
-  const width = 128;
-  const height = 128;
-  const data = new Uint8Array(width * height * 4);
-  const random = seededRandom(874126);
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      const index = (y * width + x) * 4;
-      const wave = Math.sin(y * 0.31 + x * 0.09) * 22 + Math.sin(y * 0.13 - x * 0.23) * 13;
-      const noise = random() * 16;
-      data[index] = Math.max(12, 24 + wave + noise);
-      data[index + 1] = Math.max(45, 108 + wave + noise);
-      data[index + 2] = Math.max(70, 145 + wave + noise);
-      data[index + 3] = 242;
-    }
-  }
-  const texture = new THREE.DataTexture(data, width, height, THREE.RGBAFormat);
-  texture.wrapS = THREE.RepeatWrapping;
-  texture.wrapT = THREE.RepeatWrapping;
-  texture.repeat.set(2, 9);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  texture.needsUpdate = true;
-  waterTextures.add(texture);
-  return texture;
-}
-
-function createRiverWater(chunk: THREE.Group) {
-  const texture = createWaterTexture();
-  const material = new THREE.MeshPhysicalMaterial({
-    map: texture,
-    color: new THREE.Color(0x2f8298),
-    roughness: 0.2,
-    metalness: 0,
-    transparent: true,
-    opacity: 0.94,
-    transmission: 0,
-    clearcoat: 0.5,
-    clearcoatRoughness: 0.16,
-    side: THREE.DoubleSide,
-    depthWrite: true,
-  });
-  const water = new THREE.Mesh(new THREE.PlaneGeometry(RIVER_WIDTH, CHUNK_SIZE + 1.5, 1, 24), material);
-  water.rotation.x = -Math.PI / 2;
-  water.position.y = -0.08;
-  water.receiveShadow = true;
-  water.renderOrder = 2;
-  water.userData.temporaryGeometry = true;
-  chunk.add(water);
-  waterMaterials.add(material);
-}
-
-function createRiverBanks(chunk: THREE.Group, random: () => number) {
-  for (const side of [-1, 1] as const) {
-    const bank = new THREE.Mesh(new THREE.BoxGeometry(RIVER_BANK_WIDTH, 0.24, CHUNK_SIZE), riverBankMaterial);
-    bank.position.set(side * (RIVER_WIDTH / 2 + RIVER_BANK_WIDTH / 2), -0.04, 0);
-    bank.receiveShadow = true;
-    bank.userData.temporaryGeometry = true;
-    chunk.add(bank);
-    heightMeshes.push(bank);
-    const sources = [...FOREST_BUSHES, ...FOREST_GRASS];
-    if (!sources.length) continue;
-    for (let index = 0; index < 14; index++) {
-      placeModel(
-        pick(sources, random),
-        chunk,
-        side * randomRange(random, RIVER_WIDTH / 2 + 0.7, RIVER_WIDTH / 2 + RIVER_BANK_WIDTH - 0.35),
-        randomRange(random, -42, 42),
-        random() * Math.PI * 2,
-        {
-          targetWidth: randomRange(random, 0.6, 1.5),
-          brightness: 0.01,
-          castShadow: false,
-        }
-      );
-    }
-  }
-}
-
-function buildBridge(chunk: THREE.Group, random: () => number) {
-  if (!URBAN_BRIDGES.length) return;
-  placeLinearModel(pick(URBAN_BRIDGES, random), chunk, 0, 0, {
-    direction: "x",
-    targetLength: BRIDGE_LENGTH,
-    targetCrossSize: BRIDGE_WIDTH,
-    y: 0.03,
-    height: true,
-    occlusion: true,
-    brightness: 0.17,
-    castShadow: true,
-    sinkIntoGround: 0.025,
-  });
-  addStreetTiles(chunk, random, "x", -HALF_CHUNK, -BRIDGE_LENGTH / 2 + 0.25);
-  addStreetTiles(chunk, random, "x", BRIDGE_LENGTH / 2 - 0.25, HALF_CHUNK);
-  registerStaticCollider(chunk, 0, 1.15, BRIDGE_WIDTH / 2, BRIDGE_LENGTH, 2.3, 0.35);
-  registerStaticCollider(chunk, 0, 1.15, -BRIDGE_WIDTH / 2, BRIDGE_LENGTH, 2.3, 0.35);
-}
-
-function buildRiverChunk(chunk: THREE.Group, random: () => number, cz: number) {
-  addGround(chunk, riverGroundMaterial);
-  createRiverWater(chunk);
-  createRiverBanks(chunk, random);
-  if (isBridgeCrossing(cz)) buildBridge(chunk, random);
-}
-
-function buildTunnel(chunk: THREE.Group, random: () => number, direction: Direction) {
-  addStreetTiles(chunk, random, direction, -HALF_CHUNK, HALF_CHUNK);
-  const entranceOffset = TUNNEL_LENGTH / 2;
-  if (URBAN_TUNNEL.length) {
-    const entrance = URBAN_TUNNEL[0];
-    placeModel(
-      entrance,
-      chunk,
-      direction === "x" ? -entranceOffset : 0,
-      direction === "x" ? 0 : -entranceOffset,
-      direction === "x" ? Math.PI / 2 : 0,
-      {
-        targetWidth: TUNNEL_WIDTH + 1.5,
-        maxHeight: 8,
-        y: 0.02,
-        preciseCollision: true,
-        occlusion: true,
-        brightness: 0.13,
-        castShadow: true,
-        sinkIntoGround: 0.1,
-      }
-    );
-    placeModel(
-      entrance,
-      chunk,
-      direction === "x" ? entranceOffset : 0,
-      direction === "x" ? 0 : entranceOffset,
-      direction === "x" ? -Math.PI / 2 : Math.PI,
-      {
-        targetWidth: TUNNEL_WIDTH + 1.5,
-        maxHeight: 8,
-        y: 0.02,
-        preciseCollision: true,
-        occlusion: true,
-        brightness: 0.13,
-        castShadow: true,
-        sinkIntoGround: 0.1,
-      }
-    );
-  }
-  if (URBAN_TUNNEL_WALLS.length) {
-    const wallStart = -entranceOffset + 3.8;
-    const wallEnd = entranceOffset - 3.8;
-    const sectionCount = Math.max(1, Math.ceil((wallEnd - wallStart) / 8));
-    const exactLength = (wallEnd - wallStart) / sectionCount;
-    const wallThickness = 1.15;
-    const wallOffset = TUNNEL_WIDTH / 2 + wallThickness / 2;
-    for (let index = 0; index < sectionCount; index++) {
-      const along = wallStart + exactLength * (index + 0.5);
-      for (const side of [-1, 1] as const) {
-        const definition = URBAN_TUNNEL_WALLS[modulo(index + (side === 1 ? 1 : 0), URBAN_TUNNEL_WALLS.length)];
-        placeLinearModel(
-          definition,
-          chunk,
-          direction === "x" ? along : wallOffset * side,
-          direction === "x" ? wallOffset * side : along,
-          {
-            direction,
-            targetLength: exactLength + 0.28,
-            targetCrossSize: wallThickness,
-            y: 0.015,
-            rotationY: side === -1 ? Math.PI : 0,
-            occlusion: index % 3 === 0,
-            brightness: 0.11,
-            castShadow: true,
-            sinkIntoGround: 0.075,
-          }
-        );
-      }
-    }
-    if (direction === "x") {
-      registerStaticCollider(chunk, 0, 3.2, wallOffset, wallEnd - wallStart, 6.4, wallThickness);
-      registerStaticCollider(chunk, 0, 3.2, -wallOffset, wallEnd - wallStart, 6.4, wallThickness);
-    } else {
-      registerStaticCollider(chunk, wallOffset, 3.2, 0, wallThickness, 6.4, wallEnd - wallStart);
-      registerStaticCollider(chunk, -wallOffset, 3.2, 0, wallThickness, 6.4, wallEnd - wallStart);
-    }
-  }
-}
-
 function buildSmallPark(chunk: THREE.Group, random: () => number, direction: Direction, slotIndex: number) {
   const slot = getBuildingSlots(direction)[slotIndex];
   if (!slot) return;
   const park = new THREE.Mesh(new THREE.BoxGeometry(9.5, 0.045, 9.5), parkGroundMaterial);
   park.position.set(slot.x, -0.012, slot.z); park.receiveShadow = true; park.userData.temporaryGeometry = true; chunk.add(park); heightMeshes.push(park);
   if (FOREST_TREES.length) {
-    const treeCount = 4 + Math.floor(random() * 3);
+    const treeCount = 6 + Math.floor(random() * 3);
     for (let index = 0; index < treeCount; index++) placeModel(pick(FOREST_TREES, random), chunk, slot.x + randomRange(random, -3.5, 3.5), slot.z + randomRange(random, -3.5, 3.5), random() * Math.PI * 2, { collision: true, colliderType: "tree", targetHeight: randomRange(random, 3.8, 5.5), brightness: 0.03, castShadow: index < 3 });
   }
   const sources = [...FOREST_BUSHES, ...FOREST_FLOWERS, ...FOREST_GRASS];
   if (!sources.length) return;
-  const decorationCount = 7 + Math.floor(random() * 4);
+  const decorationCount = 12 + Math.floor(random() * 5);
   for (let index = 0; index < decorationCount; index++) placeModel(pick(sources, random), chunk, slot.x + randomRange(random, -4, 4), slot.z + randomRange(random, -4, 4), random() * Math.PI * 2, { targetWidth: randomRange(random, 0.45, 1.15), brightness: 0.01, castShadow: false });
 }
 
-function buildCityChunk(chunk: THREE.Group, random: () => number, direction: Direction, tunnel: boolean) {
+function buildCityChunk(chunk: THREE.Group, random: () => number, direction: Direction) {
   addGround(chunk, cityGroundMaterial);
-  if (tunnel) { buildTunnel(chunk, random, direction); return; }
   addStreetTiles(chunk, random, direction);
-  const alleyDirection: Direction = direction === "x" ? "z" : "x";
-  addAlleyTiles(chunk, random, alleyDirection, 0);
-  if (random() < 0.48) addAlleyTiles(chunk, random, direction, random() < 0.5 ? -17 : 17);
-  const hasSmallPark = random() < 0.2, parkSlot = hasSmallPark ? Math.floor(random() * 16) : -1;
+  const crossDirection: Direction = direction === "x" ? "z" : "x";
+  addAlleyTiles(chunk, random, crossDirection, 0);
+  const firstSide = random() < 0.5 ? -1 : 1;
+  addAlleyTiles(chunk, random, direction, firstSide * 17.2);
+  if (random() < 0.7) addAlleyTiles(chunk, random, direction, firstSide * -17.2);
+  const hasSmallPark = random() < 0.24;
+  const slots = getBuildingSlots(direction);
+  const parkSlot = hasSmallPark ? Math.floor(random() * slots.length) : -1;
   spawnBuildings(chunk, random, direction, parkSlot);
   if (hasSmallPark) buildSmallPark(chunk, random, direction, parkSlot);
   spawnVehicles(chunk, random, getRoadPoints(direction));
@@ -908,17 +713,13 @@ function buildCityChunk(chunk: THREE.Group, random: () => number, direction: Dir
 function buildChunk(chunk: THREE.Group, cx: number, cz: number) {
   const random = seededRandom(chunkSeed(cx, cz));
   const kind = getChunkKind(cx, cz);
-  const direction = getRoadDirection(cx, cz, kind);
+  const direction = getRoadDirection(cx, cz);
   chunk.userData.kind = kind;
   if (kind === "park") {
     buildPark(chunk, random);
     return;
   }
-  if (kind === "river") {
-    buildRiverChunk(chunk, random, cz);
-    return;
-  }
-  buildCityChunk(chunk, random, direction, kind === "tunnel-x" || kind === "tunnel-z");
+  buildCityChunk(chunk, random, direction);
 }
 
 export function generateChunk(scene: THREE.Scene, cx: number, cz: number) {
@@ -1170,17 +971,7 @@ export function updateCameraOcclusion(
 }
 
 export function updateWorldAnimations(elapsedTime: number) {
-  for (const texture of waterTextures) {
-    texture.offset.y = -elapsedTime * 0.075;
-    texture.offset.x = Math.sin(elapsedTime * 0.4) * 0.025;
-  }
-  const opacity = 0.93 + Math.sin(elapsedTime * 0.85) * 0.015;
-  for (const material of waterMaterials) {
-    if ("opacity" in material && typeof material.opacity === "number") {
-      material.transparent = true;
-      material.opacity = opacity;
-    }
-  }
+  void elapsedTime;
 }
 
 export function destroyAllChunks() {
@@ -1190,9 +981,6 @@ export function destroyAllChunks() {
   preciseCollisionMeshes.length = 0;
   heightMeshes.length = 0;
   occlusionMeshes.length = 0;
-  waterMaterials.clear();
-  for (const texture of waterTextures) texture.dispose();
-  waterTextures.clear();
   cameraOcclusionDistance = 0;
   cameraOcclusionReady = false;
   desiredChunkKeys.clear();
