@@ -6,9 +6,11 @@ import {
   FOREST_FLOWERS,
   FOREST_GRASS,
   FOREST_TREES,
+  URBAN_ALLEYS,
   URBAN_BRIDGES,
   URBAN_BUILDINGS,
   URBAN_RIVER,
+  URBAN_STREETS,
   URBAN_TUNNEL,
   URBAN_TUNNEL_WALLS,
   URBAN_VEHICLES,
@@ -20,11 +22,16 @@ export const CHUNK_SIZE = 88;
 const HALF_CHUNK = CHUNK_SIZE / 2;
 
 const ROAD_WIDTH = 8.2;
-const SIDEWALK_WIDTH = 1.45;
-const ALLEY_WIDTH = 3;
+const ALLEY_WIDTH = 3.2;
 
-const RIVER_WIDTH = 27;
-const RIVER_BANK_WIDTH = 5;
+const RIVER_WIDTH = 26;
+const RIVER_BANK_WIDTH = 5.5;
+
+const BRIDGE_LENGTH = 35;
+const BRIDGE_WIDTH = 9;
+
+const TUNNEL_WIDTH = 10.5;
+const TUNNEL_LENGTH = 64;
 
 const PLAYER_BASE_Y = 0.055;
 
@@ -37,7 +44,7 @@ type ChunkKind =
   | "tunnel-x"
   | "tunnel-z";
 
-type SimpleColliderType =
+type ColliderType =
   | "tree"
   | "vehicle"
   | "wall"
@@ -64,7 +71,7 @@ type ModelOptions = {
 
   collision?: boolean;
   preciseCollision?: boolean;
-  colliderType?: SimpleColliderType;
+  colliderType?: ColliderType;
 
   height?: boolean;
   occlusion?: boolean;
@@ -82,6 +89,12 @@ type ModelOptions = {
   rotationZ?: number;
 
   sinkIntoGround?: number;
+};
+
+type LinearModelOptions = ModelOptions & {
+  direction: Direction;
+  targetLength: number;
+  targetCrossSize: number;
 };
 
 export const chunks =
@@ -145,6 +158,9 @@ const tempVector =
 const tempVectorB =
   new THREE.Vector3();
 
+const tempQuaternion =
+  new THREE.Quaternion();
+
 let cameraOcclusionDistance = 0;
 let cameraOcclusionReady = false;
 
@@ -154,179 +170,59 @@ let cameraOcclusionReady = false;
 
 const cityGroundMaterial =
   new THREE.MeshStandardMaterial({
-    color: 0x292e2d,
+    color: 0x252a29,
     roughness: 1,
     metalness: 0,
   });
 
 const parkGroundMaterial =
   new THREE.MeshStandardMaterial({
-    color: 0x263b29,
+    color: 0x233526,
     roughness: 1,
     metalness: 0,
   });
 
 const riverGroundMaterial =
   new THREE.MeshStandardMaterial({
-    color: 0x252a29,
-    roughness: 1,
-    metalness: 0,
-  });
-
-const roadMaterial =
-  new THREE.MeshStandardMaterial({
-    color: 0x303433,
-    roughness: 1,
-    metalness: 0,
-  });
-
-const roadPatchMaterial =
-  new THREE.MeshStandardMaterial({
-    color: 0x232625,
-    roughness: 1,
-    metalness: 0,
-    polygonOffset: true,
-    polygonOffsetFactor: -3,
-    polygonOffsetUnits: -3,
-  });
-
-const roadDustMaterial =
-  new THREE.MeshStandardMaterial({
-    color: 0x4c4a42,
-    roughness: 1,
-    metalness: 0,
-    transparent: true,
-    opacity: 0.42,
-    polygonOffset: true,
-    polygonOffsetFactor: -4,
-    polygonOffsetUnits: -4,
-  });
-
-const crackMaterial =
-  new THREE.MeshBasicMaterial({
-    color: 0x171918,
-    transparent: true,
-    opacity: 0.82,
-    depthWrite: false,
-  });
-
-const potholeMaterial =
-  new THREE.MeshStandardMaterial({
-    color: 0x191c1b,
-    roughness: 1,
-    metalness: 0,
-    polygonOffset: true,
-    polygonOffsetFactor: -5,
-    polygonOffsetUnits: -5,
-  });
-
-const alleyMaterial =
-  new THREE.MeshStandardMaterial({
-    color: 0x3c403e,
-    roughness: 1,
-    metalness: 0,
-  });
-
-const sidewalkMaterial =
-  new THREE.MeshStandardMaterial({
-    color: 0x73736d,
-    roughness: 1,
-    metalness: 0,
-  });
-
-const brokenSidewalkMaterial =
-  new THREE.MeshStandardMaterial({
-    color: 0x555851,
-    roughness: 1,
-    metalness: 0,
-  });
-
-const curbMaterial =
-  new THREE.MeshStandardMaterial({
-    color: 0x8a8981,
-    roughness: 1,
-    metalness: 0,
-  });
-
-const centerLineMaterial =
-  new THREE.MeshStandardMaterial({
-    color: 0x9f9565,
-    roughness: 1,
-    metalness: 0,
-    transparent: true,
-    opacity: 0.46,
-    polygonOffset: true,
-    polygonOffsetFactor: -4,
-    polygonOffsetUnits: -4,
-  });
-
-const edgeLineMaterial =
-  new THREE.MeshStandardMaterial({
-    color: 0xb1b2ab,
-    roughness: 1,
-    metalness: 0,
-    transparent: true,
-    opacity: 0.32,
-    polygonOffset: true,
-    polygonOffsetFactor: -4,
-    polygonOffsetUnits: -4,
-  });
-
-const grassBladeMaterial =
-  new THREE.MeshStandardMaterial({
-    color: 0x486f3d,
-    roughness: 1,
-    metalness: 0,
-    side: THREE.DoubleSide,
-  });
-
-const bridgeSurfaceMaterial =
-  new THREE.MeshStandardMaterial({
-    color: 0x353a38,
-    roughness: 1,
-    metalness: 0,
-  });
-
-const bridgeRailMaterial =
-  new THREE.MeshStandardMaterial({
-    color: 0x626864,
-    roughness: 0.85,
-    metalness: 0.08,
-  });
-
-const tunnelWallMaterial =
-  new THREE.MeshStandardMaterial({
-    color: 0x3e423f,
+    color: 0x171d1d,
     roughness: 1,
     metalness: 0,
   });
 
 const riverBankMaterial =
   new THREE.MeshStandardMaterial({
-    color: 0x353b31,
+    color: 0x31382f,
     roughness: 1,
     metalness: 0,
   });
 
 const foundationMaterial =
   new THREE.MeshStandardMaterial({
-    color: 0x30332f,
+    color: 0x2a2e2b,
     roughness: 1,
     metalness: 0,
   });
 
 const foundationEdgeMaterial =
   new THREE.MeshStandardMaterial({
-    color: 0x252824,
+    color: 0x202421,
     roughness: 1,
     metalness: 0,
   });
 
 const rubbleMaterial =
   new THREE.MeshStandardMaterial({
-    color: 0x4b4a43,
+    color: 0x464740,
     roughness: 1,
     metalness: 0,
+  });
+
+const grassBladeMaterial =
+  new THREE.MeshStandardMaterial({
+    color: 0x45683b,
+    roughness: 1,
+    metalness: 0,
+    side: THREE.DoubleSide,
   });
 
 /* -------------------------------------------------------------------------- */
@@ -336,68 +232,6 @@ const rubbleMaterial =
 const groundGeometry =
   new THREE.PlaneGeometry(
     CHUNK_SIZE,
-    CHUNK_SIZE
-  );
-
-const roadXGeometry =
-  new THREE.PlaneGeometry(
-    CHUNK_SIZE,
-    ROAD_WIDTH
-  );
-
-const roadZGeometry =
-  new THREE.PlaneGeometry(
-    ROAD_WIDTH,
-    CHUNK_SIZE
-  );
-
-const sidewalkXGeometry =
-  new THREE.PlaneGeometry(
-    CHUNK_SIZE,
-    SIDEWALK_WIDTH
-  );
-
-const sidewalkZGeometry =
-  new THREE.PlaneGeometry(
-    SIDEWALK_WIDTH,
-    CHUNK_SIZE
-  );
-
-const curbXGeometry =
-  new THREE.BoxGeometry(
-    CHUNK_SIZE,
-    0.12,
-    0.14
-  );
-
-const curbZGeometry =
-  new THREE.BoxGeometry(
-    0.14,
-    0.12,
-    CHUNK_SIZE
-  );
-
-const centerLineXGeometry =
-  new THREE.PlaneGeometry(
-    3.6,
-    0.12
-  );
-
-const centerLineZGeometry =
-  new THREE.PlaneGeometry(
-    0.12,
-    3.6
-  );
-
-const edgeLineXGeometry =
-  new THREE.PlaneGeometry(
-    CHUNK_SIZE,
-    0.08
-  );
-
-const edgeLineZGeometry =
-  new THREE.PlaneGeometry(
-    0.08,
     CHUNK_SIZE
   );
 
@@ -412,24 +246,6 @@ grassBladeGeometry.translate(
   0.12,
   0
 );
-
-const roadPatchGeometry =
-  new THREE.CircleGeometry(
-    1,
-    9
-  );
-
-const potholeGeometry =
-  new THREE.CircleGeometry(
-    1,
-    12
-  );
-
-const crackGeometry =
-  new THREE.PlaneGeometry(
-    1,
-    0.045
-  );
 
 /* -------------------------------------------------------------------------- */
 /*                                   RANDOM                                   */
@@ -496,18 +312,6 @@ function randomRange(
   );
 }
 
-function pick<T>(
-  values: readonly T[],
-  random: () => number
-): T {
-  return values[
-    Math.floor(
-      random() *
-        values.length
-    )
-  ];
-}
-
 function modulo(
   value: number,
   divisor: number
@@ -520,6 +324,18 @@ function modulo(
     divisor
   ) %
     divisor;
+}
+
+function pick<T>(
+  values: readonly T[],
+  random: () => number
+): T {
+  return values[
+    Math.floor(
+      random() *
+        values.length
+    )
+  ];
 }
 
 function shuffle<T>(
@@ -578,19 +394,29 @@ export function getChunkCoord(
 }
 
 /*
- * رودخانه یک ستون جهانی و پیوسته است.
- * با تغییر cz هیچ‌وقت قطع نمی‌شود.
+ * اولین رودخانه در چانک x=1 قرار دارد؛
+ * بنابراین از ابتدای بازی قابل مشاهده است.
  *
- * هر 24 چانک یک رودخانه دیگر ایجاد می‌شود
- * تا جهان نامحدود باقی بماند.
+ * رودخانه در تمام چانک‌های محور Z ادامه پیدا می‌کند.
  */
 function isRiverColumn(
   cx: number
 ) {
   return (
     modulo(
-      cx - 4,
-      24
+      cx - 1,
+      12
+    ) === 0
+  );
+}
+
+function isBridgeCrossing(
+  cz: number
+) {
+  return (
+    modulo(
+      cz,
+      4
     ) === 0
   );
 }
@@ -605,11 +431,14 @@ function getChunkKind(
     return "river";
   }
 
+  /*
+   * تونل نزدیک شروع بازی قرار می‌گیرد.
+   */
   if (
-    cx === 0 &&
+    cx === -1 &&
     cz === 0
   ) {
-    return "city";
+    return "tunnel-x";
   }
 
   const value =
@@ -620,21 +449,21 @@ function getChunkKind(
 
   if (
     value > 0 &&
-    value % 19 === 0
+    value % 23 === 0
   ) {
     return "park";
   }
 
   if (
     value > 0 &&
-    value % 31 === 0
+    value % 29 === 0
   ) {
     return "tunnel-x";
   }
 
   if (
     value > 0 &&
-    value % 37 === 0
+    value % 41 === 0
   ) {
     return "tunnel-z";
   }
@@ -660,13 +489,20 @@ function getRoadDirection(
     return "z";
   }
 
+  if (
+    cx === 0 &&
+    cz === 0
+  ) {
+    return "x";
+  }
+
   return (
     modulo(
       cx + cz,
-      3
-    ) === 0
-      ? "z"
-      : "x"
+      4
+    ) < 2
+      ? "x"
+      : "z"
   );
 }
 
@@ -745,14 +581,14 @@ function brightenMaterial(
     ) {
       result.roughness =
         Math.max(
-          result.roughness,
-          0.62
+          0.67,
+          result.roughness
         );
 
       result.metalness =
         Math.min(
-          result.metalness,
-          0.14
+          0.12,
+          result.metalness
         );
     }
 
@@ -906,424 +742,6 @@ function alignToGround(
   }
 }
 
-/* -------------------------------------------------------------------------- */
-/*                            BUILDING FOUNDATION                             */
-/* -------------------------------------------------------------------------- */
-
-function createBuildingFoundation(
-  object: THREE.Object3D,
-  chunk: THREE.Group
-) {
-  object.updateWorldMatrix(
-    true,
-    true
-  );
-
-  const bounds =
-    new THREE.Box3().setFromObject(
-      object
-    );
-
-  if (
-    bounds.isEmpty()
-  ) {
-    return;
-  }
-
-  bounds.getSize(
-    tempSize
-  );
-
-  bounds.getCenter(
-    tempCenter
-  );
-
-  const width =
-    Math.max(
-      2,
-      Math.min(
-        tempSize.x + 0.9,
-        23
-      )
-    );
-
-  const depth =
-    Math.max(
-      2,
-      Math.min(
-        tempSize.z + 0.9,
-        23
-      )
-    );
-
-  /*
-   * لایه اصلی زیر ساختمان باعث می‌شود
-   * ساختمان دیگر شناور دیده نشود.
-   */
-  const foundationGeometry =
-    new THREE.BoxGeometry(
-      width,
-      0.16,
-      depth
-    );
-
-  const foundation =
-    new THREE.Mesh(
-      foundationGeometry,
-      foundationMaterial
-    );
-
-  foundation.position.set(
-    tempCenter.x,
-    0.015,
-    tempCenter.z
-  );
-
-  foundation.rotation.y =
-    object.rotation.y;
-
-  foundation.receiveShadow =
-    true;
-
-  foundation.userData
-    .temporaryGeometry = true;
-
-  chunk.add(
-    foundation
-  );
-
-  heightMeshes.push(
-    foundation
-  );
-
-  /*
-   * حاشیه تیره و نامنظم برای ترکیب کف ساختمان
-   * با زمین اطراف.
-   */
-  const edgeGeometry =
-    new THREE.BoxGeometry(
-      width + 0.65,
-      0.055,
-      depth + 0.65
-    );
-
-  const edge =
-    new THREE.Mesh(
-      edgeGeometry,
-      foundationEdgeMaterial
-    );
-
-  edge.position.set(
-    tempCenter.x,
-    -0.01,
-    tempCenter.z
-  );
-
-  edge.rotation.y =
-    object.rotation.y;
-
-  edge.receiveShadow =
-    true;
-
-  edge.userData
-    .temporaryGeometry = true;
-
-  chunk.add(edge);
-
-  /*
-   * چند قطعه آوار کوچک اطراف پایه ساختمان.
-   */
-  const rubbleCount =
-    Math.max(
-      3,
-      Math.min(
-        8,
-        Math.floor(
-          (
-            width +
-            depth
-          ) /
-            5
-        )
-      )
-    );
-
-  for (
-    let index = 0;
-    index < rubbleCount;
-    index++
-  ) {
-    const rubbleGeometry =
-      new THREE.BoxGeometry(
-        0.25 +
-          Math.random() *
-            0.65,
-        0.12 +
-          Math.random() *
-            0.22,
-        0.25 +
-          Math.random() *
-            0.65
-      );
-
-    const rubble =
-      new THREE.Mesh(
-        rubbleGeometry,
-        rubbleMaterial
-      );
-
-    const horizontalSide =
-      Math.random() < 0.5;
-
-    const side =
-      Math.random() < 0.5
-        ? -1
-        : 1;
-
-    rubble.position.set(
-      tempCenter.x +
-        (
-          horizontalSide
-            ? side *
-              (
-                width / 2 +
-                0.25
-              )
-            : (
-                Math.random() -
-                0.5
-              ) *
-              width
-        ),
-      0.08,
-      tempCenter.z +
-        (
-          horizontalSide
-            ? (
-                Math.random() -
-                0.5
-              ) *
-              depth
-            : side *
-              (
-                depth / 2 +
-                0.25
-              )
-        )
-    );
-
-    rubble.rotation.set(
-      Math.random() * 0.2,
-      Math.random() *
-        Math.PI,
-      Math.random() * 0.2
-    );
-
-    rubble.castShadow =
-      true;
-
-    rubble.receiveShadow =
-      true;
-
-    rubble.userData
-      .temporaryGeometry = true;
-
-    chunk.add(rubble);
-  }
-}
-
-/* -------------------------------------------------------------------------- */
-/*                                  COLLISION                                 */
-/* -------------------------------------------------------------------------- */
-
-function getColliderFactors(
-  type: SimpleColliderType
-) {
-  switch (type) {
-    case "tree":
-      return {
-        x: 0.16,
-        z: 0.16,
-        y: 0.75,
-        minimum: 0.38,
-      };
-
-    case "vehicle":
-      return {
-        x: 0.82,
-        z: 0.82,
-        y: 0.8,
-        minimum: 0.65,
-      };
-
-    case "wall":
-      return {
-        x: 0.9,
-        z: 0.9,
-        y: 0.92,
-        minimum: 0.5,
-      };
-
-    case "rail":
-      return {
-        x: 0.98,
-        z: 0.98,
-        y: 0.98,
-        minimum: 0.25,
-      };
-  }
-}
-
-function registerSimpleCollider(
-  object: THREE.Object3D,
-  chunk: THREE.Group,
-  type: SimpleColliderType
-) {
-  object.updateWorldMatrix(
-    true,
-    true
-  );
-
-  const bounds =
-    new THREE.Box3().setFromObject(
-      object
-    );
-
-  if (
-    bounds.isEmpty()
-  ) {
-    return;
-  }
-
-  bounds.getSize(
-    tempSize
-  );
-
-  bounds.getCenter(
-    tempCenter
-  );
-
-  const factors =
-    getColliderFactors(
-      type
-    );
-
-  let width =
-    Math.max(
-      factors.minimum,
-      tempSize.x *
-        factors.x
-    );
-
-  let depth =
-    Math.max(
-      factors.minimum,
-      tempSize.z *
-        factors.z
-    );
-
-  const height =
-    Math.max(
-      0.8,
-      tempSize.y *
-        factors.y
-    );
-
-  if (
-    type === "tree"
-  ) {
-    width =
-      Math.min(
-        width,
-        1.2
-      );
-
-    depth =
-      Math.min(
-        depth,
-        1.2
-      );
-  }
-
-  const box =
-    new THREE.Box3()
-      .setFromCenterAndSize(
-        new THREE.Vector3(
-          tempCenter.x,
-          bounds.min.y +
-            height / 2,
-          tempCenter.z
-        ),
-        new THREE.Vector3(
-          width,
-          height,
-          depth
-        )
-      );
-
-  simpleColliders.push({
-    box,
-    chunk,
-  });
-}
-
-/*
- * برخورد ساختمان بر اساس Mesh واقعی انجام می‌شود.
- * بنابراین فضای خالی، در ورودی، شکاف یا بخش خراب‌شده
- * قابل عبور باقی می‌ماند.
- */
-function registerPreciseCollision(
-  object: THREE.Object3D,
-  chunk: THREE.Group
-) {
-  object.traverse(
-    (child) => {
-      if (
-        !(
-          child instanceof
-          THREE.Mesh
-        )
-      ) {
-        return;
-      }
-
-      child.geometry
-        .computeBoundingBox();
-
-      const geometryBounds =
-        child.geometry
-          .boundingBox;
-
-      if (
-        !geometryBounds
-      ) {
-        return;
-      }
-
-      geometryBounds.getSize(
-        tempSize
-      );
-
-      /*
-       * جزئیات خیلی ریز مثل سیم، برگ و تکه‌های تزئینی
-       * وارد برخورد دقیق نمی‌شوند.
-       */
-      if (
-        tempSize.x < 0.18 &&
-        tempSize.y < 0.18 &&
-        tempSize.z < 0.18
-      ) {
-        return;
-      }
-
-      preciseCollisionMeshes.push({
-        mesh: child,
-        chunk,
-      });
-    }
-  );
-}
-
 function registerModel(
   object: THREE.Object3D,
   chunk: THREE.Group,
@@ -1443,7 +861,7 @@ function placeModel(
       configureClone(
         object,
         options.brightness ??
-          0.2,
+          0.18,
         options.castShadow ??
           true
       );
@@ -1493,7 +911,615 @@ function placeModel(
 }
 
 /* -------------------------------------------------------------------------- */
-/*                               BASIC SURFACES                               */
+/*                           LINEAR MODEL PLACEMENT                           */
+/* -------------------------------------------------------------------------- */
+
+function placeLinearModel(
+  definition: ModelDef,
+  chunk: THREE.Group,
+  x: number,
+  z: number,
+  options: LinearModelOptions
+) {
+  void loadSource(
+    definition.url
+  )
+    .then((source) => {
+      if (
+        chunk.userData
+          .destroyed ||
+        !chunk.parent
+      ) {
+        return;
+      }
+
+      const object =
+        source.clone(true);
+
+      object.scale.setScalar(
+        definition.scale
+      );
+
+      object.position.set(
+        x,
+        options.y ?? 0,
+        z
+      );
+
+      object.rotation.set(
+        options.rotationX ??
+          0,
+        0,
+        options.rotationZ ??
+          0
+      );
+
+      configureClone(
+        object,
+        options.brightness ??
+          0.06,
+        options.castShadow ??
+          false
+      );
+
+      object.updateWorldMatrix(
+        true,
+        true
+      );
+
+      tempBox.setFromObject(
+        object
+      );
+
+      tempBox.getSize(
+        tempSize
+      );
+
+      /*
+       * محور بلند مدل به جهت مسیر چرخانده می‌شود.
+       */
+      const localLongAxis =
+        tempSize.x >=
+        tempSize.z
+          ? "x"
+          : "z";
+
+      if (
+        localLongAxis !==
+        options.direction
+      ) {
+        object.rotation.y =
+          Math.PI / 2;
+      }
+
+      object.updateWorldMatrix(
+        true,
+        true
+      );
+
+      tempBox.setFromObject(
+        object
+      );
+
+      tempBox.getSize(
+        tempSize
+      );
+
+      const currentLength =
+        options.direction === "x"
+          ? tempSize.x
+          : tempSize.z;
+
+      const currentCrossSize =
+        options.direction === "x"
+          ? tempSize.z
+          : tempSize.x;
+
+      const lengthScale =
+        options.targetLength /
+        Math.max(
+          currentLength,
+          0.001
+        );
+
+      const crossScale =
+        options.targetCrossSize /
+        Math.max(
+          currentCrossSize,
+          0.001
+        );
+
+      if (
+        options.direction === "x"
+      ) {
+        object.scale.x *=
+          lengthScale;
+
+        object.scale.z *=
+          crossScale;
+      } else {
+        object.scale.z *=
+          lengthScale;
+
+        object.scale.x *=
+          crossScale;
+      }
+
+      alignToGround(
+        object,
+        options.y ?? 0,
+        options.sinkIntoGround ??
+          0.025
+      );
+
+      chunk.add(
+        object
+      );
+
+      object.updateWorldMatrix(
+        true,
+        true
+      );
+
+      registerModel(
+        object,
+        chunk,
+        options
+      );
+    })
+    .catch((error) => {
+      console.error(
+        `Linear model failed: ${definition.url}`,
+        error
+      );
+    });
+}
+
+/* -------------------------------------------------------------------------- */
+/*                                 FOUNDATION                                 */
+/* -------------------------------------------------------------------------- */
+
+function createBuildingFoundation(
+  object: THREE.Object3D,
+  chunk: THREE.Group
+) {
+  object.updateWorldMatrix(
+    true,
+    true
+  );
+
+  const bounds =
+    new THREE.Box3().setFromObject(
+      object
+    );
+
+  if (
+    bounds.isEmpty()
+  ) {
+    return;
+  }
+
+  bounds.getSize(
+    tempSize
+  );
+
+  bounds.getCenter(
+    tempCenter
+  );
+
+  const width =
+    Math.min(
+      tempSize.x + 0.45,
+      17
+    );
+
+  const depth =
+    Math.min(
+      tempSize.z + 0.45,
+      17
+    );
+
+  const edgeGeometry =
+    new THREE.BoxGeometry(
+      width + 0.45,
+      0.055,
+      depth + 0.45
+    );
+
+  const edge =
+    new THREE.Mesh(
+      edgeGeometry,
+      foundationEdgeMaterial
+    );
+
+  edge.position.set(
+    tempCenter.x,
+    -0.01,
+    tempCenter.z
+  );
+
+  edge.rotation.y =
+    object.rotation.y;
+
+  edge.receiveShadow =
+    true;
+
+  edge.userData
+    .temporaryGeometry = true;
+
+  chunk.add(edge);
+
+  const foundationGeometry =
+    new THREE.BoxGeometry(
+      width,
+      0.11,
+      depth
+    );
+
+  const foundation =
+    new THREE.Mesh(
+      foundationGeometry,
+      foundationMaterial
+    );
+
+  foundation.position.set(
+    tempCenter.x,
+    0.008,
+    tempCenter.z
+  );
+
+  foundation.rotation.y =
+    object.rotation.y;
+
+  foundation.receiveShadow =
+    true;
+
+  foundation.userData
+    .temporaryGeometry = true;
+
+  chunk.add(
+    foundation
+  );
+
+  heightMeshes.push(
+    foundation
+  );
+
+  const random =
+    seededRandom(
+      Math.floor(
+        (
+          tempCenter.x +
+          1000
+        ) *
+          37 +
+        (
+          tempCenter.z +
+          1000
+        ) *
+          71
+      )
+    );
+
+  const rubbleCount =
+    3 +
+    Math.floor(
+      random() * 4
+    );
+
+  for (
+    let index = 0;
+    index < rubbleCount;
+    index++
+  ) {
+    const geometry =
+      new THREE.BoxGeometry(
+        randomRange(
+          random,
+          0.25,
+          0.65
+        ),
+        randomRange(
+          random,
+          0.1,
+          0.26
+        ),
+        randomRange(
+          random,
+          0.25,
+          0.65
+        )
+      );
+
+    const rubble =
+      new THREE.Mesh(
+        geometry,
+        rubbleMaterial
+      );
+
+    const horizontal =
+      random() < 0.5;
+
+    const side =
+      random() < 0.5
+        ? -1
+        : 1;
+
+    rubble.position.set(
+      tempCenter.x +
+        (
+          horizontal
+            ? side *
+              (
+                width / 2 +
+                0.2
+              )
+            : randomRange(
+                random,
+                -width / 2,
+                width / 2
+              )
+        ),
+      0.08,
+      tempCenter.z +
+        (
+          horizontal
+            ? randomRange(
+                random,
+                -depth / 2,
+                depth / 2
+              )
+            : side *
+              (
+                depth / 2 +
+                0.2
+              )
+        )
+    );
+
+    rubble.rotation.set(
+      randomRange(
+        random,
+        -0.15,
+        0.15
+      ),
+      random() *
+        Math.PI,
+      randomRange(
+        random,
+        -0.15,
+        0.15
+      )
+    );
+
+    rubble.castShadow =
+      true;
+
+    rubble.receiveShadow =
+      true;
+
+    rubble.userData
+      .temporaryGeometry = true;
+
+    chunk.add(rubble);
+  }
+}
+
+/* -------------------------------------------------------------------------- */
+/*                                  COLLISION                                 */
+/* -------------------------------------------------------------------------- */
+
+function getColliderFactors(
+  type: ColliderType
+) {
+  switch (type) {
+    case "tree":
+      return {
+        x: 0.15,
+        z: 0.15,
+        y: 0.76,
+        minimum: 0.38,
+      };
+
+    case "vehicle":
+      return {
+        x: 0.8,
+        z: 0.8,
+        y: 0.82,
+        minimum: 0.6,
+      };
+
+    case "wall":
+      return {
+        x: 0.94,
+        z: 0.94,
+        y: 0.95,
+        minimum: 0.5,
+      };
+
+    case "rail":
+      return {
+        x: 0.98,
+        z: 0.98,
+        y: 0.98,
+        minimum: 0.22,
+      };
+  }
+}
+
+function registerSimpleCollider(
+  object: THREE.Object3D,
+  chunk: THREE.Group,
+  type: ColliderType
+) {
+  object.updateWorldMatrix(
+    true,
+    true
+  );
+
+  const bounds =
+    new THREE.Box3().setFromObject(
+      object
+    );
+
+  if (
+    bounds.isEmpty()
+  ) {
+    return;
+  }
+
+  bounds.getSize(
+    tempSize
+  );
+
+  bounds.getCenter(
+    tempCenter
+  );
+
+  const factors =
+    getColliderFactors(
+      type
+    );
+
+  let width =
+    Math.max(
+      factors.minimum,
+      tempSize.x *
+        factors.x
+    );
+
+  let depth =
+    Math.max(
+      factors.minimum,
+      tempSize.z *
+        factors.z
+    );
+
+  if (
+    type === "tree"
+  ) {
+    width =
+      Math.min(
+        width,
+        1.15
+      );
+
+    depth =
+      Math.min(
+        depth,
+        1.15
+      );
+  }
+
+  const height =
+    Math.max(
+      0.8,
+      tempSize.y *
+        factors.y
+    );
+
+  simpleColliders.push({
+    chunk,
+
+    box:
+      new THREE.Box3()
+        .setFromCenterAndSize(
+          new THREE.Vector3(
+            tempCenter.x,
+            bounds.min.y +
+              height / 2,
+            tempCenter.z
+          ),
+          new THREE.Vector3(
+            width,
+            height,
+            depth
+          )
+        ),
+  });
+}
+
+function registerStaticCollider(
+  chunk: THREE.Group,
+  centerX: number,
+  centerY: number,
+  centerZ: number,
+  width: number,
+  height: number,
+  depth: number
+) {
+  simpleColliders.push({
+    chunk,
+
+    box:
+      new THREE.Box3()
+        .setFromCenterAndSize(
+          new THREE.Vector3(
+            centerX +
+              chunk.position.x,
+            centerY,
+            centerZ +
+              chunk.position.z
+          ),
+          new THREE.Vector3(
+            width,
+            height,
+            depth
+          )
+        ),
+  });
+}
+
+function registerPreciseCollision(
+  object: THREE.Object3D,
+  chunk: THREE.Group
+) {
+  object.traverse(
+    (child) => {
+      if (
+        !(
+          child instanceof
+          THREE.Mesh
+        )
+      ) {
+        return;
+      }
+
+      child.geometry
+        .computeBoundingBox();
+
+      const geometryBounds =
+        child.geometry
+          .boundingBox;
+
+      if (
+        !geometryBounds
+      ) {
+        return;
+      }
+
+      geometryBounds.getSize(
+        tempSize
+      );
+
+      if (
+        tempSize.x < 0.16 &&
+        tempSize.y < 0.16 &&
+        tempSize.z < 0.16
+      ) {
+        return;
+      }
+
+      preciseCollisionMeshes.push({
+        mesh: child,
+        chunk,
+      });
+    }
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/*                                  SURFACES                                  */
 /* -------------------------------------------------------------------------- */
 
 function createSurface(
@@ -1534,7 +1560,7 @@ function addGround(
       material,
       0,
       0,
-      0
+      -0.045
     );
 
   ground.name =
@@ -1550,497 +1576,164 @@ function addGround(
 }
 
 /* -------------------------------------------------------------------------- */
-/*                              DAMAGED ASPHALT                               */
+/*                              STREET AND ALLEY                              */
 /* -------------------------------------------------------------------------- */
 
-function addRoadDamage(
+function addStreetTiles(
   chunk: THREE.Group,
   random: () => number,
-  direction: Direction
+  direction: Direction,
+  start = -HALF_CHUNK,
+  end = HALF_CHUNK,
+  crossOffset = 0
 ) {
-  const patchCount = 20;
+  if (
+    URBAN_STREETS.length === 0
+  ) {
+    return;
+  }
+
+  const tileLength = 11;
+  const totalLength =
+    end - start;
+
+  const count =
+    Math.ceil(
+      totalLength /
+        tileLength
+    );
+
+  const exactLength =
+    totalLength / count;
 
   for (
     let index = 0;
-    index < patchCount;
+    index < count;
     index++
   ) {
     const along =
-      randomRange(
-        random,
-        -41,
-        41
-      );
+      start +
+      exactLength *
+        (
+          index + 0.5
+        );
 
-    const across =
-      randomRange(
-        random,
-        -ROAD_WIDTH / 2 +
-          0.45,
-        ROAD_WIDTH / 2 -
-          0.45
-      );
-
-    const patch =
-      createSurface(
-        roadPatchGeometry,
-        random() < 0.72
-          ? roadPatchMaterial
-          : roadDustMaterial,
-        direction === "x"
-          ? along
-          : across,
-        direction === "x"
-          ? across
-          : along,
-        0.047
-      );
-
-    patch.scale.set(
-      randomRange(
-        random,
-        0.3,
-        1.8
-      ),
-      randomRange(
-        random,
-        0.3,
-        1.25
-      ),
-      1
-    );
-
-    patch.rotation.z =
-      random() *
-      Math.PI;
-
-    chunk.add(patch);
-  }
-
-  const potholeCount =
-    3 +
-    Math.floor(
-      random() * 4
-    );
-
-  for (
-    let index = 0;
-    index < potholeCount;
-    index++
-  ) {
-    const along =
-      randomRange(
-        random,
-        -39,
-        39
-      );
-
-    const across =
-      randomRange(
-        random,
-        -ROAD_WIDTH / 2 +
-          0.7,
-        ROAD_WIDTH / 2 -
-          0.7
-      );
-
-    const pothole =
-      createSurface(
-        potholeGeometry,
-        potholeMaterial,
-        direction === "x"
-          ? along
-          : across,
-        direction === "x"
-          ? across
-          : along,
-        0.052
-      );
-
-    pothole.scale.set(
-      randomRange(
-        random,
-        0.35,
-        0.85
-      ),
-      randomRange(
-        random,
-        0.18,
-        0.55
-      ),
-      1
-    );
-
-    pothole.rotation.z =
-      random() *
-      Math.PI;
-
-    chunk.add(pothole);
-  }
-
-  const crackCount = 30;
-
-  for (
-    let index = 0;
-    index < crackCount;
-    index++
-  ) {
-    const along =
-      randomRange(
-        random,
-        -41,
-        41
-      );
-
-    const across =
-      randomRange(
-        random,
-        -ROAD_WIDTH / 2 +
-          0.35,
-        ROAD_WIDTH / 2 -
-          0.35
-      );
-
-    const crack =
-      createSurface(
-        crackGeometry,
-        crackMaterial,
-        direction === "x"
-          ? along
-          : across,
-        direction === "x"
-          ? across
-          : along,
-        0.056
-      );
-
-    crack.scale.set(
-      randomRange(
-        random,
-        0.3,
-        1.4
-      ),
-      1,
-      1
-    );
-
-    crack.rotation.z =
-      random() *
-      Math.PI;
-
-    chunk.add(crack);
-  }
-}
-
-/* -------------------------------------------------------------------------- */
-/*                                    ROAD                                    */
-/* -------------------------------------------------------------------------- */
-
-function addRoadLines(
-  chunk: THREE.Group,
-  random: () => number,
-  direction: Direction
-) {
-  const offsets =
-    [
-      -38,
-      -31,
-      -24,
-      -17,
-      -10,
-      -3,
-      4,
-      11,
-      18,
-      25,
-      32,
-      39,
-    ];
-
-  const visibleOffsets =
-    offsets.filter(
-      () =>
-        random() > 0.32
-    );
-
-  const lines =
-    new THREE.InstancedMesh(
-      direction === "x"
-        ? centerLineXGeometry
-        : centerLineZGeometry,
-      centerLineMaterial,
-      visibleOffsets.length
-    );
-
-  const matrix =
-    new THREE.Matrix4();
-
-  const position =
-    new THREE.Vector3();
-
-  const quaternion =
-    new THREE.Quaternion()
-      .setFromEuler(
-        new THREE.Euler(
-          -Math.PI / 2,
-          0,
-          0
+    const definition =
+      URBAN_STREETS[
+        modulo(
+          index +
+            Math.floor(
+              random() *
+                URBAN_STREETS.length
+            ),
+          URBAN_STREETS.length
         )
-      );
+      ];
 
-  const scale =
-    new THREE.Vector3();
+    placeLinearModel(
+      definition,
+      chunk,
+      direction === "x"
+        ? along
+        : crossOffset,
+      direction === "x"
+        ? crossOffset
+        : along,
+      {
+        direction,
+        targetLength:
+          exactLength +
+          0.08,
+        targetCrossSize:
+          ROAD_WIDTH +
+          2.9,
 
-  visibleOffsets.forEach(
-    (
-      offset,
-      index
-    ) => {
-      position.set(
-        direction === "x"
-          ? offset
-          : 0,
-        0.054,
-        direction === "x"
-          ? randomRange(
-              random,
-              -0.08,
-              0.08
-            )
-          : offset
-      );
+        y: 0.015,
 
-      scale.set(
-        randomRange(
-          random,
-          0.55,
-          1
-        ),
-        randomRange(
-          random,
-          0.7,
-          1
-        ),
-        1
-      );
-
-      matrix.compose(
-        position,
-        quaternion,
-        scale
-      );
-
-      lines.setMatrixAt(
-        index,
-        matrix
-      );
-    }
-  );
-
-  lines.instanceMatrix
-    .needsUpdate = true;
-
-  lines.castShadow =
-    false;
-
-  lines.receiveShadow =
-    false;
-
-  chunk.add(lines);
-}
-
-function addRoadEdges(
-  chunk: THREE.Group,
-  random: () => number,
-  direction: Direction
-) {
-  const offset =
-    ROAD_WIDTH / 2 -
-    0.29;
-
-  for (
-    const side of [
-      -1,
-      1,
-    ]
-  ) {
-    if (
-      random() < 0.3
-    ) {
-      continue;
-    }
-
-    const line =
-      createSurface(
-        direction === "x"
-          ? edgeLineXGeometry
-          : edgeLineZGeometry,
-        edgeLineMaterial,
-        direction === "x"
-          ? 0
-          : offset * side,
-        direction === "x"
-          ? offset * side
-          : 0,
-        0.053
-      );
-
-    chunk.add(line);
+        height: true,
+        brightness: 0.035,
+        castShadow: false,
+        sinkIntoGround: 0.025,
+      }
+    );
   }
 }
 
-function addRoad(
+function addAlleyTiles(
   chunk: THREE.Group,
   random: () => number,
-  direction: Direction
-) {
-  const road =
-    createSurface(
-      direction === "x"
-        ? roadXGeometry
-        : roadZGeometry,
-      roadMaterial,
-      0,
-      0,
-      0.025
-    );
-
-  chunk.add(road);
-
-  heightMeshes.push(
-    road
-  );
-
-  const sidewalkOffset =
-    ROAD_WIDTH / 2 +
-    SIDEWALK_WIDTH / 2;
-
-  const curbOffset =
-    ROAD_WIDTH / 2 +
-    0.07;
-
-  for (
-    const side of [
-      -1,
-      1,
-    ]
-  ) {
-    const sidewalk =
-      createSurface(
-        direction === "x"
-          ? sidewalkXGeometry
-          : sidewalkZGeometry,
-        random() < 0.28
-          ? brokenSidewalkMaterial
-          : sidewalkMaterial,
-        direction === "x"
-          ? 0
-          : sidewalkOffset *
-            side,
-        direction === "x"
-          ? sidewalkOffset *
-            side
-          : 0,
-        0.043
-      );
-
-    chunk.add(
-      sidewalk
-    );
-
-    heightMeshes.push(
-      sidewalk
-    );
-
-    const curb =
-      new THREE.Mesh(
-        direction === "x"
-          ? curbXGeometry
-          : curbZGeometry,
-        curbMaterial
-      );
-
-    curb.position.set(
-      direction === "x"
-        ? 0
-        : curbOffset * side,
-      0.065,
-      direction === "x"
-        ? curbOffset * side
-        : 0
-    );
-
-    curb.receiveShadow =
-      true;
-
-    chunk.add(curb);
-  }
-
-  addRoadLines(
-    chunk,
-    random,
-    direction
-  );
-
-  addRoadEdges(
-    chunk,
-    random,
-    direction
-  );
-
-  addRoadDamage(
-    chunk,
-    random,
-    direction
-  );
-}
-
-function addShortAlley(
-  chunk: THREE.Group,
   direction: Direction,
   side: -1 | 1
 ) {
-  const length = 17;
+  if (
+    URBAN_ALLEYS.length === 0
+  ) {
+    return;
+  }
 
-  const geometry =
-    direction === "x"
-      ? new THREE.PlaneGeometry(
-          length,
-          ALLEY_WIDTH
-        )
-      : new THREE.PlaneGeometry(
-          ALLEY_WIDTH,
-          length
+  const length = 20;
+
+  const start =
+    side === -1
+      ? -HALF_CHUNK
+      : HALF_CHUNK -
+        length;
+
+  const count = 3;
+
+  const exactLength =
+    length / count;
+
+  for (
+    let index = 0;
+    index < count;
+    index++
+  ) {
+    const along =
+      start +
+      exactLength *
+        (
+          index + 0.5
         );
 
-  const center =
-    side *
-    (
-      HALF_CHUNK -
-      length / 2
-    );
+    const definition =
+      URBAN_ALLEYS[
+        modulo(
+          index +
+            Math.floor(
+              random() *
+                URBAN_ALLEYS.length
+            ),
+          URBAN_ALLEYS.length
+        )
+      ];
 
-  const alley =
-    createSurface(
-      geometry,
-      alleyMaterial,
+    placeLinearModel(
+      definition,
+      chunk,
       direction === "x"
-        ? center
+        ? along
         : 0,
       direction === "x"
         ? 0
-        : center,
-      0.028
+        : along,
+      {
+        direction,
+        targetLength:
+          exactLength +
+          0.06,
+        targetCrossSize:
+          ALLEY_WIDTH,
+
+        y: 0.012,
+
+        height: true,
+        brightness: 0.025,
+        castShadow: false,
+        sinkIntoGround: 0.018,
+      }
     );
-
-  alley.userData
-    .temporaryGeometry = true;
-
-  chunk.add(alley);
-
-  heightMeshes.push(
-    alley
-  );
+  }
 }
 
 function getRoadPoints(
@@ -2096,66 +1789,88 @@ function isVilla(
 function getBuildingSlots(
   direction: Direction
 ) {
-  /*
-   * شش ساختمان در هر سمت خیابان.
-   * تقریباً تمام فضای چانک پر می‌شود.
-   */
-  const along =
+  const alongPositions =
     [
-      -36.5,
-      -22,
-      -7.4,
-      7.4,
-      22,
-      36.5,
+      -36,
+      -24,
+      -12,
+      0,
+      12,
+      24,
+      36,
     ];
-
-  const sideOffset =
-    14.4;
 
   const slots: Array<{
     x: number;
     z: number;
     rotation: number;
+    outer: boolean;
   }> = [];
 
+  const rowOffsets =
+    [
+      13.2,
+      28.2,
+    ];
+
   for (
-    const value
-    of along
+    const rowOffset
+    of rowOffsets
   ) {
-    if (
-      direction === "x"
+    for (
+      const value
+      of alongPositions
     ) {
-      slots.push({
-        x: value,
-        z:
-          -sideOffset,
-        rotation: 0,
-      });
+      /*
+       * ردیف بیرونی کمی خلوت‌تر است تا مدل‌ها روی هم نیفتند.
+       */
+      if (
+        rowOffset > 20 &&
+        Math.abs(
+          value
+        ) < 5
+      ) {
+        continue;
+      }
 
-      slots.push({
-        x: value,
-        z:
-          sideOffset,
-        rotation:
-          Math.PI,
-      });
-    } else {
-      slots.push({
-        x:
-          -sideOffset,
-        z: value,
-        rotation:
-          Math.PI / 2,
-      });
+      if (
+        direction === "x"
+      ) {
+        slots.push({
+          x: value,
+          z: -rowOffset,
+          rotation: 0,
+          outer:
+            rowOffset > 20,
+        });
 
-      slots.push({
-        x:
-          sideOffset,
-        z: value,
-        rotation:
-          -Math.PI / 2,
-      });
+        slots.push({
+          x: value,
+          z: rowOffset,
+          rotation:
+            Math.PI,
+          outer:
+            rowOffset > 20,
+        });
+      } else {
+        slots.push({
+          x: -rowOffset,
+          z: value,
+          rotation:
+            Math.PI / 2,
+          outer:
+            rowOffset > 20,
+        });
+
+        slots.push({
+          x: rowOffset,
+          z: value,
+          rotation:
+            -Math.PI / 2,
+          outer:
+            rowOffset > 20,
+        });
+      }
     }
   }
 
@@ -2176,11 +1891,9 @@ function spawnBuildings(
     const slot
     of slots
   ) {
-    /*
-     * فقط درصد بسیار کمی خالی می‌ماند.
-     */
     if (
-      random() < 0.015
+      slot.outer &&
+      random() < 0.18
     ) {
       continue;
     }
@@ -2202,20 +1915,20 @@ function spawnBuildings(
       slot.x +
         randomRange(
           random,
-          -0.18,
-          0.18
+          -0.12,
+          0.12
         ),
       slot.z +
         randomRange(
           random,
-          -0.18,
-          0.18
+          -0.12,
+          0.12
         ),
       slot.rotation +
         randomRange(
           random,
-          -0.008,
-          0.008
+          -0.006,
+          0.006
         ),
       {
         preciseCollision:
@@ -2224,47 +1937,50 @@ function spawnBuildings(
         foundation:
           true,
 
-        /*
-         * مدل کمی داخل زمین فرو می‌رود
-         * تا شناور دیده نشود.
-         */
         sinkIntoGround:
           randomRange(
             random,
-            0.06,
-            0.13
+            0.1,
+            0.17
           ),
 
         occlusion:
-          random() < 0.38,
+          !slot.outer &&
+          random() < 0.32,
 
         targetWidth:
-          villa
+          slot.outer
             ? randomRange(
                 random,
-                13.2,
-                15.2
+                10,
+                11.3
               )
-            : randomRange(
-                random,
-                14.4,
-                16.2
-              ),
+            : villa
+              ? randomRange(
+                  random,
+                  10.8,
+                  12
+                )
+              : randomRange(
+                  random,
+                  11.2,
+                  12.3
+                ),
 
         maxHeight:
           villa
             ? randomRange(
                 random,
-                8.5,
-                11.5
+                8,
+                10.5
               )
             : randomRange(
                 random,
-                14,
-                19
+                12,
+                17
               ),
 
-        brightness: 0.27,
+        brightness: 0.22,
       }
     );
   }
@@ -2313,7 +2029,7 @@ function spawnVehicles(
   const count =
     Math.min(
       available.length,
-      5 +
+      4 +
         Math.floor(
           random() * 3
         )
@@ -2340,8 +2056,8 @@ function spawnVehicles(
 
     const lane =
       random() < 0.5
-        ? -1.9
-        : 1.9;
+        ? -1.85
+        : 1.85;
 
     const x =
       point.direction === "x"
@@ -2355,7 +2071,7 @@ function spawnVehicles(
           lane
         : point.z;
 
-    let rotation =
+    const rotation =
       point.direction === "x"
         ? random() < 0.5
           ? Math.PI / 2
@@ -2364,81 +2080,82 @@ function spawnVehicles(
           ? 0
           : Math.PI;
 
-    if (
-      motorcycle
-    ) {
-      rotation +=
-        randomRange(
-          random,
-          -0.45,
-          0.45
-        );
-    }
-
     placeModel(
       definition,
       chunk,
       x,
       z,
-      rotation,
+      rotation +
+        (
+          motorcycle
+            ? randomRange(
+                random,
+                -0.5,
+                0.5
+              )
+            : randomRange(
+                random,
+                -0.08,
+                0.08
+              )
+        ),
       {
         collision: true,
         colliderType:
           "vehicle",
 
-        /*
-         * ماشین‌ها بزرگ‌تر شده‌اند.
-         */
         targetWidth:
           motorcycle
             ? randomRange(
                 random,
-                2.3,
-                3
+                2.5,
+                3.15
               )
             : randomRange(
                 random,
-                4.8,
-                6.1
+                5,
+                6.2
               ),
 
         maxHeight:
           motorcycle
-            ? 2.2
-            : 3.3,
+            ? 2.3
+            : 3.4,
 
-        /*
-         * موتور روی پهلو قرار می‌گیرد.
-         */
         rotationZ:
           motorcycle
             ? (
                 random() < 0.5
-                  ? 1
-                  : -1
+                  ? -1
+                  : 1
               ) *
               randomRange(
                 random,
-                1.15,
-                1.42
+                1.2,
+                1.46
               )
             : 0,
 
-        brightness: 0.29,
+        sinkIntoGround:
+          motorcycle
+            ? 0.06
+            : 0.025,
+
+        brightness: 0.22,
       }
     );
   }
 }
 
 /* -------------------------------------------------------------------------- */
-/*                                    PARK                                    */
+/*                                  VEGETATION                                */
 /* -------------------------------------------------------------------------- */
 
 function addFineGrass(
   chunk: THREE.Group,
   random: () => number
 ) {
-  const count = 1250;
+  const count = 950;
 
   const grass =
     new THREE.InstancedMesh(
@@ -2452,12 +2169,6 @@ function addFineGrass(
 
   const position =
     new THREE.Vector3();
-
-  const quaternion =
-    new THREE.Quaternion();
-
-  const rotation =
-    new THREE.Euler();
 
   const scale =
     new THREE.Vector3();
@@ -2473,7 +2184,7 @@ function addFineGrass(
         -41,
         41
       ),
-      0.034,
+      0.02,
       randomRange(
         random,
         -41,
@@ -2481,39 +2192,35 @@ function addFineGrass(
       )
     );
 
-    rotation.set(
-      0,
-      random() *
-        Math.PI *
-        2,
-      randomRange(
-        random,
-        -0.06,
-        0.06
-      )
-    );
-
-    quaternion.setFromEuler(
-      rotation
-    );
+    tempQuaternion
+      .setFromAxisAngle(
+        new THREE.Vector3(
+          0,
+          1,
+          0
+        ),
+        random() *
+          Math.PI *
+          2
+      );
 
     scale.set(
       randomRange(
         random,
-        0.75,
+        0.7,
         1.1
       ),
       randomRange(
         random,
-        0.55,
-        1.05
+        0.5,
+        1
       ),
       1
     );
 
     matrix.compose(
       position,
-      quaternion,
+      tempQuaternion,
       scale
     );
 
@@ -2535,194 +2242,6 @@ function addFineGrass(
   chunk.add(grass);
 }
 
-function spawnParkTrees(
-  chunk: THREE.Group,
-  random: () => number
-) {
-  for (
-    let index = 0;
-    index < 30;
-    index++
-  ) {
-    const angle =
-      (
-        index /
-        30
-      ) *
-        Math.PI *
-        2 +
-      randomRange(
-        random,
-        -0.2,
-        0.2
-      );
-
-    const radius =
-      index < 18
-        ? randomRange(
-            random,
-            25,
-            39
-          )
-        : randomRange(
-            random,
-            8,
-            26
-          );
-
-    placeModel(
-      pick(
-        FOREST_TREES,
-        random
-      ),
-      chunk,
-      Math.cos(
-        angle
-      ) *
-        radius,
-      Math.sin(
-        angle
-      ) *
-        radius,
-      random() *
-        Math.PI *
-        2,
-      {
-        collision: true,
-        colliderType:
-          "tree",
-
-        targetHeight:
-          randomRange(
-            random,
-            5,
-            7.2
-          ),
-
-        brightness: 0.05,
-      }
-    );
-  }
-}
-
-function spawnParkDetails(
-  chunk: THREE.Group,
-  random: () => number
-) {
-  for (
-    let index = 0;
-    index < 45;
-    index++
-  ) {
-    placeModel(
-      pick(
-        FOREST_BUSHES,
-        random
-      ),
-      chunk,
-      randomRange(
-        random,
-        -39,
-        39
-      ),
-      randomRange(
-        random,
-        -39,
-        39
-      ),
-      random() *
-        Math.PI *
-        2,
-      {
-        targetWidth:
-          randomRange(
-            random,
-            1,
-            2.4
-          ),
-
-        brightness: 0.03,
-        castShadow: false,
-      }
-    );
-  }
-
-  for (
-    let index = 0;
-    index < 65;
-    index++
-  ) {
-    const definition =
-      random() < 0.62
-        ? pick(
-            FOREST_FLOWERS,
-            random
-          )
-        : pick(
-            FOREST_GRASS,
-            random
-          );
-
-    placeModel(
-      definition,
-      chunk,
-      randomRange(
-        random,
-        -40,
-        40
-      ),
-      randomRange(
-        random,
-        -40,
-        40
-      ),
-      random() *
-        Math.PI *
-        2,
-      {
-        targetWidth:
-          randomRange(
-            random,
-            0.4,
-            1.05
-          ),
-
-        brightness: 0.02,
-        castShadow: false,
-      }
-    );
-  }
-}
-
-function buildPark(
-  chunk: THREE.Group,
-  random: () => number
-) {
-  addGround(
-    chunk,
-    parkGroundMaterial
-  );
-
-  addFineGrass(
-    chunk,
-    random
-  );
-
-  spawnParkTrees(
-    chunk,
-    random
-  );
-
-  spawnParkDetails(
-    chunk,
-    random
-  );
-}
-
-/* -------------------------------------------------------------------------- */
-/*                              CITY VEGETATION                               */
-/* -------------------------------------------------------------------------- */
-
 function spawnCityVegetation(
   chunk: THREE.Group,
   random: () => number,
@@ -2731,10 +2250,10 @@ function spawnCityVegetation(
   const positions =
     [
       -38,
-      -27,
-      -16,
-      16,
-      27,
+      -26,
+      -14,
+      14,
+      26,
       38,
     ];
 
@@ -2743,7 +2262,7 @@ function spawnCityVegetation(
     of positions
   ) {
     if (
-      random() < 0.14
+      random() < 0.2
     ) {
       continue;
     }
@@ -2756,8 +2275,8 @@ function spawnCityVegetation(
     const sideOffset =
       randomRange(
         random,
-        10.2,
-        11.3
+        8.7,
+        10
       ) *
       side;
 
@@ -2784,18 +2303,18 @@ function spawnCityVegetation(
         targetHeight:
           randomRange(
             random,
-            4.5,
-            6.4
+            4.1,
+            5.9
           ),
 
-        brightness: 0.05,
+        brightness: 0.03,
       }
     );
   }
 
   for (
     let index = 0;
-    index < 24;
+    index < 18;
     index++
   ) {
     const side =
@@ -2813,8 +2332,8 @@ function spawnCityVegetation(
     const across =
       randomRange(
         random,
-        9.6,
-        11.7
+        8.1,
+        10
       ) *
       side;
 
@@ -2845,11 +2364,112 @@ function spawnCityVegetation(
         targetWidth:
           randomRange(
             random,
-            0.6,
-            1.5
+            0.55,
+            1.3
           ),
 
-        brightness: 0.02,
+        brightness: 0.01,
+        castShadow: false,
+      }
+    );
+  }
+}
+
+function buildPark(
+  chunk: THREE.Group,
+  random: () => number
+) {
+  addGround(
+    chunk,
+    parkGroundMaterial
+  );
+
+  addFineGrass(
+    chunk,
+    random
+  );
+
+  for (
+    let index = 0;
+    index < 28;
+    index++
+  ) {
+    placeModel(
+      pick(
+        FOREST_TREES,
+        random
+      ),
+      chunk,
+      randomRange(
+        random,
+        -39,
+        39
+      ),
+      randomRange(
+        random,
+        -39,
+        39
+      ),
+      random() *
+        Math.PI *
+        2,
+      {
+        collision: true,
+        colliderType:
+          "tree",
+
+        targetHeight:
+          randomRange(
+            random,
+            4.8,
+            7
+          ),
+
+        brightness: 0.03,
+      }
+    );
+  }
+
+  for (
+    let index = 0;
+    index < 48;
+    index++
+  ) {
+    const source =
+      random() < 0.55
+        ? FOREST_BUSHES
+        : random() < 0.5
+          ? FOREST_FLOWERS
+          : FOREST_GRASS;
+
+    placeModel(
+      pick(
+        source,
+        random
+      ),
+      chunk,
+      randomRange(
+        random,
+        -40,
+        40
+      ),
+      randomRange(
+        random,
+        -40,
+        40
+      ),
+      random() *
+        Math.PI *
+        2,
+      {
+        targetWidth:
+          randomRange(
+            random,
+            0.45,
+            1.7
+          ),
+
+        brightness: 0.01,
         castShadow: false,
       }
     );
@@ -2857,18 +2477,23 @@ function spawnCityVegetation(
 }
 
 /* -------------------------------------------------------------------------- */
-/*                                  RIVER                                     */
+/*                                   RIVER                                    */
 /* -------------------------------------------------------------------------- */
 
 function createWaterTexture() {
-  const width = 64;
-  const height = 64;
+  const width = 128;
+  const height = 128;
 
   const data =
     new Uint8Array(
       width *
         height *
         4
+    );
+
+  const random =
+    seededRandom(
+      874126
     );
 
   for (
@@ -2891,37 +2516,46 @@ function createWaterTexture() {
 
       const wave =
         Math.sin(
-          y * 0.55 +
-            x * 0.14
+          y * 0.31 +
+            x * 0.09
         ) *
-          18 +
+          22 +
         Math.sin(
-          y * 0.19 -
-            x * 0.31
+          y * 0.13 -
+            x * 0.23
         ) *
-          12;
+          13;
 
       const noise =
-        Math.random() *
-        18;
+        random() *
+        16;
 
       data[index] =
-        32 +
-        wave +
-        noise;
+        Math.max(
+          12,
+          28 +
+            wave +
+            noise
+        );
 
       data[index + 1] =
-        86 +
-        wave +
-        noise;
+        Math.max(
+          30,
+          78 +
+            wave +
+            noise
+        );
 
       data[index + 2] =
-        100 +
-        wave +
-        noise;
+        Math.max(
+          38,
+          92 +
+            wave +
+            noise
+        );
 
       data[index + 3] =
-        220;
+        228;
     }
   }
 
@@ -2941,7 +2575,7 @@ function createWaterTexture() {
 
   texture.repeat.set(
     2,
-    8
+    9
   );
 
   texture.colorSpace =
@@ -2966,14 +2600,14 @@ function createRiverWater(
   const material =
     new THREE.MeshPhysicalMaterial({
       map: texture,
-      color: 0x477c86,
-      roughness: 0.28,
-      metalness: 0.02,
+      color: 0x3d747d,
+      roughness: 0.3,
+      metalness: 0,
       transparent: true,
-      opacity: 0.86,
-      transmission: 0.08,
-      clearcoat: 0.35,
-      clearcoatRoughness: 0.25,
+      opacity: 0.88,
+      transmission: 0.04,
+      clearcoat: 0.32,
+      clearcoatRoughness: 0.24,
       side: THREE.DoubleSide,
     });
 
@@ -2993,7 +2627,7 @@ function createRiverWater(
     -Math.PI / 2;
 
   water.position.y =
-    -0.22;
+    -0.25;
 
   water.receiveShadow =
     true;
@@ -3012,7 +2646,7 @@ function createRiverBanks(
   chunk: THREE.Group,
   random: () => number
 ) {
-  const bankGeometry =
+  const geometry =
     new THREE.BoxGeometry(
       RIVER_BANK_WIDTH,
       0.38,
@@ -3027,7 +2661,7 @@ function createRiverBanks(
   ) {
     const bank =
       new THREE.Mesh(
-        bankGeometry,
+        geometry,
         riverBankMaterial
       );
 
@@ -3037,7 +2671,7 @@ function createRiverBanks(
           RIVER_WIDTH / 2 +
           RIVER_BANK_WIDTH / 2
         ),
-      -0.03,
+      -0.04,
       0
     );
 
@@ -3055,33 +2689,30 @@ function createRiverBanks(
 
     for (
       let index = 0;
-      index < 18;
+      index < 14;
       index++
     ) {
-      const definition =
-        random() < 0.56
-          ? pick(
-              FOREST_BUSHES,
-              random
-            )
-          : pick(
-              FOREST_GRASS,
-              random
-            );
+      const source =
+        random() < 0.6
+          ? FOREST_BUSHES
+          : FOREST_GRASS;
 
       placeModel(
-        definition,
+        pick(
+          source,
+          random
+        ),
         chunk,
         side *
           randomRange(
             random,
             RIVER_WIDTH /
               2 +
-              0.8,
+              0.7,
             RIVER_WIDTH /
               2 +
               RIVER_BANK_WIDTH -
-              0.4
+              0.35
           ),
         randomRange(
           random,
@@ -3095,11 +2726,11 @@ function createRiverBanks(
           targetWidth:
             randomRange(
               random,
-              0.65,
-              1.8
+              0.6,
+              1.5
             ),
 
-          brightness: 0.02,
+          brightness: 0.01,
           castShadow: false,
         }
       );
@@ -3111,250 +2742,105 @@ function createRiverBanks(
 /*                                   BRIDGE                                   */
 /* -------------------------------------------------------------------------- */
 
-function createBridgeSection(
-  chunk: THREE.Group,
-  length: number,
-  width: number,
-  x: number,
-  y: number,
-  z: number,
-  rotationZ: number
-) {
-  const geometry =
-    new THREE.BoxGeometry(
-      length,
-      0.38,
-      width
-    );
-
-  const section =
-    new THREE.Mesh(
-      geometry,
-      bridgeSurfaceMaterial
-    );
-
-  section.position.set(
-    x,
-    y,
-    z
-  );
-
-  section.rotation.z =
-    rotationZ;
-
-  section.receiveShadow =
-    true;
-
-  section.userData
-    .temporaryGeometry = true;
-
-  chunk.add(section);
-
-  heightMeshes.push(
-    section
-  );
-}
-
-function createBridgeRail(
-  chunk: THREE.Group,
-  x: number,
-  y: number,
-  z: number,
-  length: number,
-  rotationZ: number
-) {
-  const geometry =
-    new THREE.BoxGeometry(
-      length,
-      0.72,
-      0.18
-    );
-
-  const rail =
-    new THREE.Mesh(
-      geometry,
-      bridgeRailMaterial
-    );
-
-  rail.position.set(
-    x,
-    y,
-    z
-  );
-
-  rail.rotation.z =
-    rotationZ;
-
-  rail.castShadow =
-    true;
-
-  rail.receiveShadow =
-    true;
-
-  rail.userData
-    .temporaryGeometry = true;
-
-  chunk.add(rail);
-
-  registerSimpleCollider(
-    rail,
-    chunk,
-    "rail"
-  );
-}
-
-function buildFunctionalBridge(
+function buildBridge(
   chunk: THREE.Group,
   random: () => number
 ) {
-  const bridgeHeight =
-    2.7;
+  if (
+    URBAN_BRIDGES.length === 0
+  ) {
+    return;
+  }
 
-  const flatLength =
-    RIVER_WIDTH + 5;
+  const definition =
+    pick(
+      URBAN_BRIDGES,
+      random
+    );
 
-  const rampHorizontal =
+  /*
+   * خود مدل پل سطح قابل حرکت است.
+   */
+  placeLinearModel(
+    definition,
+    chunk,
+    0,
+    0,
+    {
+      direction: "x",
+
+      targetLength:
+        BRIDGE_LENGTH,
+
+      targetCrossSize:
+        BRIDGE_WIDTH,
+
+      y: 0.03,
+
+      height: true,
+      occlusion: true,
+
+      brightness: 0.17,
+      castShadow: true,
+      sinkIntoGround: 0.025,
+    }
+  );
+
+  const approachLength =
     (
       CHUNK_SIZE -
-      flatLength
+      BRIDGE_LENGTH
     ) /
       2;
 
-  const rampAngle =
-    Math.atan2(
-      bridgeHeight,
-      rampHorizontal
-    );
-
-  const rampLength =
-    Math.sqrt(
-      rampHorizontal *
-        rampHorizontal +
-      bridgeHeight *
-        bridgeHeight
-    );
-
-  const leftX =
-    -(
-      flatLength / 2 +
-      rampHorizontal / 2
-    );
-
-  const rightX =
-    flatLength / 2 +
-    rampHorizontal / 2;
-
-  createBridgeSection(
+  addStreetTiles(
     chunk,
-    flatLength,
-    ROAD_WIDTH,
-    0,
-    bridgeHeight,
-    0,
-    0
+    random,
+    "x",
+    -HALF_CHUNK,
+    -BRIDGE_LENGTH / 2 +
+      0.25
   );
 
-  createBridgeSection(
+  addStreetTiles(
     chunk,
-    rampLength,
-    ROAD_WIDTH,
-    leftX,
-    bridgeHeight / 2,
-    0,
-    rampAngle
+    random,
+    "x",
+    BRIDGE_LENGTH / 2 -
+      0.25,
+    HALF_CHUNK
   );
-
-  createBridgeSection(
-    chunk,
-    rampLength,
-    ROAD_WIDTH,
-    rightX,
-    bridgeHeight / 2,
-    0,
-    -rampAngle
-  );
-
-  const railOffset =
-    ROAD_WIDTH / 2 +
-    0.13;
-
-  for (
-    const side of [
-      -1,
-      1,
-    ]
-  ) {
-    createBridgeRail(
-      chunk,
-      0,
-      bridgeHeight +
-        0.52,
-      railOffset *
-        side,
-      flatLength,
-      0
-    );
-
-    createBridgeRail(
-      chunk,
-      leftX,
-      bridgeHeight / 2 +
-        0.52,
-      railOffset *
-        side,
-      rampLength,
-      rampAngle
-    );
-
-    createBridgeRail(
-      chunk,
-      rightX,
-      bridgeHeight / 2 +
-        0.52,
-      railOffset *
-        side,
-      rampLength,
-      -rampAngle
-    );
-  }
 
   /*
-   * مدل GLB به صورت تزئینی روی پل قرار می‌گیرد.
-   * سطح واقعی و قابل حرکت پل از Geometry ساخته شده است.
+   * Colliderهای باریک کناره پل.
    */
-  if (
-    URBAN_BRIDGES.length >
-    0
-  ) {
-    placeModel(
-      pick(
-        URBAN_BRIDGES,
-        random
-      ),
-      chunk,
-      0,
-      0,
-      0,
-      {
-        y: bridgeHeight -
-          0.32,
+  registerStaticCollider(
+    chunk,
+    0,
+    1.15,
+    BRIDGE_WIDTH / 2,
+    BRIDGE_LENGTH,
+    2.3,
+    0.35
+  );
 
-        targetWidth:
-          flatLength,
+  registerStaticCollider(
+    chunk,
+    0,
+    1.15,
+    -BRIDGE_WIDTH / 2,
+    BRIDGE_LENGTH,
+    2.3,
+    0.35
+  );
 
-        maxHeight: 7,
-        brightness: 0.27,
-        occlusion: true,
-        castShadow: true,
-        sinkIntoGround: 0.08,
-      }
-    );
-  }
+  void approachLength;
 }
 
 function buildRiverChunk(
   chunk: THREE.Group,
-  random: () => number
+  random: () => number,
+  cz: number
 ) {
   addGround(
     chunk,
@@ -3371,14 +2857,13 @@ function buildRiverChunk(
   );
 
   /*
-   * مدل رودخانه فقط برای جزئیات ساحل استفاده می‌شود.
-   * آب اصلی Procedural و متحرک است.
+   * مدل رودخانه در امتداد محور Z قرار می‌گیرد.
    */
   if (
     URBAN_RIVER.length >
     0
   ) {
-    placeModel(
+    placeLinearModel(
       pick(
         URBAN_RIVER,
         random
@@ -3386,158 +2871,60 @@ function buildRiverChunk(
       chunk,
       0,
       0,
-      0,
       {
-        y: -0.32,
-        water: true,
-        targetWidth:
-          CHUNK_SIZE,
-        maxHeight: 3,
-        brightness: 0.1,
+        direction: "z",
+        targetLength:
+          CHUNK_SIZE + 0.5,
+        targetCrossSize:
+          RIVER_WIDTH +
+          RIVER_BANK_WIDTH *
+            2,
+
+        y: -0.3,
+
+        water: false,
+        height: false,
+        brightness: 0.035,
         castShadow: false,
+        sinkIntoGround: 0,
       }
     );
   }
 
-  buildFunctionalBridge(
-    chunk,
-    random
-  );
+  if (
+    isBridgeCrossing(cz)
+  ) {
+    buildBridge(
+      chunk,
+      random
+    );
+  }
 }
 
 /* -------------------------------------------------------------------------- */
 /*                                   TUNNEL                                   */
 /* -------------------------------------------------------------------------- */
 
-function createTunnelStructure(
-  chunk: THREE.Group,
-  direction: Direction
-) {
-  const tunnelWidth =
-    ROAD_WIDTH + 3.2;
-
-  const tunnelHeight =
-    7.2;
-
-  const wallThickness =
-    0.65;
-
-  const tunnelLength =
-    CHUNK_SIZE;
-
-  const wallGeometry =
-    direction === "x"
-      ? new THREE.BoxGeometry(
-          tunnelLength,
-          tunnelHeight,
-          wallThickness
-        )
-      : new THREE.BoxGeometry(
-          wallThickness,
-          tunnelHeight,
-          tunnelLength
-        );
-
-  const sideOffset =
-    tunnelWidth / 2;
-
-  for (
-    const side of [
-      -1,
-      1,
-    ]
-  ) {
-    const wall =
-      new THREE.Mesh(
-        wallGeometry,
-        tunnelWallMaterial
-      );
-
-    wall.position.set(
-      direction === "x"
-        ? 0
-        : sideOffset *
-          side,
-      tunnelHeight / 2,
-      direction === "x"
-        ? sideOffset *
-          side
-        : 0
-    );
-
-    wall.castShadow =
-      true;
-
-    wall.receiveShadow =
-      true;
-
-    wall.userData
-      .temporaryGeometry = true;
-
-    chunk.add(wall);
-
-    registerSimpleCollider(
-      wall,
-      chunk,
-      "wall"
-    );
-  }
-
-  /*
-   * سقف فقط ظاهر تونل است و وارد heightMeshes نمی‌شود.
-   * بنابراین بازیکن نمی‌تواند روی سقف راه برود.
-   */
-  const roofGeometry =
-    direction === "x"
-      ? new THREE.BoxGeometry(
-          tunnelLength,
-          0.55,
-          tunnelWidth +
-            wallThickness
-        )
-      : new THREE.BoxGeometry(
-          tunnelWidth +
-            wallThickness,
-          0.55,
-          tunnelLength
-        );
-
-  const roof =
-    new THREE.Mesh(
-      roofGeometry,
-      tunnelWallMaterial
-    );
-
-  roof.position.y =
-    tunnelHeight;
-
-  roof.castShadow =
-    true;
-
-  roof.receiveShadow =
-    true;
-
-  roof.userData
-    .temporaryGeometry = true;
-
-  chunk.add(roof);
-
-  occlusionMeshes.push(
-    roof
-  );
-}
-
-function spawnTunnel(
+function buildTunnel(
   chunk: THREE.Group,
   random: () => number,
   direction: Direction
 ) {
-  createTunnelStructure(
+  /*
+   * خیابان کف تونل کاملاً متصل ساخته می‌شود.
+   */
+  addStreetTiles(
     chunk,
-    direction
+    random,
+    direction,
+    -HALF_CHUNK,
+    HALF_CHUNK
   );
 
-  const rotation =
+  const entranceOffset =
+    TUNNEL_LENGTH / 2;
+
+  const entranceRotation =
     direction === "x"
       ? Math.PI / 2
       : 0;
@@ -3546,111 +2933,206 @@ function spawnTunnel(
     URBAN_TUNNEL.length >
     0
   ) {
-    placeModel(
-      pick(
-        URBAN_TUNNEL,
-        random
-      ),
+    const entranceA =
+      URBAN_TUNNEL[0];
+
+    const entranceB =
+      URBAN_TUNNEL[
+        URBAN_TUNNEL.length >
+        1
+          ? 1
+          : 0
+      ];
+
+    placeLinearModel(
+      entranceA,
       chunk,
-      0,
-      0,
-      rotation,
+      direction === "x"
+        ? -entranceOffset
+        : 0,
+      direction === "x"
+        ? 0
+        : -entranceOffset,
       {
-        collision: false,
-        height: false,
+        direction,
+        targetLength: 7,
+        targetCrossSize:
+          TUNNEL_WIDTH,
+
+        y: 0.025,
+
+        rotationX: 0,
+        rotationZ: 0,
+
+        preciseCollision:
+          true,
+
         occlusion: true,
 
-        targetWidth:
-          CHUNK_SIZE,
-
-        maxHeight: 8.3,
-        brightness: 0.27,
+        brightness: 0.16,
+        castShadow: true,
         sinkIntoGround: 0.08,
       }
     );
+
+    placeLinearModel(
+      entranceB,
+      chunk,
+      direction === "x"
+        ? entranceOffset
+        : 0,
+      direction === "x"
+        ? 0
+        : entranceOffset,
+      {
+        direction,
+        targetLength: 7,
+        targetCrossSize:
+          TUNNEL_WIDTH,
+
+        y: 0.025,
+
+        preciseCollision:
+          true,
+
+        occlusion: true,
+
+        brightness: 0.16,
+        castShadow: true,
+        sinkIntoGround: 0.08,
+      }
+    );
+
+    void entranceRotation;
   }
 
-  /*
-   * مدل‌های دیواره دقیقاً کنار دیواره اصلی قرار می‌گیرند.
-   */
-  const alongPositions =
-    [
-      -37,
-      -25,
-      -13,
-      -1,
-      11,
-      23,
-      35,
-    ];
-
-  const sideOffset =
-    (
-      ROAD_WIDTH +
-      3.2
-    ) /
-      2 -
-    0.18;
-
-  for (
-    let index = 0;
-    index <
-      alongPositions.length;
-    index++
+  if (
+    URBAN_TUNNEL_WALLS.length >
+    0
   ) {
-    const along =
-      alongPositions[index];
+    const sectionLength = 9;
+
+    const sectionCount =
+      Math.ceil(
+        (
+          TUNNEL_LENGTH -
+          12
+        ) /
+          sectionLength
+      );
+
+    const exactLength =
+      (
+        TUNNEL_LENGTH -
+        12
+      ) /
+        sectionCount;
 
     for (
-      const side of [
-        -1,
-        1,
-      ]
+      let index = 0;
+      index < sectionCount;
+      index++
     ) {
+      const along =
+        -TUNNEL_LENGTH /
+          2 +
+        6 +
+        exactLength *
+          (
+            index + 0.5
+          );
+
       const definition =
         URBAN_TUNNEL_WALLS[
-          (
-            index +
-            (
-              side === 1
-                ? 1
-                : 0
-            )
-          ) %
+          modulo(
+            index,
             URBAN_TUNNEL_WALLS.length
+          )
         ];
 
-      placeModel(
+      placeLinearModel(
         definition,
         chunk,
         direction === "x"
           ? along
-          : sideOffset *
-            side,
+          : 0,
         direction === "x"
-          ? sideOffset *
-            side
+          ? 0
           : along,
-        rotation,
         {
-          collision: false,
+          direction,
+
+          targetLength:
+            exactLength +
+            0.08,
+
+          targetCrossSize:
+            TUNNEL_WIDTH,
+
+          y: 0.015,
+
+          preciseCollision:
+            true,
 
           occlusion:
-            index % 3 === 0,
+            index % 2 === 0,
 
-          targetWidth:
-            randomRange(
-              random,
-              8,
-              10
-            ),
-
-          maxHeight: 7.4,
-          brightness: 0.25,
-          sinkIntoGround: 0.08,
+          brightness: 0.13,
+          castShadow: true,
+          sinkIntoGround: 0.065,
         }
       );
     }
+  }
+
+  /*
+   * Colliderهای دیواره تونل به شکل پیوسته.
+   */
+  const wallOffset =
+    TUNNEL_WIDTH / 2;
+
+  if (
+    direction === "x"
+  ) {
+    registerStaticCollider(
+      chunk,
+      0,
+      3.4,
+      wallOffset,
+      TUNNEL_LENGTH,
+      6.8,
+      0.45
+    );
+
+    registerStaticCollider(
+      chunk,
+      0,
+      3.4,
+      -wallOffset,
+      TUNNEL_LENGTH,
+      6.8,
+      0.45
+    );
+  } else {
+    registerStaticCollider(
+      chunk,
+      wallOffset,
+      3.4,
+      0,
+      0.45,
+      6.8,
+      TUNNEL_LENGTH
+    );
+
+    registerStaticCollider(
+      chunk,
+      -wallOffset,
+      3.4,
+      0,
+      0.45,
+      6.8,
+      TUNNEL_LENGTH
+    );
   }
 }
 
@@ -3669,21 +3151,34 @@ function buildCityChunk(
     cityGroundMaterial
   );
 
-  addRoad(
+  if (
+    tunnel
+  ) {
+    buildTunnel(
+      chunk,
+      random,
+      direction
+    );
+
+    return;
+  }
+
+  addStreetTiles(
     chunk,
     random,
     direction
   );
 
   /*
-   * تعداد کوچه‌ها کم است تا فضای خالی زیاد نشود.
+   * کوچه فقط وقتی ساخته می‌شود که واقعاً
+   * بین ساختمان‌ها مسیر ایجاد کند.
    */
   if (
-    !tunnel &&
-    random() < 0.09
+    random() < 0.22
   ) {
-    addShortAlley(
+    addAlleyTiles(
       chunk,
+      random,
       direction === "x"
         ? "z"
         : "x",
@@ -3712,16 +3207,6 @@ function buildCityChunk(
     random,
     direction
   );
-
-  if (
-    tunnel
-  ) {
-    spawnTunnel(
-      chunk,
-      random,
-      direction
-    );
-  }
 }
 
 function buildChunk(
@@ -3769,7 +3254,8 @@ function buildChunk(
   ) {
     buildRiverChunk(
       chunk,
-      random
+      random,
+      cz
     );
 
     return;
@@ -4085,6 +3571,35 @@ function intersectsSimpleCollider(
   return false;
 }
 
+function getNearbyCollisionMeshes(
+  x: number,
+  z: number,
+  range: number
+) {
+  return preciseCollisionMeshes
+    .filter(
+      (entry) => {
+        entry.mesh
+          .getWorldPosition(
+            tempVector
+          );
+
+        return (
+          Math.abs(
+            tempVector.x - x
+          ) < range &&
+          Math.abs(
+            tempVector.z - z
+          ) < range
+        );
+      }
+    )
+    .map(
+      (entry) =>
+        entry.mesh
+    );
+}
+
 function preciseMovementBlocked(
   player: THREE.Object3D,
   fromX: number,
@@ -4107,92 +3622,144 @@ function preciseMovementBlocked(
       dz
     );
 
+  const meshes =
+    getNearbyCollisionMeshes(
+      toX,
+      toZ,
+      20
+    );
+
   if (
-    distance <
-    0.0001
+    meshes.length === 0
   ) {
     return false;
   }
 
-  rayDirection.set(
-    dx / distance,
-    0,
-    dz / distance
-  );
-
-  tempVectorB.set(
-    -rayDirection.z,
-    0,
-    rayDirection.x
-  );
-
-  const meshes =
-    preciseCollisionMeshes.map(
-      (entry) =>
-        entry.mesh
+  if (
+    distance >
+    0.0001
+  ) {
+    rayDirection.set(
+      dx / distance,
+      0,
+      dz / distance
     );
 
-  /*
-   * سه ارتفاع و سه نقطه عرضی بررسی می‌شود.
-   * این برخورد دقیق دیوار را تشخیص می‌دهد،
-   * اما از شکاف واقعی ساختمان عبور می‌کند.
-   */
-  const heights =
-    [
-      0.32,
-      0.95,
-      1.62,
-    ];
-
-  const sideOffsets =
-    [
-      -radius,
+    tempVectorB.set(
+      -rayDirection.z,
       0,
-      radius,
-    ];
+      rayDirection.x
+    );
 
-  for (
-    const height
-    of heights
-  ) {
+    const heights =
+      [
+        0.3,
+        0.9,
+        1.5,
+      ];
+
+    const sideOffsets =
+      [
+        -radius,
+        0,
+        radius,
+      ];
+
     for (
-      const side
-      of sideOffsets
+      const height
+      of heights
     ) {
-      rayOrigin.set(
-        fromX +
-          tempVectorB.x *
-            side,
-        player.position.y +
-          height,
-        fromZ +
-          tempVectorB.z *
-            side
-      );
-
-      raycaster.set(
-        rayOrigin,
-        rayDirection
-      );
-
-      raycaster.near = 0;
-
-      raycaster.far =
-        distance +
-        radius +
-        0.08;
-
-      const hits =
-        raycaster.intersectObjects(
-          meshes,
-          false
+      for (
+        const side
+        of sideOffsets
+      ) {
+        rayOrigin.set(
+          fromX +
+            tempVectorB.x *
+              side,
+          player.position.y +
+            height,
+          fromZ +
+            tempVectorB.z *
+              side
         );
 
-      if (
-        hits.length > 0
-      ) {
-        return true;
+        raycaster.set(
+          rayOrigin,
+          rayDirection
+        );
+
+        raycaster.near = 0;
+
+        raycaster.far =
+          distance +
+          radius +
+          0.1;
+
+        if (
+          raycaster.intersectObjects(
+            meshes,
+            false
+          ).length > 0
+        ) {
+          return true;
+        }
       }
+    }
+  }
+
+  /*
+   * هشت پرتو کوتاه اطراف محل مقصد؛
+   * جلوی عبور آرام از دیوار را می‌گیرد.
+   */
+  const probeDirections = [
+    [1, 0],
+    [-1, 0],
+    [0, 1],
+    [0, -1],
+    [0.707, 0.707],
+    [-0.707, 0.707],
+    [0.707, -0.707],
+    [-0.707, -0.707],
+  ];
+
+  for (
+    const [
+      probeX,
+      probeZ,
+    ]
+    of probeDirections
+  ) {
+    rayOrigin.set(
+      toX,
+      player.position.y +
+        0.85,
+      toZ
+    );
+
+    rayDirection.set(
+      probeX,
+      0,
+      probeZ
+    );
+
+    raycaster.set(
+      rayOrigin,
+      rayDirection
+    );
+
+    raycaster.near = 0;
+
+    raycaster.far =
+      radius + 0.08;
+
+    if (
+      raycaster.intersectObjects(
+        meshes,
+        false
+      ).length > 0
+    ) {
+      return true;
     }
   }
 
@@ -4253,10 +3820,6 @@ export function resolveWorldCollision(
     return;
   }
 
-  /*
-   * ابتدا حرکت فقط روی محور X بررسی می‌شود.
-   * این باعث سر خوردن کنار دیوار می‌شود.
-   */
   if (
     !movementBlocked(
       player,
@@ -4273,9 +3836,6 @@ export function resolveWorldCollision(
     return;
   }
 
-  /*
-   * سپس حرکت فقط روی محور Z بررسی می‌شود.
-   */
   if (
     !movementBlocked(
       player,
@@ -4312,12 +3872,10 @@ export function findSafeSpawnPosition(
     [x, z],
     [x + 4, z],
     [x - 4, z],
-    [x, z + 4],
-    [x, z - 4],
-    [x + 7, z + 7],
-    [x - 7, z + 7],
-    [x + 7, z - 7],
-    [x - 7, z - 7],
+    [x, z + 3],
+    [x, z - 3],
+    [x + 7, z],
+    [x - 7, z],
   ];
 
   const testPlayer =
@@ -4330,21 +3888,24 @@ export function findSafeSpawnPosition(
   );
 
   for (
-    const candidate
+    const [
+      candidateX,
+      candidateZ,
+    ]
     of candidates
   ) {
     if (
       !intersectsSimpleCollider(
         testPlayer,
-        candidate[0],
-        candidate[1],
+        candidateX,
+        candidateZ,
         radius
       )
     ) {
       return new THREE.Vector3(
-        candidate[0],
+        candidateX,
         PLAYER_BASE_Y,
-        candidate[1]
+        candidateZ
       );
     }
   }
@@ -4367,7 +3928,7 @@ export function updatePlayerWorldHeight(
   rayOrigin.set(
     player.position.x,
     player.position.y +
-      11,
+      12,
     player.position.z
   );
 
@@ -4377,7 +3938,7 @@ export function updatePlayerWorldHeight(
   );
 
   raycaster.near = 0;
-  raycaster.far = 26;
+  raycaster.far = 28;
 
   const hits =
     raycaster.intersectObjects(
@@ -4395,7 +3956,7 @@ export function updatePlayerWorldHeight(
     if (
       hit.point.y <=
       player.position.y +
-        1.7
+        2
     ) {
       targetY =
         hit.point.y +
@@ -4408,7 +3969,7 @@ export function updatePlayerWorldHeight(
   const lerp =
     1 -
     Math.exp(
-      -13 *
+      -14 *
         delta
     );
 
@@ -4441,8 +4002,7 @@ export function updateCameraOcclusion(
     tempVector.length();
 
   if (
-    desiredDistance <=
-    0.1
+    desiredDistance <= 0.1
   ) {
     return;
   }
@@ -4472,7 +4032,7 @@ export function updateCameraOcclusion(
   ) {
     targetDistance =
       Math.max(
-        4.4,
+        4.3,
         hits[0].distance -
           0.48
       );
@@ -4525,30 +4085,27 @@ export function updateCameraOcclusion(
 export function updateWorldAnimations(
   elapsedTime: number
 ) {
-  /*
-   * حرکت UV باعث می‌شود آب واقعاً در امتداد رودخانه روان دیده شود.
-   */
   for (
     const texture
     of waterTextures
   ) {
     texture.offset.y =
       -elapsedTime *
-      0.055;
+      0.075;
 
     texture.offset.x =
       Math.sin(
         elapsedTime *
-          0.35
+          0.4
       ) *
       0.025;
   }
 
   const opacity =
-    0.84 +
+    0.86 +
     Math.sin(
       elapsedTime *
-        0.8
+        0.85
     ) *
       0.025;
 
