@@ -16,18 +16,19 @@ import {
   type ModelDef,
 } from "../assets/Models";
 
-export const CHUNK_SIZE = 88;
+export const CHUNK_SIZE = 64;
 
 const HALF_CHUNK = CHUNK_SIZE / 2;
 const ROAD_WIDTH = 8.2;
-const ALLEY_WIDTH = 3.2;
-const RIVER_WIDTH = 26;
-const RIVER_BANK_WIDTH = 5.5;
-const BRIDGE_LENGTH = 35;
+const ALLEY_WIDTH = 3.4;
+const RIVER_WIDTH = 22;
+const RIVER_BANK_WIDTH = 5;
+const BRIDGE_LENGTH = 31;
 const BRIDGE_WIDTH = 9;
-const TUNNEL_WIDTH = 10.5;
-const TUNNEL_LENGTH = 64;
+const TUNNEL_WIDTH = 9.4;
+const TUNNEL_LENGTH = 54;
 const PLAYER_BASE_Y = 0.055;
+const CHUNKS_PER_BATCH = 2;
 
 type Direction = "x" | "z";
 type ChunkKind = "city" | "park" | "river" | "tunnel-x" | "tunnel-z";
@@ -62,6 +63,10 @@ type LinearModelOptions = ModelOptions & {
 };
 
 export const chunks = new Map<string, THREE.Group>();
+const desiredChunkKeys = new Set<string>();
+const queuedChunkKeys = new Set<string>();
+let chunkGenerationQueue: Array<{ scene: THREE.Scene; cx: number; cz: number }> = [];
+let chunkGenerationScheduled = false;
 
 const loader = new GLTFLoader();
 const textureLoader = new THREE.TextureLoader();
@@ -113,7 +118,6 @@ earthTexture.minFilter = THREE.LinearMipmapLinearFilter;
 earthTexture.magFilter = THREE.LinearFilter;
 earthTexture.generateMipmaps = true;
 
-// ØªÙ…Ø§Ù… Ø³Ø·ÙˆØ­ Ø²Ù…ÛŒÙ† Ø§Ø² ÛŒÚ© ØªÚ©Ø³Ú†Ø± Ùˆ ÛŒÚ© Ù…ØªØ±ÛŒØ§Ù„ Ù…Ø´ØªØ±Ú© Ø§Ø³ØªÙØ§Ø¯Ù‡ Ù…ÛŒâ€ŒÚ©Ù†Ù†Ø¯.
 const earthGroundMaterial = new THREE.MeshStandardMaterial({
   map: earthTexture,
   color: 0xffffff,
@@ -192,8 +196,10 @@ function getChunkKind(cx: number, cz: number): ChunkKind {
   return "city";
 }
 
-function getRoadDirection(_cx: number, _cz: number, kind: ChunkKind): Direction {
-  return kind === "tunnel-z" ? "z" : "x";
+function getRoadDirection(cx: number, cz: number, kind: ChunkKind): Direction {
+  if (kind === "tunnel-z") return "z";
+  if (kind === "tunnel-x") return "x";
+  return modulo(cx + cz, 2) === 0 ? "x" : "z";
 }
 
 function loadSource(url: string) {
@@ -511,48 +517,29 @@ function addAlleyTiles(
   chunk: THREE.Group,
   random: () => number,
   direction: Direction,
-  side: -1 | 1
+  crossOffset = 0,
+  start = -HALF_CHUNK,
+  end = HALF_CHUNK
 ) {
-  if (!URBAN_ALLEYS.length) return;
+  if (!URBAN_ALLEYS.length || end <= start) return;
   const connector = URBAN_ALLEYS.find((item) => item.url.includes("Connecting_alley_and_street"));
   const alleys = URBAN_ALLEYS.filter((item) => !item.url.includes("Connecting_alley_and_street"));
   const usable = alleys.length ? alleys : URBAN_ALLEYS;
-  const length = 25;
-  const start = side === -1 ? -HALF_CHUNK : HALF_CHUNK - length;
-  const count = 4;
-  const exactLength = length / count;
+  const count = Math.max(2, Math.ceil((end - start) / 8));
+  const exactLength = (end - start) / count;
   for (let index = 0; index < count; index++) {
     const along = start + exactLength * (index + 0.5);
-    const connectorIndex = side === -1 ? count - 1 : 0;
-    const definition = index === connectorIndex && connector ? connector : usable[modulo(index, usable.length)];
-    placeLinearModel(
-      definition,
-      chunk,
-      direction === "x" ? along : 0,
-      direction === "x" ? 0 : along,
-      {
-        direction,
-        targetLength: exactLength + 0.1,
-        targetCrossSize: ALLEY_WIDTH,
-        y: 0.006,
-        flattenSurface: true,
-        brightness: 0.015,
-        castShadow: false,
-        sinkIntoGround: 0.004,
-      }
-    );
+    const centerIndex = Math.floor(count / 2);
+    const definition = connector && (index === centerIndex || index === centerIndex - 1) ? connector : usable[modulo(index, usable.length)];
+    placeLinearModel(definition, chunk, direction === "x" ? along : crossOffset, direction === "x" ? crossOffset : along, {
+      direction, targetLength: exactLength + 0.12, targetCrossSize: ALLEY_WIDTH, y: 0.006, flattenSurface: true, brightness: 0.015, castShadow: false, sinkIntoGround: 0.004,
+    });
   }
 }
 
 function getRoadPoints(direction: Direction): RoadPoint[] {
   const result: RoadPoint[] = [];
-  for (let offset = -38; offset <= 38; offset += 11) {
-    result.push({
-      x: direction === "x" ? offset : 0,
-      z: direction === "x" ? 0 : offset,
-      direction,
-    });
-  }
+  for (let offset = -27; offset <= 27; offset += 9) result.push({ x: direction === "x" ? offset : 0, z: direction === "x" ? 0 : offset, direction });
   return result;
 }
 
@@ -562,49 +549,30 @@ function isVilla(definition: ModelDef) {
 }
 
 function getBuildingSlots(direction: Direction) {
-  const alongPositions = [-36, -24, -12, 0, 12, 24, 36];
-  const rowOffsets = [12.2, 24.8, 36.2];
+  const alongPositions = [-24, -8, 8, 24];
+  const rowOffsets = [11.4, 24];
   const slots: Array<{ x: number; z: number; rotation: number; outer: boolean }> = [];
   for (const rowOffset of rowOffsets) {
     for (const value of alongPositions) {
-      const outer = rowOffset > 30;
-      if (direction === "x") {
-        slots.push({ x: value, z: -rowOffset, rotation: 0, outer });
-        slots.push({ x: value, z: rowOffset, rotation: Math.PI, outer });
-      } else {
-        slots.push({ x: -rowOffset, z: value, rotation: Math.PI / 2, outer });
-        slots.push({ x: rowOffset, z: value, rotation: -Math.PI / 2, outer });
-      }
+      const outer = rowOffset > 20;
+      if (direction === "x") { slots.push({ x: value, z: -rowOffset, rotation: 0, outer }); slots.push({ x: value, z: rowOffset, rotation: Math.PI, outer }); }
+      else { slots.push({ x: -rowOffset, z: value, rotation: Math.PI / 2, outer }); slots.push({ x: rowOffset, z: value, rotation: -Math.PI / 2, outer }); }
     }
   }
   return slots;
 }
 
-function spawnBuildings(chunk: THREE.Group, random: () => number, direction: Direction) {
+function spawnBuildings(chunk: THREE.Group, random: () => number, direction: Direction, skippedSlot = -1) {
   if (!URBAN_BUILDINGS.length) return;
-  for (const slot of getBuildingSlots(direction)) {
-    const definition = pick(URBAN_BUILDINGS, random);
-    const villa = isVilla(definition);
-    placeModel(
-      definition,
-      chunk,
-      slot.x + randomRange(random, -0.1, 0.1),
-      slot.z + randomRange(random, -0.1, 0.1),
-      slot.rotation + randomRange(random, -0.005, 0.005),
-      {
-        preciseCollision: true,
-        foundation: true,
-        sinkIntoGround: randomRange(random, 0.1, 0.16),
-        occlusion: !slot.outer && random() < 0.3,
-        targetWidth: slot.outer
-          ? randomRange(random, 9.4, 10.8)
-          : villa
-            ? randomRange(random, 10.6, 11.8)
-            : randomRange(random, 11, 12.2),
-        maxHeight: villa ? randomRange(random, 8, 10.5) : randomRange(random, 12, 17),
-        brightness: 0.22,
-      }
-    );
+  const slots = getBuildingSlots(direction);
+  for (let index = 0; index < slots.length; index++) {
+    if (index === skippedSlot) continue;
+    const slot = slots[index], definition = pick(URBAN_BUILDINGS, random), villa = isVilla(definition);
+    placeModel(definition, chunk, slot.x + randomRange(random, -0.18, 0.18), slot.z + randomRange(random, -0.18, 0.18), slot.rotation + randomRange(random, -0.009, 0.009), {
+      preciseCollision: true, foundation: true, sinkIntoGround: randomRange(random, 0.1, 0.16), occlusion: !slot.outer && random() < 0.3, castShadow: !slot.outer,
+      targetWidth: slot.outer ? randomRange(random, 8.8, 10) : villa ? randomRange(random, 9.2, 10.5) : randomRange(random, 9.5, 10.8),
+      maxHeight: villa ? randomRange(random, 7.5, 9.5) : randomRange(random, 11, 16), brightness: 0.22,
+    });
   }
 }
 
@@ -616,7 +584,7 @@ function isMotorcycle(definition: ModelDef) {
 function spawnVehicles(chunk: THREE.Group, random: () => number, points: RoadPoint[]) {
   if (!URBAN_VEHICLES.length) return;
   const available = shuffle([...points], random);
-  const count = Math.min(available.length, 4 + Math.floor(random() * 3));
+  const count = Math.min(available.length, 3 + Math.floor(random() * 2));
   for (let index = 0; index < count; index++) {
     const point = available[index];
     const definition = pick(URBAN_VEHICLES, random);
@@ -652,13 +620,13 @@ function spawnVehicles(chunk: THREE.Group, random: () => number, points: RoadPoi
 }
 
 function addFineGrass(chunk: THREE.Group, random: () => number) {
-  const count = 950;
+  const count = 520;
   const grass = new THREE.InstancedMesh(grassBladeGeometry, grassBladeMaterial, count);
   const matrix = new THREE.Matrix4();
   const position = new THREE.Vector3();
   const scale = new THREE.Vector3();
   for (let index = 0; index < count; index++) {
-    position.set(randomRange(random, -41, 41), 0.02, randomRange(random, -41, 41));
+    position.set(randomRange(random, -30, 30), 0.02, randomRange(random, -30, 30));
     tempQuaternion.setFromAxisAngle(upAxis, random() * Math.PI * 2);
     scale.set(randomRange(random, 0.7, 1.1), randomRange(random, 0.5, 1), 1);
     matrix.compose(position, tempQuaternion, scale);
@@ -672,42 +640,17 @@ function addFineGrass(chunk: THREE.Group, random: () => number) {
 
 function spawnCityVegetation(chunk: THREE.Group, random: () => number, direction: Direction) {
   if (FOREST_TREES.length) {
-    for (const value of [-38, -26, -14, 14, 26, 38]) {
-      if (random() < 0.2) continue;
-      const sideOffset = randomRange(random, 8.7, 10) * (random() < 0.5 ? -1 : 1);
-      placeModel(
-        pick(FOREST_TREES, random),
-        chunk,
-        direction === "x" ? value : sideOffset,
-        direction === "x" ? sideOffset : value,
-        random() * Math.PI * 2,
-        {
-          collision: true,
-          colliderType: "tree",
-          targetHeight: randomRange(random, 4.1, 5.9),
-          brightness: 0.03,
-        }
-      );
+    for (const value of [-26, -17, -8, 8, 17, 26]) {
+      if (random() < 0.32) continue;
+      const sideOffset = randomRange(random, 7.2, 9.2) * (random() < 0.5 ? -1 : 1);
+      placeModel(pick(FOREST_TREES, random), chunk, direction === "x" ? value + randomRange(random, -0.7, 0.7) : sideOffset, direction === "x" ? sideOffset : value + randomRange(random, -0.7, 0.7), random() * Math.PI * 2, { collision: true, colliderType: "tree", targetHeight: randomRange(random, 3.9, 5.5), brightness: 0.03, castShadow: random() < 0.55 });
     }
   }
-  const decorationSources = [...FOREST_BUSHES, ...FOREST_FLOWERS];
-  if (!decorationSources.length) return;
-  for (let index = 0; index < 18; index++) {
-    const side = random() < 0.5 ? -1 : 1;
-    const along = randomRange(random, -40, 40);
-    const across = randomRange(random, 8.1, 10) * side;
-    placeModel(
-      pick(decorationSources, random),
-      chunk,
-      direction === "x" ? along : across,
-      direction === "x" ? across : along,
-      random() * Math.PI * 2,
-      {
-        targetWidth: randomRange(random, 0.55, 1.3),
-        brightness: 0.01,
-        castShadow: false,
-      }
-    );
+  const sources = [...FOREST_BUSHES, ...FOREST_FLOWERS];
+  if (!sources.length) return;
+  for (let index = 0; index < 12; index++) {
+    const side = random() < 0.5 ? -1 : 1, along = randomRange(random, -29, 29), across = randomRange(random, 7, 9.5) * side;
+    placeModel(pick(sources, random), chunk, direction === "x" ? along : across, direction === "x" ? across : along, random() * Math.PI * 2, { targetWidth: randomRange(random, 0.5, 1.2), brightness: 0.01, castShadow: false });
   }
 }
 
@@ -715,12 +658,12 @@ function buildPark(chunk: THREE.Group, random: () => number) {
   addGround(chunk, parkGroundMaterial);
   addFineGrass(chunk, random);
   if (FOREST_TREES.length) {
-    for (let index = 0; index < 28; index++) {
+    for (let index = 0; index < 18; index++) {
       placeModel(
         pick(FOREST_TREES, random),
         chunk,
-        randomRange(random, -39, 39),
-        randomRange(random, -39, 39),
+        randomRange(random, -29, 29),
+        randomRange(random, -29, 29),
         random() * Math.PI * 2,
         {
           collision: true,
@@ -733,12 +676,12 @@ function buildPark(chunk: THREE.Group, random: () => number) {
   }
   const sources = [...FOREST_BUSHES, ...FOREST_FLOWERS, ...FOREST_GRASS];
   if (!sources.length) return;
-  for (let index = 0; index < 48; index++) {
+  for (let index = 0; index < 30; index++) {
     placeModel(
       pick(sources, random),
       chunk,
-      randomRange(random, -40, 40),
-      randomRange(random, -40, 40),
+      randomRange(random, -30, 30),
+      randomRange(random, -30, 30),
       random() * Math.PI * 2,
       {
         targetWidth: randomRange(random, 0.45, 1.7),
@@ -894,11 +837,12 @@ function buildTunnel(chunk: THREE.Group, random: () => number, direction: Direct
     );
   }
   if (URBAN_TUNNEL_WALLS.length) {
-    const wallStart = -entranceOffset + 6;
-    const wallEnd = entranceOffset - 6;
+    const wallStart = -entranceOffset + 3.8;
+    const wallEnd = entranceOffset - 3.8;
     const sectionCount = Math.max(1, Math.ceil((wallEnd - wallStart) / 8));
     const exactLength = (wallEnd - wallStart) / sectionCount;
-    const wallOffset = TUNNEL_WIDTH / 2;
+    const wallThickness = 1.15;
+    const wallOffset = TUNNEL_WIDTH / 2 + wallThickness / 2;
     for (let index = 0; index < sectionCount; index++) {
       const along = wallStart + exactLength * (index + 0.5);
       for (const side of [-1, 1] as const) {
@@ -910,8 +854,8 @@ function buildTunnel(chunk: THREE.Group, random: () => number, direction: Direct
           direction === "x" ? wallOffset * side : along,
           {
             direction,
-            targetLength: exactLength + 0.12,
-            targetCrossSize: 1.15,
+            targetLength: exactLength + 0.28,
+            targetCrossSize: wallThickness,
             y: 0.015,
             rotationY: side === -1 ? Math.PI : 0,
             occlusion: index % 3 === 0,
@@ -923,29 +867,40 @@ function buildTunnel(chunk: THREE.Group, random: () => number, direction: Direct
       }
     }
     if (direction === "x") {
-      registerStaticCollider(chunk, 0, 3.2, wallOffset, wallEnd - wallStart, 6.4, 0.65);
-      registerStaticCollider(chunk, 0, 3.2, -wallOffset, wallEnd - wallStart, 6.4, 0.65);
+      registerStaticCollider(chunk, 0, 3.2, wallOffset, wallEnd - wallStart, 6.4, wallThickness);
+      registerStaticCollider(chunk, 0, 3.2, -wallOffset, wallEnd - wallStart, 6.4, wallThickness);
     } else {
-      registerStaticCollider(chunk, wallOffset, 3.2, 0, 0.65, 6.4, wallEnd - wallStart);
-      registerStaticCollider(chunk, -wallOffset, 3.2, 0, 0.65, 6.4, wallEnd - wallStart);
+      registerStaticCollider(chunk, wallOffset, 3.2, 0, wallThickness, 6.4, wallEnd - wallStart);
+      registerStaticCollider(chunk, -wallOffset, 3.2, 0, wallThickness, 6.4, wallEnd - wallStart);
     }
   }
 }
 
-function buildCityChunk(
-  chunk: THREE.Group,
-  random: () => number,
-  direction: Direction,
-  tunnel: boolean
-) {
-  addGround(chunk, cityGroundMaterial);
-  if (tunnel) {
-    buildTunnel(chunk, random, direction);
-    return;
+function buildSmallPark(chunk: THREE.Group, random: () => number, direction: Direction, slotIndex: number) {
+  const slot = getBuildingSlots(direction)[slotIndex];
+  if (!slot) return;
+  const park = new THREE.Mesh(new THREE.BoxGeometry(9.5, 0.045, 9.5), parkGroundMaterial);
+  park.position.set(slot.x, -0.012, slot.z); park.receiveShadow = true; park.userData.temporaryGeometry = true; chunk.add(park); heightMeshes.push(park);
+  if (FOREST_TREES.length) {
+    const treeCount = 4 + Math.floor(random() * 3);
+    for (let index = 0; index < treeCount; index++) placeModel(pick(FOREST_TREES, random), chunk, slot.x + randomRange(random, -3.5, 3.5), slot.z + randomRange(random, -3.5, 3.5), random() * Math.PI * 2, { collision: true, colliderType: "tree", targetHeight: randomRange(random, 3.8, 5.5), brightness: 0.03, castShadow: index < 3 });
   }
+  const sources = [...FOREST_BUSHES, ...FOREST_FLOWERS, ...FOREST_GRASS];
+  if (!sources.length) return;
+  const decorationCount = 7 + Math.floor(random() * 4);
+  for (let index = 0; index < decorationCount; index++) placeModel(pick(sources, random), chunk, slot.x + randomRange(random, -4, 4), slot.z + randomRange(random, -4, 4), random() * Math.PI * 2, { targetWidth: randomRange(random, 0.45, 1.15), brightness: 0.01, castShadow: false });
+}
+
+function buildCityChunk(chunk: THREE.Group, random: () => number, direction: Direction, tunnel: boolean) {
+  addGround(chunk, cityGroundMaterial);
+  if (tunnel) { buildTunnel(chunk, random, direction); return; }
   addStreetTiles(chunk, random, direction);
-  if (random() < 0.22) addAlleyTiles(chunk, random, direction === "x" ? "z" : "x", random() < 0.5 ? -1 : 1);
-  spawnBuildings(chunk, random, direction);
+  const alleyDirection: Direction = direction === "x" ? "z" : "x";
+  addAlleyTiles(chunk, random, alleyDirection, 0);
+  if (random() < 0.48) addAlleyTiles(chunk, random, direction, random() < 0.5 ? -17 : 17);
+  const hasSmallPark = random() < 0.2, parkSlot = hasSmallPark ? Math.floor(random() * 16) : -1;
+  spawnBuildings(chunk, random, direction, parkSlot);
+  if (hasSmallPark) buildSmallPark(chunk, random, direction, parkSlot);
   spawnVehicles(chunk, random, getRoadPoints(direction));
   spawnCityVegetation(chunk, random, direction);
 }
@@ -980,17 +935,42 @@ export function generateChunk(scene: THREE.Scene, cx: number, cz: number) {
   return chunk;
 }
 
-export async function updateChunks(
-  scene: THREE.Scene,
-  playerX: number,
-  playerZ: number,
-  renderDistance = 1
-) {
+function scheduleNextChunkBatch() {
+  if (chunkGenerationScheduled || !chunkGenerationQueue.length) return;
+  chunkGenerationScheduled = true;
+  const run = () => {
+    chunkGenerationScheduled = false;
+    let generated = 0;
+    while (chunkGenerationQueue.length && generated < CHUNKS_PER_BATCH) {
+      const task = chunkGenerationQueue.shift();
+      if (!task) break;
+      const key = `${task.cx},${task.cz}`;
+      queuedChunkKeys.delete(key);
+      if (!desiredChunkKeys.has(key) || chunks.has(key)) continue;
+      generateChunk(task.scene, task.cx, task.cz); generated++;
+    }
+    if (chunkGenerationQueue.length) scheduleNextChunkBatch();
+  };
+  if (typeof requestAnimationFrame === "function") requestAnimationFrame(run); else setTimeout(run, 16);
+}
+
+function queueChunkGeneration(scene: THREE.Scene, cx: number, cz: number) {
+  const key = `${cx},${cz}`;
+  if (chunks.has(key) || queuedChunkKeys.has(key)) return;
+  queuedChunkKeys.add(key); chunkGenerationQueue.push({ scene, cx, cz });
+}
+
+export async function updateChunks(scene: THREE.Scene, playerX: number, playerZ: number, renderDistance = 1) {
   const { cx, cz } = getChunkCoord(playerX, playerZ);
-  for (let x = cx - renderDistance; x <= cx + renderDistance; x++) {
-    for (let z = cz - renderDistance; z <= cz + renderDistance; z++) generateChunk(scene, x, z);
+  const required: Array<{ cx: number; cz: number; distance: number }> = [];
+  desiredChunkKeys.clear();
+  for (let x = cx - renderDistance; x <= cx + renderDistance; x++) for (let z = cz - renderDistance; z <= cz + renderDistance; z++) {
+    const key = `${x},${z}`; desiredChunkKeys.add(key); required.push({ cx: x, cz: z, distance: Math.abs(x - cx) + Math.abs(z - cz) });
   }
-  destroyFarChunks(cx, cz, renderDistance);
+  required.sort((a, b) => a.distance - b.distance);
+  for (const item of required) queueChunkGeneration(scene, item.cx, item.cz);
+  chunkGenerationQueue = chunkGenerationQueue.filter((task) => { const key = `${task.cx},${task.cz}`; if (desiredChunkKeys.has(key)) return true; queuedChunkKeys.delete(key); return false; });
+  scheduleNextChunkBatch(); destroyFarChunks(cx, cz, renderDistance);
 }
 
 function destroyFarChunks(centerX: number, centerZ: number, renderDistance: number) {
@@ -1215,4 +1195,8 @@ export function destroyAllChunks() {
   waterTextures.clear();
   cameraOcclusionDistance = 0;
   cameraOcclusionReady = false;
+  desiredChunkKeys.clear();
+  queuedChunkKeys.clear();
+  chunkGenerationQueue.length = 0;
+  chunkGenerationScheduled = false;
 }
