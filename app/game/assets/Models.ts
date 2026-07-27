@@ -6,6 +6,40 @@ export type ModelDef = {
 const BASE_URL =
   "https://pub-15ed8100c073408287949c0bebad27a6.r2.dev";
 
+export const URBAN_STREETS: ModelDef[] = [
+  {
+    url: `${BASE_URL}/streets/Street1.glb`,
+    scale: 7.5,
+  },
+  {
+    url: `${BASE_URL}/streets/Street2.glb`,
+    scale: 7.5,
+  },
+  {
+    url: `${BASE_URL}/streets/Street3.glb`,
+    scale: 7.5,
+  },
+];
+
+export const URBAN_ALLEYS: ModelDef[] = [
+  {
+    url: `${BASE_URL}/alleys/Alley1.glb`,
+    scale: 7.5,
+  },
+  {
+    url: `${BASE_URL}/alleys/Alley2.glb`,
+    scale: 7.5,
+  },
+  {
+    url: `${BASE_URL}/alleys/Alley3.glb`,
+    scale: 7.5,
+  },
+  {
+    url: `${BASE_URL}/Connecting_alley_and_street/Connecting_alley_and_street.glb`,
+    scale: 7.5,
+  },
+];
+
 export const URBAN_BUILDINGS: ModelDef[] = [
   {
     url: `${BASE_URL}/Buildings/Urban_building1.glb`,
@@ -211,6 +245,26 @@ export const FOREST_TREES: ModelDef[] = [
   },
   {
     url: `${BASE_URL}/Plants_and_trees/glTF/DeadTree_5.gltf`,
+    scale: 3,
+  },
+  {
+    url: `${BASE_URL}/Plants_and_trees/glTF/DeadTree_6.gltf`,
+    scale: 3,
+  },
+  {
+    url: `${BASE_URL}/Plants_and_trees/glTF/DeadTree_7.gltf`,
+    scale: 3,
+  },
+  {
+    url: `${BASE_URL}/Plants_and_trees/glTF/DeadTree_8.gltf`,
+    scale: 3,
+  },
+  {
+    url: `${BASE_URL}/Plants_and_trees/glTF/DeadTree_9.gltf`,
+    scale: 3,
+  },
+  {
+    url: `${BASE_URL}/Plants_and_trees/glTF/DeadTree_10.gltf`,
     scale: 3,
   },
 ];
