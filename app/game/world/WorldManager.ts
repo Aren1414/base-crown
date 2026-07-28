@@ -13,13 +13,61 @@ import {
   type ModelDef,
 } from "../assets/Models";
 
-export const CHUNK_SIZE = 56;
+type WorldProfile = {
+  desktop: boolean;
+  chunkSize: number;
+  roadWidth: number;
+  alleyWidth: number;
+  renderDistance: number;
+  chunksPerBatch: number;
+  buildingScale: number;
+  vegetationScale: number;
+  vehicleScale: number;
+};
+
+function detectDesktopProfile() {
+  if (typeof window === "undefined" || typeof navigator === "undefined") return false;
+  const coarsePointer = window.matchMedia?.("(pointer: coarse)").matches ?? false;
+  const finePointer = window.matchMedia?.("(pointer: fine)").matches ?? false;
+  const wideViewport = Math.max(window.innerWidth, window.innerHeight) >= 1100;
+  const touchOnly = navigator.maxTouchPoints > 0 && coarsePointer && !finePointer;
+  return wideViewport && !touchOnly;
+}
+
+const WORLD_PROFILE: WorldProfile = detectDesktopProfile()
+  ? {
+      desktop: true,
+      chunkSize: 72,
+      roadWidth: 9.4,
+      alleyWidth: 4.2,
+      renderDistance: 2,
+      chunksPerBatch: 2,
+      buildingScale: 1.08,
+      vegetationScale: 1.35,
+      vehicleScale: 1.2,
+    }
+  : {
+      desktop: false,
+      chunkSize: 56,
+      roadWidth: 8.2,
+      alleyWidth: 3.5,
+      renderDistance: 1,
+      chunksPerBatch: 2,
+      buildingScale: 1,
+      vegetationScale: 1,
+      vehicleScale: 1,
+    };
+
+export const CHUNK_SIZE = WORLD_PROFILE.chunkSize;
+export const DEFAULT_RENDER_DISTANCE = WORLD_PROFILE.renderDistance;
+export const IS_DESKTOP_WORLD = WORLD_PROFILE.desktop;
 
 const HALF_CHUNK = CHUNK_SIZE / 2;
-const ROAD_WIDTH = 8.2;
-const ALLEY_WIDTH = 3.5;
+const ROAD_WIDTH = WORLD_PROFILE.roadWidth;
+const ALLEY_WIDTH = WORLD_PROFILE.alleyWidth;
 const PLAYER_BASE_Y = 0.055;
-const CHUNKS_PER_BATCH = 2;
+const CHUNKS_PER_BATCH = WORLD_PROFILE.chunksPerBatch;
+const LAYOUT_SCALE = CHUNK_SIZE / 56;
 
 type Direction = "x" | "z";
 type ChunkKind = "city" | "park";
@@ -86,8 +134,8 @@ const earthTexture = textureLoader.load(
     texture.colorSpace = THREE.SRGBColorSpace;
     texture.wrapS = THREE.RepeatWrapping;
     texture.wrapT = THREE.RepeatWrapping;
-    texture.repeat.set(4, 4);
-    texture.anisotropy = 2;
+    texture.repeat.set(WORLD_PROFILE.desktop ? 5 : 4, WORLD_PROFILE.desktop ? 5 : 4);
+    texture.anisotropy = WORLD_PROFILE.desktop ? 4 : 2;
     texture.minFilter = THREE.LinearMipmapLinearFilter;
     texture.magFilter = THREE.LinearFilter;
     texture.generateMipmaps = true;
@@ -100,8 +148,8 @@ const earthTexture = textureLoader.load(
 earthTexture.colorSpace = THREE.SRGBColorSpace;
 earthTexture.wrapS = THREE.RepeatWrapping;
 earthTexture.wrapT = THREE.RepeatWrapping;
-earthTexture.repeat.set(4, 4);
-earthTexture.anisotropy = 2;
+earthTexture.repeat.set(WORLD_PROFILE.desktop ? 5 : 4, WORLD_PROFILE.desktop ? 5 : 4);
+earthTexture.anisotropy = WORLD_PROFILE.desktop ? 4 : 2;
 earthTexture.minFilter = THREE.LinearMipmapLinearFilter;
 earthTexture.magFilter = THREE.LinearFilter;
 earthTexture.generateMipmaps = true;
@@ -490,7 +538,11 @@ function addAlleyTiles(
 
 function getRoadPoints(direction: Direction): RoadPoint[] {
   const result: RoadPoint[] = [];
-  for (let offset = -23; offset <= 23; offset += 8) result.push({ x: direction === "x" ? offset : 0, z: direction === "x" ? 0 : offset, direction });
+  const limit = 23 * LAYOUT_SCALE;
+  const step = 8 * LAYOUT_SCALE;
+  for (let offset = -limit; offset <= limit + 0.001; offset += step) {
+    result.push({ x: direction === "x" ? offset : 0, z: direction === "x" ? 0 : offset, direction });
+  }
   return result;
 }
 
@@ -500,24 +552,29 @@ function isVilla(definition: ModelDef) {
 }
 
 function getBuildingSlots(direction: Direction) {
-  const alongPositions = [-20, -6.7, 6.7, 20];
+  const alongPositions = WORLD_PROFILE.desktop
+    ? [-29, -17.4, -5.8, 5.8, 17.4, 29]
+    : [-20, -6.7, 6.7, 20];
+  const innerOffset = WORLD_PROFILE.desktop ? 13.6 : 11.5;
+  const outerOffset = WORLD_PROFILE.desktop ? 27.2 : 22.5;
+  const outerAlong = WORLD_PROFILE.desktop ? [-27.5, -9.2, 9.2, 27.5] : [-19.5, 19.5];
   const slots: Array<{ x: number; z: number; rotation: number; outer: boolean }> = [];
   for (const value of alongPositions) {
     if (direction === "x") {
-      slots.push({ x: value, z: -11.5, rotation: 0, outer: false });
-      slots.push({ x: value, z: 11.5, rotation: Math.PI, outer: false });
+      slots.push({ x: value, z: -innerOffset, rotation: 0, outer: false });
+      slots.push({ x: value, z: innerOffset, rotation: Math.PI, outer: false });
     } else {
-      slots.push({ x: -11.5, z: value, rotation: Math.PI / 2, outer: false });
-      slots.push({ x: 11.5, z: value, rotation: -Math.PI / 2, outer: false });
+      slots.push({ x: -innerOffset, z: value, rotation: Math.PI / 2, outer: false });
+      slots.push({ x: innerOffset, z: value, rotation: -Math.PI / 2, outer: false });
     }
   }
-  for (const value of [-19.5, 19.5]) {
+  for (const value of outerAlong) {
     if (direction === "x") {
-      slots.push({ x: value, z: -22.5, rotation: 0, outer: true });
-      slots.push({ x: value, z: 22.5, rotation: Math.PI, outer: true });
+      slots.push({ x: value, z: -outerOffset, rotation: 0, outer: true });
+      slots.push({ x: value, z: outerOffset, rotation: Math.PI, outer: true });
     } else {
-      slots.push({ x: -22.5, z: value, rotation: Math.PI / 2, outer: true });
-      slots.push({ x: 22.5, z: value, rotation: -Math.PI / 2, outer: true });
+      slots.push({ x: -outerOffset, z: value, rotation: Math.PI / 2, outer: true });
+      slots.push({ x: outerOffset, z: value, rotation: -Math.PI / 2, outer: true });
     }
   }
   return slots;
@@ -531,8 +588,16 @@ function spawnBuildings(chunk: THREE.Group, random: () => number, direction: Dir
     const slot = slots[index], definition = pick(URBAN_BUILDINGS, random), villa = isVilla(definition);
     placeModel(definition, chunk, slot.x + randomRange(random, -0.18, 0.18), slot.z + randomRange(random, -0.18, 0.18), slot.rotation + randomRange(random, -0.009, 0.009), {
       preciseCollision: true, foundation: true, sinkIntoGround: randomRange(random, 0.1, 0.16), occlusion: !slot.outer && random() < 0.3, castShadow: !slot.outer,
-      targetWidth: slot.outer ? randomRange(random, 10.2, 11.2) : villa ? randomRange(random, 10.8, 11.8) : randomRange(random, 11.1, 12.1),
-      maxHeight: villa ? randomRange(random, 8.2, 10.2) : randomRange(random, 12, 17), brightness: 0.22,
+      targetWidth:
+        (slot.outer
+          ? randomRange(random, 10.2, 11.2)
+          : villa
+            ? randomRange(random, 10.8, 11.8)
+            : randomRange(random, 11.1, 12.1)) * WORLD_PROFILE.buildingScale,
+      maxHeight:
+        (villa ? randomRange(random, 8.2, 10.2) : randomRange(random, 12, 17)) *
+        (WORLD_PROFILE.desktop ? 1.08 : 1),
+      brightness: 0.22,
     });
   }
 }
@@ -545,7 +610,7 @@ function isMotorcycle(definition: ModelDef) {
 function spawnVehicles(chunk: THREE.Group, random: () => number, points: RoadPoint[]) {
   if (!URBAN_VEHICLES.length) return;
   const available = shuffle([...points], random);
-  const count = Math.min(available.length, 2 + Math.floor(random() * 2));
+  const count = Math.min(available.length, Math.round((2 + Math.floor(random() * 2)) * WORLD_PROFILE.vehicleScale));
   for (let index = 0; index < count; index++) {
     const point = available[index];
     const definition = pick(URBAN_VEHICLES, random);
@@ -581,13 +646,13 @@ function spawnVehicles(chunk: THREE.Group, random: () => number, points: RoadPoi
 }
 
 function addFineGrass(chunk: THREE.Group, random: () => number) {
-  const count = 700;
+  const count = Math.round(700 * WORLD_PROFILE.vegetationScale);
   const grass = new THREE.InstancedMesh(grassBladeGeometry, grassBladeMaterial, count);
   const matrix = new THREE.Matrix4();
   const position = new THREE.Vector3();
   const scale = new THREE.Vector3();
   for (let index = 0; index < count; index++) {
-    position.set(randomRange(random, -26, 26), 0.02, randomRange(random, -26, 26));
+    position.set(randomRange(random, -HALF_CHUNK + 2, HALF_CHUNK - 2), 0.02, randomRange(random, -HALF_CHUNK + 2, HALF_CHUNK - 2));
     tempQuaternion.setFromAxisAngle(upAxis, random() * Math.PI * 2);
     scale.set(randomRange(random, 0.7, 1.1), randomRange(random, 0.5, 1), 1);
     matrix.compose(position, tempQuaternion, scale);
@@ -601,11 +666,17 @@ function addFineGrass(chunk: THREE.Group, random: () => number) {
 
 function spawnCityVegetation(chunk: THREE.Group, random: () => number, direction: Direction) {
   if (FOREST_TREES.length) {
-    const positions = [-23, -16, -9, 9, 16, 23];
-    for (const value of positions) {
+    const basePositions = WORLD_PROFILE.desktop
+      ? [-31, -25, -19, -13, -7, 7, 13, 19, 25, 31]
+      : [-23, -16, -9, 9, 16, 23];
+    for (const value of basePositions) {
       for (const side of [-1, 1] as const) {
-        if (random() < 0.28) continue;
-        const sideOffset = randomRange(random, 7.1, 9.3) * side;
+        if (random() < (WORLD_PROFILE.desktop ? 0.2 : 0.28)) continue;
+        const sideOffset = randomRange(
+          random,
+          WORLD_PROFILE.desktop ? 8.4 : 7.1,
+          WORLD_PROFILE.desktop ? 11.4 : 9.3
+        ) * side;
         placeModel(
           pick(FOREST_TREES, random),
           chunk,
@@ -615,9 +686,9 @@ function spawnCityVegetation(chunk: THREE.Group, random: () => number, direction
           {
             collision: true,
             colliderType: "tree",
-            targetHeight: randomRange(random, 3.8, 5.8),
+            targetHeight: randomRange(random, 3.8, WORLD_PROFILE.desktop ? 6.4 : 5.8),
             brightness: 0.03,
-            castShadow: random() < 0.5,
+            castShadow: random() < (WORLD_PROFILE.desktop ? 0.65 : 0.5),
           }
         );
       }
@@ -625,17 +696,26 @@ function spawnCityVegetation(chunk: THREE.Group, random: () => number, direction
   }
   const sources = [...FOREST_BUSHES, ...FOREST_FLOWERS, ...FOREST_GRASS];
   if (!sources.length) return;
-  for (let index = 0; index < 24; index++) {
+  const decorationCount = Math.round(24 * WORLD_PROFILE.vegetationScale);
+  for (let index = 0; index < decorationCount; index++) {
     const side = random() < 0.5 ? -1 : 1;
-    const along = randomRange(random, -25, 25);
-    const across = randomRange(random, 7, 10.2) * side;
+    const along = randomRange(random, -HALF_CHUNK + 2, HALF_CHUNK - 2);
+    const across = randomRange(
+      random,
+      WORLD_PROFILE.desktop ? 8.2 : 7,
+      WORLD_PROFILE.desktop ? 12.2 : 10.2
+    ) * side;
     placeModel(
       pick(sources, random),
       chunk,
       direction === "x" ? along : across,
       direction === "x" ? across : along,
       random() * Math.PI * 2,
-      { targetWidth: randomRange(random, 0.5, 1.35), brightness: 0.01, castShadow: false }
+      {
+        targetWidth: randomRange(random, 0.5, WORLD_PROFILE.desktop ? 1.55 : 1.35),
+        brightness: 0.01,
+        castShadow: false,
+      }
     );
   }
 }
@@ -644,12 +724,12 @@ function buildPark(chunk: THREE.Group, random: () => number) {
   addGround(chunk, parkGroundMaterial);
   addFineGrass(chunk, random);
   if (FOREST_TREES.length) {
-    for (let index = 0; index < 22; index++) {
+    for (let index = 0; index < Math.round(22 * WORLD_PROFILE.vegetationScale); index++) {
       placeModel(
         pick(FOREST_TREES, random),
         chunk,
-        randomRange(random, -25, 25),
-        randomRange(random, -25, 25),
+        randomRange(random, -HALF_CHUNK + 3, HALF_CHUNK - 3),
+        randomRange(random, -HALF_CHUNK + 3, HALF_CHUNK - 3),
         random() * Math.PI * 2,
         {
           collision: true,
@@ -662,12 +742,12 @@ function buildPark(chunk: THREE.Group, random: () => number) {
   }
   const sources = [...FOREST_BUSHES, ...FOREST_FLOWERS, ...FOREST_GRASS];
   if (!sources.length) return;
-  for (let index = 0; index < 42; index++) {
+  for (let index = 0; index < Math.round(42 * WORLD_PROFILE.vegetationScale); index++) {
     placeModel(
       pick(sources, random),
       chunk,
-      randomRange(random, -26, 26),
-      randomRange(random, -26, 26),
+      randomRange(random, -HALF_CHUNK + 2, HALF_CHUNK - 2),
+      randomRange(random, -HALF_CHUNK + 2, HALF_CHUNK - 2),
       random() * Math.PI * 2,
       {
         targetWidth: randomRange(random, 0.45, 1.7),
@@ -681,15 +761,16 @@ function buildPark(chunk: THREE.Group, random: () => number) {
 function buildSmallPark(chunk: THREE.Group, random: () => number, direction: Direction, slotIndex: number) {
   const slot = getBuildingSlots(direction)[slotIndex];
   if (!slot) return;
-  const park = new THREE.Mesh(new THREE.BoxGeometry(9.5, 0.045, 9.5), parkGroundMaterial);
+  const parkSize = WORLD_PROFILE.desktop ? 10.8 : 9.5;
+  const park = new THREE.Mesh(new THREE.BoxGeometry(parkSize, 0.045, parkSize), parkGroundMaterial);
   park.position.set(slot.x, -0.012, slot.z); park.receiveShadow = true; park.userData.temporaryGeometry = true; chunk.add(park); heightMeshes.push(park);
   if (FOREST_TREES.length) {
-    const treeCount = 6 + Math.floor(random() * 3);
+    const treeCount = Math.round((6 + Math.floor(random() * 3)) * WORLD_PROFILE.vegetationScale);
     for (let index = 0; index < treeCount; index++) placeModel(pick(FOREST_TREES, random), chunk, slot.x + randomRange(random, -3.5, 3.5), slot.z + randomRange(random, -3.5, 3.5), random() * Math.PI * 2, { collision: true, colliderType: "tree", targetHeight: randomRange(random, 3.8, 5.5), brightness: 0.03, castShadow: index < 3 });
   }
   const sources = [...FOREST_BUSHES, ...FOREST_FLOWERS, ...FOREST_GRASS];
   if (!sources.length) return;
-  const decorationCount = 12 + Math.floor(random() * 5);
+  const decorationCount = Math.round((12 + Math.floor(random() * 5)) * WORLD_PROFILE.vegetationScale);
   for (let index = 0; index < decorationCount; index++) placeModel(pick(sources, random), chunk, slot.x + randomRange(random, -4, 4), slot.z + randomRange(random, -4, 4), random() * Math.PI * 2, { targetWidth: randomRange(random, 0.45, 1.15), brightness: 0.01, castShadow: false });
 }
 
@@ -698,10 +779,20 @@ function buildCityChunk(chunk: THREE.Group, random: () => number, direction: Dir
   addStreetTiles(chunk, random, direction);
   const crossDirection: Direction = direction === "x" ? "z" : "x";
   addAlleyTiles(chunk, random, crossDirection, 0);
-  const firstSide = random() < 0.5 ? -1 : 1;
-  addAlleyTiles(chunk, random, direction, firstSide * 17.2);
-  if (random() < 0.7) addAlleyTiles(chunk, random, direction, firstSide * -17.2);
-  const hasSmallPark = random() < 0.24;
+
+  if (WORLD_PROFILE.desktop) {
+    addAlleyTiles(chunk, random, direction, -22.5);
+    addAlleyTiles(chunk, random, direction, 22.5);
+    if (random() < 0.72) {
+      addAlleyTiles(chunk, random, crossDirection, random() < 0.5 ? -18 : 18);
+    }
+  } else {
+    const firstSide = random() < 0.5 ? -1 : 1;
+    addAlleyTiles(chunk, random, direction, firstSide * 17.2);
+    if (random() < 0.7) addAlleyTiles(chunk, random, direction, firstSide * -17.2);
+  }
+
+  const hasSmallPark = random() < (WORLD_PROFILE.desktop ? 0.2 : 0.24);
   const slots = getBuildingSlots(direction);
   const parkSlot = hasSmallPark ? Math.floor(random() * slots.length) : -1;
   spawnBuildings(chunk, random, direction, parkSlot);
@@ -761,17 +852,25 @@ function queueChunkGeneration(scene: THREE.Scene, cx: number, cz: number) {
   queuedChunkKeys.add(key); chunkGenerationQueue.push({ scene, cx, cz });
 }
 
-export async function updateChunks(scene: THREE.Scene, playerX: number, playerZ: number, renderDistance = 1) {
+export async function updateChunks(
+  scene: THREE.Scene,
+  playerX: number,
+  playerZ: number,
+  renderDistance = DEFAULT_RENDER_DISTANCE
+) {
+  const effectiveRenderDistance = WORLD_PROFILE.desktop
+    ? Math.max(renderDistance, DEFAULT_RENDER_DISTANCE)
+    : renderDistance;
   const { cx, cz } = getChunkCoord(playerX, playerZ);
   const required: Array<{ cx: number; cz: number; distance: number }> = [];
   desiredChunkKeys.clear();
-  for (let x = cx - renderDistance; x <= cx + renderDistance; x++) for (let z = cz - renderDistance; z <= cz + renderDistance; z++) {
+  for (let x = cx - effectiveRenderDistance; x <= cx + effectiveRenderDistance; x++) for (let z = cz - effectiveRenderDistance; z <= cz + effectiveRenderDistance; z++) {
     const key = `${x},${z}`; desiredChunkKeys.add(key); required.push({ cx: x, cz: z, distance: Math.abs(x - cx) + Math.abs(z - cz) });
   }
   required.sort((a, b) => a.distance - b.distance);
   for (const item of required) queueChunkGeneration(scene, item.cx, item.cz);
   chunkGenerationQueue = chunkGenerationQueue.filter((task) => { const key = `${task.cx},${task.cz}`; if (desiredChunkKeys.has(key)) return true; queuedChunkKeys.delete(key); return false; });
-  scheduleNextChunkBatch(); destroyFarChunks(cx, cz, renderDistance);
+  scheduleNextChunkBatch(); destroyFarChunks(cx, cz, effectiveRenderDistance);
 }
 
 function destroyFarChunks(centerX: number, centerZ: number, renderDistance: number) {
