@@ -73,7 +73,11 @@ type Direction = "x" | "z";
 type ChunkKind = "city" | "park";
 type ColliderType = "tree" | "vehicle" | "wall" | "rail";
 type SimpleCollider = { box: THREE.Box3; chunk: THREE.Group };
-type PreciseCollisionMesh = { mesh: THREE.Mesh; chunk: THREE.Group };
+type PreciseCollisionMesh = {
+  mesh: THREE.Mesh;
+  chunk: THREE.Group;
+  worldBounds: THREE.Box3;
+};
 type RoadPoint = { x: number; z: number; direction: Direction };
 type ModelOptions = {
   y?: number;
@@ -111,8 +115,11 @@ const textureLoader = new THREE.TextureLoader();
 const modelCache = new Map<string, Promise<THREE.Group>>();
 const simpleColliders: SimpleCollider[] = [];
 const preciseCollisionMeshes: PreciseCollisionMesh[] = [];
+const simpleCollidersByChunk = new Map<THREE.Group, SimpleCollider[]>();
+const preciseCollisionMeshesByChunk = new Map<THREE.Group, PreciseCollisionMesh[]>();
 const heightMeshes: THREE.Object3D[] = [];
 const occlusionMeshes: THREE.Object3D[] = [];
+const occlusionMeshesByChunk = new Map<THREE.Group, THREE.Object3D[]>();
 const raycaster = new THREE.Raycaster();
 const rayOrigin = new THREE.Vector3();
 const rayDirection = new THREE.Vector3();
@@ -124,9 +131,18 @@ const tempVector = new THREE.Vector3();
 const tempVectorB = new THREE.Vector3();
 const tempQuaternion = new THREE.Quaternion();
 const upAxis = new THREE.Vector3(0, 1, 0);
+const playerCollisionBox = new THREE.Box3();
+const sweptCollisionBox = new THREE.Box3();
+const collisionBoxMin = new THREE.Vector3();
+const collisionBoxMax = new THREE.Vector3();
+const nearbySimpleColliders: SimpleCollider[] = [];
+const nearbyPreciseCollisionMeshes: PreciseCollisionMesh[] = [];
+const nearbyPreciseMeshes: THREE.Mesh[] = [];
 
 let cameraOcclusionDistance = 0;
 let cameraOcclusionReady = false;
+let cameraOcclusionAccumulator = 0;
+let cachedCameraTargetDistance = 0;
 
 const earthTexture = textureLoader.load(
   EARTH_TEXTURE,
@@ -289,7 +305,12 @@ function registerModel(object: THREE.Object3D, chunk: THREE.Group, options: Mode
   object.traverse((child) => {
     if (!(child instanceof THREE.Mesh)) return;
     if (options.height) heightMeshes.push(child);
-    if (options.occlusion) occlusionMeshes.push(child);
+    if (options.occlusion) {
+      occlusionMeshes.push(child);
+      const chunkOccluders = occlusionMeshesByChunk.get(chunk);
+      if (chunkOccluders) chunkOccluders.push(child);
+      else occlusionMeshesByChunk.set(chunk, [child]);
+    }
   });
 }
 
@@ -437,13 +458,17 @@ function registerSimpleCollider(object: THREE.Object3D, chunk: THREE.Group, type
     depth = Math.min(depth, 1.15);
   }
   const height = Math.max(0.8, tempSize.y * factors.y);
-  simpleColliders.push({
+  const collider: SimpleCollider = {
     chunk,
     box: new THREE.Box3().setFromCenterAndSize(
       new THREE.Vector3(tempCenter.x, bounds.min.y + height / 2, tempCenter.z),
       new THREE.Vector3(width, height, depth)
     ),
-  });
+  };
+  simpleColliders.push(collider);
+  const chunkColliders = simpleCollidersByChunk.get(chunk);
+  if (chunkColliders) chunkColliders.push(collider);
+  else simpleCollidersByChunk.set(chunk, [collider]);
 }
 
 function registerPreciseCollision(object: THREE.Object3D, chunk: THREE.Group) {
@@ -454,7 +479,16 @@ function registerPreciseCollision(object: THREE.Object3D, chunk: THREE.Group) {
     if (!bounds) return;
     bounds.getSize(tempSize);
     if (tempSize.x < 0.16 && tempSize.y < 0.16 && tempSize.z < 0.16) return;
-    preciseCollisionMeshes.push({ mesh: child, chunk });
+    child.updateWorldMatrix(true, false);
+    const entry: PreciseCollisionMesh = {
+      mesh: child,
+      chunk,
+      worldBounds: new THREE.Box3().setFromObject(child),
+    };
+    preciseCollisionMeshes.push(entry);
+    const chunkMeshes = preciseCollisionMeshesByChunk.get(chunk);
+    if (chunkMeshes) chunkMeshes.push(entry);
+    else preciseCollisionMeshesByChunk.set(chunk, [entry]);
   });
 }
 
@@ -889,6 +923,9 @@ function removeChunk(key: string, chunk: THREE.Group) {
   for (let index = preciseCollisionMeshes.length - 1; index >= 0; index--) {
     if (preciseCollisionMeshes[index].chunk === chunk) preciseCollisionMeshes.splice(index, 1);
   }
+  simpleCollidersByChunk.delete(chunk);
+  preciseCollisionMeshesByChunk.delete(chunk);
+  occlusionMeshesByChunk.delete(chunk);
   const objects = new Set<THREE.Object3D>();
   chunk.traverse((object) => {
     objects.add(object);
@@ -904,24 +941,62 @@ function removeChunk(key: string, chunk: THREE.Group) {
   chunks.delete(key);
 }
 
+function collectNearbyChunks(x: number, z: number, radiusInChunks = 1) {
+  const { cx, cz } = getChunkCoord(x, z);
+  const result: THREE.Group[] = [];
+  for (let offsetX = -radiusInChunks; offsetX <= radiusInChunks; offsetX++) {
+    for (let offsetZ = -radiusInChunks; offsetZ <= radiusInChunks; offsetZ++) {
+      const chunk = chunks.get(`${cx + offsetX},${cz + offsetZ}`);
+      if (chunk) result.push(chunk);
+    }
+  }
+  return result;
+}
+
 function intersectsSimpleCollider(player: THREE.Object3D, x: number, z: number, radius: number) {
-  const box = new THREE.Box3(
-    new THREE.Vector3(x - radius, player.position.y + 0.08, z - radius),
-    new THREE.Vector3(x + radius, player.position.y + 2.05, z + radius)
-  );
-  for (const collider of simpleColliders) {
-    if (box.intersectsBox(collider.box)) return true;
+  collisionBoxMin.set(x - radius, player.position.y + 0.08, z - radius);
+  collisionBoxMax.set(x + radius, player.position.y + 2.05, z + radius);
+  playerCollisionBox.set(collisionBoxMin, collisionBoxMax);
+  nearbySimpleColliders.length = 0;
+  for (const chunk of collectNearbyChunks(x, z, 1)) {
+    const colliders = simpleCollidersByChunk.get(chunk);
+    if (colliders) nearbySimpleColliders.push(...colliders);
+  }
+  for (const collider of nearbySimpleColliders) {
+    if (playerCollisionBox.intersectsBox(collider.box)) return true;
   }
   return false;
 }
 
-function getNearbyCollisionMeshes(x: number, z: number, range: number) {
-  return preciseCollisionMeshes
-    .filter((entry) => {
-      entry.mesh.getWorldPosition(tempVector);
-      return Math.abs(tempVector.x - x) < range && Math.abs(tempVector.z - z) < range;
-    })
-    .map((entry) => entry.mesh);
+function getNearbyCollisionMeshes(
+  fromX: number,
+  fromZ: number,
+  toX: number,
+  toZ: number,
+  playerY: number,
+  radius: number
+) {
+  collisionBoxMin.set(
+    Math.min(fromX, toX) - radius - 0.12,
+    playerY + 0.08,
+    Math.min(fromZ, toZ) - radius - 0.12
+  );
+  collisionBoxMax.set(
+    Math.max(fromX, toX) + radius + 0.12,
+    playerY + 2.05,
+    Math.max(fromZ, toZ) + radius + 0.12
+  );
+  sweptCollisionBox.set(collisionBoxMin, collisionBoxMax);
+  nearbyPreciseCollisionMeshes.length = 0;
+  nearbyPreciseMeshes.length = 0;
+  for (const chunk of collectNearbyChunks(toX, toZ, 1)) {
+    const entries = preciseCollisionMeshesByChunk.get(chunk);
+    if (entries) nearbyPreciseCollisionMeshes.push(...entries);
+  }
+  for (const entry of nearbyPreciseCollisionMeshes) {
+    if (entry.worldBounds.intersectsBox(sweptCollisionBox)) nearbyPreciseMeshes.push(entry.mesh);
+  }
+  return nearbyPreciseMeshes;
 }
 
 function preciseMovementBlocked(
@@ -935,17 +1010,17 @@ function preciseMovementBlocked(
   const dx = toX - fromX;
   const dz = toZ - fromZ;
   const distance = Math.hypot(dx, dz);
-  const meshes = getNearbyCollisionMeshes(toX, toZ, 20);
+  const meshes = getNearbyCollisionMeshes(fromX, fromZ, toX, toZ, player.position.y, radius);
   if (!meshes.length) return false;
   if (distance > 0.0001) {
     rayDirection.set(dx / distance, 0, dz / distance);
     tempVectorB.set(-rayDirection.z, 0, rayDirection.x);
-    for (const height of [0.3, 0.9, 1.5]) {
+    for (const height of [0.32, 0.95, 1.55]) {
       for (const side of [-radius, 0, radius]) {
         rayOrigin.set(fromX + tempVectorB.x * side, player.position.y + height, fromZ + tempVectorB.z * side);
         raycaster.set(rayOrigin, rayDirection);
         raycaster.near = 0;
-        raycaster.far = distance + radius + 0.1;
+        raycaster.far = distance + radius + 0.08;
         if (raycaster.intersectObjects(meshes, false).length) return true;
       }
     }
@@ -961,11 +1036,11 @@ function preciseMovementBlocked(
     [-0.707, -0.707],
   ] as const;
   for (const [probeX, probeZ] of probeDirections) {
-    rayOrigin.set(toX, player.position.y + 0.85, toZ);
+    rayOrigin.set(toX, player.position.y + 0.9, toZ);
     rayDirection.set(probeX, 0, probeZ);
     raycaster.set(rayOrigin, rayDirection);
     raycaster.near = 0;
-    raycaster.far = radius + 0.08;
+    raycaster.far = radius + 0.055;
     if (raycaster.intersectObjects(meshes, false).length) return true;
   }
   return false;
@@ -1050,16 +1125,28 @@ export function updateCameraOcclusion(
   const desiredDistance = tempVector.length();
   if (desiredDistance <= 0.1) return;
   tempVector.normalize();
-  raycaster.set(target, tempVector);
-  raycaster.near = 0;
-  raycaster.far = desiredDistance;
-  const hits = raycaster.intersectObjects(occlusionMeshes, false);
-  let targetDistance = desiredDistance;
-  if (hits.length) targetDistance = Math.max(4.3, hits[0].distance - 0.48);
+  cameraOcclusionAccumulator += delta;
+  const occlusionInterval = WORLD_PROFILE.desktop ? 1 / 45 : 1 / 30;
+  if (!cameraOcclusionReady || cameraOcclusionAccumulator >= occlusionInterval) {
+    cameraOcclusionAccumulator = 0;
+    raycaster.set(target, tempVector);
+    raycaster.near = 0;
+    raycaster.far = desiredDistance;
+    const nearbyOcclusionMeshes: THREE.Object3D[] = [];
+    for (const chunk of collectNearbyChunks(target.x, target.z, 1)) {
+      const chunkOccluders = occlusionMeshesByChunk.get(chunk);
+      if (chunkOccluders) nearbyOcclusionMeshes.push(...chunkOccluders);
+    }
+    const hits = raycaster.intersectObjects(nearbyOcclusionMeshes, false);
+    cachedCameraTargetDistance = hits.length
+      ? Math.max(4.3, hits[0].distance - 0.48)
+      : desiredDistance;
+  }
   if (!cameraOcclusionReady) {
-    cameraOcclusionDistance = targetDistance;
+    cameraOcclusionDistance = cachedCameraTargetDistance || desiredDistance;
     cameraOcclusionReady = true;
   }
+  const targetDistance = cachedCameraTargetDistance || desiredDistance;
   const speed = targetDistance < cameraOcclusionDistance ? 10 : 3.5;
   cameraOcclusionDistance = THREE.MathUtils.lerp(
     cameraOcclusionDistance,
@@ -1078,10 +1165,15 @@ export function destroyAllChunks() {
   chunks.clear();
   simpleColliders.length = 0;
   preciseCollisionMeshes.length = 0;
+  simpleCollidersByChunk.clear();
+  preciseCollisionMeshesByChunk.clear();
   heightMeshes.length = 0;
   occlusionMeshes.length = 0;
+  occlusionMeshesByChunk.clear();
   cameraOcclusionDistance = 0;
   cameraOcclusionReady = false;
+  cameraOcclusionAccumulator = 0;
+  cachedCameraTargetDistance = 0;
   desiredChunkKeys.clear();
   queuedChunkKeys.clear();
   chunkGenerationQueue.length = 0;
