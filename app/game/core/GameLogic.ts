@@ -4,7 +4,7 @@ export function createGameLogic(
   player: THREE.Object3D
 ) {
   const walkSpeed = 4;
-  const runSpeed = 8.5;
+  const runSpeed = 15.5;
   const runThresholdSquared = 0.36;
   const minimumInputSquared = 0.0001;
   const moveDirection = new THREE.Vector3();
