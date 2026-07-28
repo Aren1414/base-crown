@@ -3,93 +3,346 @@ import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 
 export const MODEL_URL = "/models/modeling1.glb";
 
+type ActionType = "punch" | "kick" | "jump";
+
+const IDLE_URL = "/models/Breathing Idle.glb";
+const WALK_URL = "/models/Walk.glb";
+const RUN_URL = "/models/Running.glb";
+const VISUAL_ROOT_NAME = "PlayerVisualRoot";
+const JUMP_HEIGHT = 1.05;
+
 export async function loadPlayerModel(scene: THREE.Scene) {
   const loader = new GLTFLoader();
 
-  const glbModel = await loader.loadAsync(MODEL_URL);
-  const player = glbModel.scene;
+  const [modelResult, idleResult, walkResult, runResult] =
+    await Promise.all([
+      loader.loadAsync(MODEL_URL),
+      loader.loadAsync(IDLE_URL),
+      loader.loadAsync(WALK_URL),
+      loader.loadAsync(RUN_URL),
+    ]);
 
-  player.scale.set(1.6, 1.6, 1.6);
-  player.position.set(0, -0.3, 0);
+  const player = new THREE.Group();
+  const visualRoot = new THREE.Group();
+  const model = modelResult.scene;
 
+  player.name = "Player";
+  visualRoot.name = VISUAL_ROOT_NAME;
+
+  model.position.set(0, -0.3, 0);
+  visualRoot.add(model);
+  player.add(visualRoot);
+
+  player.scale.setScalar(1.6);
   scene.add(player);
 
   const mixer = new THREE.AnimationMixer(player);
+  const availableTargets = new Set<string>();
 
-  // حذف Root Motion
-  const removeRootMotion = (clip: THREE.AnimationClip): THREE.AnimationClip => {
-    clip.tracks = clip.tracks.filter(
-      (track: THREE.KeyframeTrack) => !track.name.endsWith(".position")
-    );
+  player.traverse((object) => {
+    if (object.name) {
+      availableTargets.add(object.name);
+    }
+  });
+
+  const getTargetName = (trackName: string) => {
+    const separatorIndex = trackName.indexOf(".");
+
+    if (separatorIndex === -1) {
+      return trackName;
+    }
+
+    return trackName.slice(0, separatorIndex);
+  };
+
+  const prepareClip = (
+    source: THREE.AnimationClip,
+    type?: ActionType
+  ) => {
+    const clip = source.clone();
+
+    clip.tracks = clip.tracks
+      .filter((track) => {
+        const targetName = getTargetName(track.name);
+
+        return (
+          !targetName ||
+          availableTargets.has(targetName)
+        );
+      })
+      .map((track) => {
+        if (
+          !(track instanceof THREE.VectorKeyframeTrack) ||
+          !track.name.endsWith(".position")
+        ) {
+          return track;
+        }
+
+        const targetName = getTargetName(track.name);
+
+        if (!/(hips|root|pelvis)/i.test(targetName)) {
+          return track;
+        }
+
+        const cleanedTrack = track.clone();
+        const values = cleanedTrack.values;
+
+        if (values.length < 3) {
+          return cleanedTrack;
+        }
+
+        const initialX = values[0];
+        const initialZ = values[2];
+
+        for (
+          let index = 0;
+          index < values.length;
+          index += 3
+        ) {
+          values[index] = initialX;
+          values[index + 2] = initialZ;
+        }
+
+        return cleanedTrack;
+      });
+
+    if (type === "jump") {
+      const duration = Math.max(clip.duration, 0.6);
+
+      const jumpTrack = new THREE.NumberKeyframeTrack(
+        `${VISUAL_ROOT_NAME}.position[y]`,
+        [0, duration * 0.42, duration],
+        [0, JUMP_HEIGHT, 0],
+        THREE.InterpolateSmooth
+      );
+
+      clip.tracks.push(jumpTrack);
+    }
+
+    clip.resetDuration();
+
     return clip;
   };
 
-  // Idle
-  const idleAnim = await loader.loadAsync("/models/Breathing Idle.glb");
-  const idleAction = mixer.clipAction(removeRootMotion(idleAnim.animations[0]));
+  const getClip = (
+    result: typeof idleResult,
+    url: string,
+    type?: ActionType
+  ) => {
+    const sourceClip = result.animations[0];
+
+    if (!sourceClip) {
+      throw new Error(
+        `No animation found in ${url}`
+      );
+    }
+
+    return prepareClip(sourceClip, type);
+  };
+
+  const idleAction = mixer.clipAction(
+    getClip(idleResult, IDLE_URL)
+  );
+
+  const walkAction = mixer.clipAction(
+    getClip(walkResult, WALK_URL)
+  );
+
+  const runAction = mixer.clipAction(
+    getClip(runResult, RUN_URL)
+  );
+
   idleAction.setLoop(THREE.LoopRepeat, Infinity);
-  idleAction.enabled = true;
-  idleAction.play();
-
-  // Walk
-  const walkAnim = await loader.loadAsync("/models/Walk.glb");
-  const walkAction = mixer.clipAction(removeRootMotion(walkAnim.animations[0]));
   walkAction.setLoop(THREE.LoopRepeat, Infinity);
-
-  // Run
-  const runAnim = await loader.loadAsync("/models/Running.glb");
-  const runAction = mixer.clipAction(removeRootMotion(runAnim.animations[0]));
   runAction.setLoop(THREE.LoopRepeat, Infinity);
 
-  let currentAction: THREE.AnimationAction = idleAction;
+  idleAction
+    .setEffectiveWeight(1)
+    .setEffectiveTimeScale(1)
+    .play();
 
-  // تغییر انیمیشن حرکت
-  const setMoveBySpeed = (movementSpeed: number) => {
+  walkAction.setEffectiveTimeScale(1);
+  runAction.setEffectiveTimeScale(1.12);
+
+  let currentAction = idleAction;
+  let activeOneShot: THREE.AnimationAction | null =
+    null;
+
+  let latestRequestId = 0;
+
+  const oneShotCache = new Map<
+    string,
+    Promise<THREE.AnimationAction>
+  >();
+
+  const detectActionType = (
+    file: string,
+    providedType?: ActionType
+  ): ActionType => {
+    if (providedType) {
+      return providedType;
+    }
+
+    const normalizedFile = file.toLowerCase();
+
+    if (normalizedFile.includes("jump")) {
+      return "jump";
+    }
+
+    if (
+      normalizedFile.includes("kick") ||
+      normalizedFile.includes("leg")
+    ) {
+      return "kick";
+    }
+
+    return "punch";
+  };
+
+  const loadOneShotAction = (
+    file: string,
+    type: ActionType
+  ) => {
+    const cacheKey = `${type}:${file}`;
+    const cachedAction = oneShotCache.get(cacheKey);
+
+    if (cachedAction) {
+      return cachedAction;
+    }
+
+    const actionPromise = loader
+      .loadAsync(`/models/${file}`)
+      .then((result) => {
+        const clip = getClip(
+          result,
+          `/models/${file}`,
+          type
+        );
+
+        const action = mixer.clipAction(clip);
+
+        action.setLoop(THREE.LoopOnce, 1);
+        action.clampWhenFinished = true;
+        action.enabled = true;
+
+        return action;
+      })
+      .catch((error) => {
+        oneShotCache.delete(cacheKey);
+        throw error;
+      });
+
+    oneShotCache.set(cacheKey, actionPromise);
+
+    return actionPromise;
+  };
+
+  const setMoveBySpeed = (
+    movementSpeed: number
+  ) => {
     let targetAction = idleAction;
 
-    if (movementSpeed > 0.1 && movementSpeed < 0.6) {
-      targetAction = walkAction;
-    } else if (movementSpeed >= 0.6) {
+    if (movementSpeed >= 0.6) {
       targetAction = runAction;
+    } else if (movementSpeed > 0.1) {
+      targetAction = walkAction;
     }
 
-    if (targetAction !== currentAction) {
-      currentAction.crossFadeTo(targetAction, 0.2, false);
-      targetAction.reset();
-      targetAction.play();
-      currentAction = targetAction;
+    if (targetAction === currentAction) {
+      return;
     }
+
+    targetAction
+      .reset()
+      .setEffectiveWeight(1)
+      .play();
+
+    currentAction.crossFadeTo(
+      targetAction,
+      0.18,
+      true
+    );
+
+    currentAction = targetAction;
   };
 
-  // اجرای مشت/لگد/پرش بدون حذف هیچ Track
+  const restoreMovementAnimation = () => {
+    currentAction.setEffectiveWeight(1);
+    visualRoot.position.y = 0;
+    activeOneShot = null;
+  };
+
+  mixer.addEventListener(
+    "finished",
+    (event) => {
+      const finishedAction = (
+        event as {
+          action: THREE.AnimationAction;
+        }
+      ).action;
+
+      if (finishedAction !== activeOneShot) {
+        return;
+      }
+
+      finishedAction.stop();
+      restoreMovementAnimation();
+    }
+  );
+
   const playAnimOnce = async (
     file: string,
-    type: "punch" | "kick" | "jump" = "punch"
+    providedType?: ActionType
   ) => {
-    const anim = await loader.loadAsync(`/models/${file}`);
-    const clip: THREE.AnimationClip = removeRootMotion(anim.animations[0]);
+    const requestId = ++latestRequestId;
+    const type = detectActionType(
+      file,
+      providedType
+    );
 
-    const temp = mixer.clipAction(clip);
+    try {
+      const action = await loadOneShotAction(
+        file,
+        type
+      );
 
-    temp.setLoop(THREE.LoopOnce, 1);
-    temp.clampWhenFinished = true;
-    temp.enabled = true;
+      if (requestId !== latestRequestId) {
+        return;
+      }
 
-    // اجرای روی لایه بالاتر
-    temp.setEffectiveWeight(1.0);
-    currentAction.setEffectiveWeight(0.6);
+      if (
+        activeOneShot &&
+        activeOneShot !== action
+      ) {
+        activeOneShot.stop();
+      }
 
-    temp.reset();
-    temp.play();
+      visualRoot.position.y = 0;
+      activeOneShot = action;
 
-    const duration = clip.duration * 1000;
+      currentAction.setEffectiveWeight(
+        type === "jump" ? 0.35 : 0.55
+      );
 
-    setTimeout(() => {
-      temp.stop();
-      temp.enabled = false;
-      currentAction.setEffectiveWeight(1.0);
-    }, Math.min(duration, 2500));
+      action
+        .reset()
+        .setEffectiveWeight(1)
+        .setEffectiveTimeScale(1)
+        .play();
+    } catch (error) {
+      console.error(
+        `Failed to load animation ${file}:`,
+        error
+      );
+
+      restoreMovementAnimation();
+    }
   };
 
-  return { player, mixer, setMoveBySpeed, playAnimOnce };
+  return {
+    player,
+    mixer,
+    setMoveBySpeed,
+    playAnimOnce,
+  };
 }
