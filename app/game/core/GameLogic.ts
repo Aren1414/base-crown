@@ -1,32 +1,60 @@
 import * as THREE from "three";
 
-export function createGameLogic(player: THREE.Object3D) {
-  const walkSpeed = 4;   // سرعت واقعی
-  const runSpeed = 7;
+export function createGameLogic(
+  player: THREE.Object3D
+) {
+  const walkSpeed = 4;
+  const runSpeed = 8.5;
+  const runThresholdSquared = 0.36;
+  const minimumInputSquared = 0.0001;
+  const moveDirection = new THREE.Vector3();
 
-  const update = (delta: number, joy: { x: number; y: number }) => {
-    const { x, y } = joy;
+  const update = (
+    delta: number,
+    joy: {
+      x: number;
+      y: number;
+    }
+  ) => {
+    const x = joy.x;
+    const forward = -joy.y;
+    const intensitySquared =
+      x * x + forward * forward;
 
-    if (x === 0 && y === 0) return;
-
-    const intensity = Math.sqrt(x * x + y * y);
-    const speed = intensity < 0.6 ? walkSpeed : runSpeed;
-
-    // جلو واقعی = -y
-    const forward = -y;
-
-    const moveDir = new THREE.Vector3(x, 0, forward);
-
-    // چرخش صحیح کاراکتر
-    if (Math.abs(x) > 0.01 || Math.abs(forward) > 0.01) {
-      const angle = Math.atan2(moveDir.x, moveDir.z);
-      player.rotation.y = angle;
+    if (
+      intensitySquared <
+      minimumInputSquared
+    ) {
+      return;
     }
 
-    // حرکت پیوسته واقعی
-    moveDir.normalize();
-    player.position.addScaledVector(moveDir, speed * delta);
+    const speed =
+      intensitySquared <
+      runThresholdSquared
+        ? walkSpeed
+        : runSpeed;
+
+    player.rotation.y = Math.atan2(
+      x,
+      forward
+    );
+
+    const inverseLength =
+      1 / Math.sqrt(intensitySquared);
+
+    moveDirection.set(
+      x * inverseLength,
+      0,
+      forward * inverseLength
+    );
+
+    player.position.addScaledVector(
+      moveDirection,
+      speed * delta
+    );
   };
 
-  return { update };
+  return {
+    update,
+  };
 }
