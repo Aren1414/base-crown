@@ -4,12 +4,19 @@ import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 export const MODEL_URL = "/models/modeling1.glb";
 
 type ActionType = "punch" | "kick" | "jump";
+type MovementState = "idle" | "walk" | "run";
 
 const IDLE_URL = "/models/Breathing Idle.glb";
 const WALK_URL = "/models/Walk.glb";
 const RUN_URL = "/models/Running.glb";
 const VISUAL_ROOT_NAME = "PlayerVisualRoot";
 const JUMP_HEIGHT = 1.05;
+
+const WALK_ENTER_THRESHOLD = 0.12;
+const WALK_EXIT_THRESHOLD = 0.07;
+const RUN_ENTER_THRESHOLD = 0.68;
+const RUN_EXIT_THRESHOLD = 0.52;
+const MOVEMENT_CROSS_FADE_DURATION = 0.18;
 
 export async function loadPlayerModel(scene: THREE.Scene) {
   const loader = new GLTFLoader();
@@ -37,11 +44,14 @@ export async function loadPlayerModel(scene: THREE.Scene) {
   const availableTargets = new Set<string>();
 
   player.traverse((object) => {
-    if (object.name) availableTargets.add(object.name);
+    if (object.name) {
+      availableTargets.add(object.name);
+    }
   });
 
   const getTargetName = (trackName: string) => {
     const separatorIndex = trackName.indexOf(".");
+
     return separatorIndex === -1
       ? trackName
       : trackName.slice(0, separatorIndex);
@@ -56,6 +66,7 @@ export async function loadPlayerModel(scene: THREE.Scene) {
     clip.tracks = clip.tracks
       .filter((track) => {
         const targetName = getTargetName(track.name);
+
         return !targetName || availableTargets.has(targetName);
       })
       .map((track) => {
@@ -75,12 +86,18 @@ export async function loadPlayerModel(scene: THREE.Scene) {
         const cleanedTrack = track.clone();
         const values = cleanedTrack.values;
 
-        if (values.length < 3) return cleanedTrack;
+        if (values.length < 3) {
+          return cleanedTrack;
+        }
 
         const initialX = values[0];
         const initialZ = values[2];
 
-        for (let index = 0; index < values.length; index += 3) {
+        for (
+          let index = 0;
+          index < values.length;
+          index += 3
+        ) {
           values[index] = initialX;
           values[index + 2] = initialZ;
         }
@@ -102,6 +119,7 @@ export async function loadPlayerModel(scene: THREE.Scene) {
     }
 
     clip.resetDuration();
+
     return clip;
   };
 
@@ -119,13 +137,32 @@ export async function loadPlayerModel(scene: THREE.Scene) {
     return prepareClip(sourceClip, type);
   };
 
-  const idleAction = mixer.clipAction(getClip(idleResult, IDLE_URL));
-  const walkAction = mixer.clipAction(getClip(walkResult, WALK_URL));
-  const runAction = mixer.clipAction(getClip(runResult, RUN_URL));
+  const idleAction = mixer.clipAction(
+    getClip(idleResult, IDLE_URL)
+  );
 
-  idleAction.setLoop(THREE.LoopRepeat, Infinity);
-  walkAction.setLoop(THREE.LoopRepeat, Infinity);
-  runAction.setLoop(THREE.LoopRepeat, Infinity);
+  const walkAction = mixer.clipAction(
+    getClip(walkResult, WALK_URL)
+  );
+
+  const runAction = mixer.clipAction(
+    getClip(runResult, RUN_URL)
+  );
+
+  idleAction.setLoop(
+    THREE.LoopRepeat,
+    Infinity
+  );
+
+  walkAction.setLoop(
+    THREE.LoopRepeat,
+    Infinity
+  );
+
+  runAction.setLoop(
+    THREE.LoopRepeat,
+    Infinity
+  );
 
   idleAction
     .setEffectiveWeight(1)
@@ -136,6 +173,7 @@ export async function loadPlayerModel(scene: THREE.Scene) {
   runAction.setEffectiveTimeScale(1.12);
 
   let currentAction = idleAction;
+  let movementState: MovementState = "idle";
   let activeOneShot: THREE.AnimationAction | null = null;
   let latestRequestId = 0;
 
@@ -148,11 +186,15 @@ export async function loadPlayerModel(scene: THREE.Scene) {
     file: string,
     providedType?: ActionType
   ): ActionType => {
-    if (providedType) return providedType;
+    if (providedType) {
+      return providedType;
+    }
 
     const normalizedFile = file.toLowerCase();
 
-    if (normalizedFile.includes("jump")) return "jump";
+    if (normalizedFile.includes("jump")) {
+      return "jump";
+    }
 
     if (
       normalizedFile.includes("kick") ||
@@ -171,15 +213,26 @@ export async function loadPlayerModel(scene: THREE.Scene) {
     const cacheKey = `${type}:${file}`;
     const cachedAction = oneShotCache.get(cacheKey);
 
-    if (cachedAction) return cachedAction;
+    if (cachedAction) {
+      return cachedAction;
+    }
 
     const actionPromise = loader
       .loadAsync(`/models/${file}`)
       .then((result) => {
-        const clip = getClip(result, `/models/${file}`, type);
+        const clip = getClip(
+          result,
+          `/models/${file}`,
+          type
+        );
+
         const action = mixer.clipAction(clip);
 
-        action.setLoop(THREE.LoopOnce, 1);
+        action.setLoop(
+          THREE.LoopOnce,
+          1
+        );
+
         action.clampWhenFinished = true;
         action.enabled = true;
 
@@ -190,70 +243,229 @@ export async function loadPlayerModel(scene: THREE.Scene) {
         throw error;
       });
 
-    oneShotCache.set(cacheKey, actionPromise);
+    oneShotCache.set(
+      cacheKey,
+      actionPromise
+    );
+
     return actionPromise;
   };
 
-  const setMoveBySpeed = (movementSpeed: number) => {
-    let targetAction = idleAction;
+  const getMovementState = (
+    movementSpeed: number
+  ): MovementState => {
+    if (movementState === "run") {
+      if (movementSpeed <= WALK_EXIT_THRESHOLD) {
+        return "idle";
+      }
 
-    if (movementSpeed >= 0.6) {
-      targetAction = runAction;
-    } else if (movementSpeed > 0.1) {
-      targetAction = walkAction;
+      if (movementSpeed < RUN_EXIT_THRESHOLD) {
+        return "walk";
+      }
+
+      return "run";
     }
 
-    if (targetAction === currentAction) return;
+    if (movementState === "walk") {
+      if (movementSpeed <= WALK_EXIT_THRESHOLD) {
+        return "idle";
+      }
+
+      if (movementSpeed >= RUN_ENTER_THRESHOLD) {
+        return "run";
+      }
+
+      return "walk";
+    }
+
+    if (movementSpeed >= RUN_ENTER_THRESHOLD) {
+      return "run";
+    }
+
+    if (movementSpeed >= WALK_ENTER_THRESHOLD) {
+      return "walk";
+    }
+
+    return "idle";
+  };
+
+  const getMovementAction = (
+    state: MovementState
+  ) => {
+    if (state === "run") {
+      return runAction;
+    }
+
+    if (state === "walk") {
+      return walkAction;
+    }
+
+    return idleAction;
+  };
+
+  const synchronizeMovementPhase = (
+    sourceAction: THREE.AnimationAction,
+    targetAction: THREE.AnimationAction
+  ) => {
+    const sourceIsMovement =
+      sourceAction === walkAction ||
+      sourceAction === runAction;
+
+    const targetIsMovement =
+      targetAction === walkAction ||
+      targetAction === runAction;
+
+    if (!sourceIsMovement || !targetIsMovement) {
+      targetAction.time = 0;
+      return;
+    }
+
+    const sourceDuration =
+      sourceAction.getClip().duration;
+
+    const targetDuration =
+      targetAction.getClip().duration;
+
+    if (
+      sourceDuration <= 0 ||
+      targetDuration <= 0
+    ) {
+      targetAction.time = 0;
+      return;
+    }
+
+    const normalizedTime =
+      (sourceAction.time % sourceDuration) /
+      sourceDuration;
+
+    targetAction.time =
+      normalizedTime * targetDuration;
+  };
+
+  const setMoveBySpeed = (
+    movementSpeed: number
+  ) => {
+    const clampedSpeed = THREE.MathUtils.clamp(
+      movementSpeed,
+      0,
+      1
+    );
+
+    const nextMovementState =
+      getMovementState(clampedSpeed);
+
+    if (
+      nextMovementState === movementState
+    ) {
+      return;
+    }
+
+    const targetAction =
+      getMovementAction(nextMovementState);
+
+    if (targetAction === currentAction) {
+      movementState = nextMovementState;
+      return;
+    }
+
+    const previousAction = currentAction;
 
     targetAction
       .reset()
       .setEffectiveWeight(1)
       .setEffectiveTimeScale(
-        targetAction === runAction ? 1.12 : 1
+        targetAction === runAction
+          ? 1.12
+          : 1
       )
       .play();
 
-    currentAction.crossFadeTo(targetAction, 0.18, true);
+    synchronizeMovementPhase(
+      previousAction,
+      targetAction
+    );
+
+    previousAction.crossFadeTo(
+      targetAction,
+      MOVEMENT_CROSS_FADE_DURATION,
+      true
+    );
+
     currentAction = targetAction;
+    movementState = nextMovementState;
   };
 
   const restoreMovementAnimation = () => {
-    currentAction.setEffectiveWeight(1);
+    currentAction
+      .enabled = true;
+
+    currentAction
+      .setEffectiveWeight(1);
+
     visualRoot.position.y = 0;
     activeOneShot = null;
   };
 
-  mixer.addEventListener("finished", (event) => {
-    const finishedAction = (
-      event as { action: THREE.AnimationAction }
-    ).action;
+  mixer.addEventListener(
+    "finished",
+    (event) => {
+      const finishedAction = (
+        event as {
+          action: THREE.AnimationAction;
+        }
+      ).action;
 
-    if (finishedAction !== activeOneShot) return;
+      if (
+        finishedAction !==
+        activeOneShot
+      ) {
+        return;
+      }
 
-    finishedAction.stop();
-    restoreMovementAnimation();
-  });
+      finishedAction.stop();
+      restoreMovementAnimation();
+    }
+  );
 
   const playAnimOnce = async (
     file: string,
     providedType?: ActionType
   ) => {
-    const requestId = ++latestRequestId;
-    const type = detectActionType(file, providedType);
+    const requestId =
+      ++latestRequestId;
+
+    const type = detectActionType(
+      file,
+      providedType
+    );
 
     try {
-      const action = await loadOneShotAction(file, type);
+      const action =
+        await loadOneShotAction(
+          file,
+          type
+        );
 
-      if (requestId !== latestRequestId) return;
+      if (
+        requestId !== latestRequestId
+      ) {
+        return;
+      }
 
-      if (activeOneShot && activeOneShot !== action) {
+      if (
+        activeOneShot &&
+        activeOneShot !== action
+      ) {
         activeOneShot.stop();
       }
 
       visualRoot.position.y = 0;
       activeOneShot = action;
+
       currentAction.setEffectiveWeight(
-        type === "jump" ? 0.35 : 0.55
+        type === "jump"
+          ? 0.35
+          : 0.55
       );
 
       action
@@ -262,7 +474,11 @@ export async function loadPlayerModel(scene: THREE.Scene) {
         .setEffectiveTimeScale(1)
         .play();
     } catch (error) {
-      console.error(`Failed to load animation ${file}:`, error);
+      console.error(
+        `Failed to load animation ${file}:`,
+        error
+      );
+
       restoreMovementAnimation();
     }
   };
