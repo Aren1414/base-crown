@@ -113,11 +113,13 @@ let chunkGenerationScheduled = false;
 const loader = new GLTFLoader();
 const textureLoader = new THREE.TextureLoader();
 const modelCache = new Map<string, Promise<THREE.Group>>();
+const materialVariantCache = new WeakMap<THREE.Material, Map<number, THREE.Material>>();
 const simpleColliders: SimpleCollider[] = [];
 const preciseCollisionMeshes: PreciseCollisionMesh[] = [];
 const simpleCollidersByChunk = new Map<THREE.Group, SimpleCollider[]>();
 const preciseCollisionMeshesByChunk = new Map<THREE.Group, PreciseCollisionMesh[]>();
 const heightMeshes: THREE.Object3D[] = [];
+const heightMeshesByChunk = new Map<THREE.Group, THREE.Object3D[]>();
 const occlusionMeshes: THREE.Object3D[] = [];
 const occlusionMeshesByChunk = new Map<THREE.Group, THREE.Object3D[]>();
 const raycaster = new THREE.Raycaster();
@@ -131,6 +133,8 @@ const tempVector = new THREE.Vector3();
 const tempVectorB = new THREE.Vector3();
 const tempQuaternion = new THREE.Quaternion();
 const upAxis = new THREE.Vector3(0, 1, 0);
+const whiteColor = new THREE.Color(0xffffff);
+const nearbyHeightMeshes: THREE.Object3D[] = [];
 const playerCollisionBox = new THREE.Box3();
 const sweptCollisionBox = new THREE.Box3();
 const collisionBoxMin = new THREE.Vector3();
@@ -250,6 +254,11 @@ function loadSource(url: string) {
 }
 
 function brightenMaterial(material: THREE.Material, amount: number) {
+  const cacheKey = Math.round(amount * 1000);
+  let variants = materialVariantCache.get(material);
+  if (!variants) { variants = new Map(); materialVariantCache.set(material, variants); }
+  const cached = variants.get(cacheKey);
+  if (cached) return cached;
   const result = material.clone();
   if (
     result instanceof THREE.MeshStandardMaterial ||
@@ -258,13 +267,14 @@ function brightenMaterial(material: THREE.Material, amount: number) {
     result instanceof THREE.MeshPhongMaterial ||
     result instanceof THREE.MeshBasicMaterial
   ) {
-    result.color.lerp(new THREE.Color(0xffffff), amount);
+    result.color.lerp(whiteColor, amount);
     if (result instanceof THREE.MeshStandardMaterial || result instanceof THREE.MeshPhysicalMaterial) {
       result.roughness = Math.max(0.67, result.roughness);
       result.metalness = Math.min(0.12, result.metalness);
     }
     result.needsUpdate = true;
   }
+  variants.set(cacheKey, result);
   return result;
 }
 
@@ -304,7 +314,12 @@ function registerModel(object: THREE.Object3D, chunk: THREE.Group, options: Mode
   else if (options.collision) registerSimpleCollider(object, chunk, options.colliderType ?? "vehicle");
   object.traverse((child) => {
     if (!(child instanceof THREE.Mesh)) return;
-    if (options.height) heightMeshes.push(child);
+    if (options.height) {
+      heightMeshes.push(child);
+      const chunkHeights = heightMeshesByChunk.get(chunk);
+      if (chunkHeights) chunkHeights.push(child);
+      else heightMeshesByChunk.set(chunk, [child]);
+    }
     if (options.occlusion) {
       occlusionMeshes.push(child);
       const chunkOccluders = occlusionMeshesByChunk.get(chunk);
@@ -396,6 +411,7 @@ function createBuildingFoundation(object: THREE.Object3D, chunk: THREE.Group) {
   if (bounds.isEmpty()) return;
   bounds.getSize(tempSize);
   bounds.getCenter(tempCenter);
+  chunk.worldToLocal(tempCenter);
   const width = Math.min(tempSize.x + 0.45, 17);
   const depth = Math.min(tempSize.z + 0.45, 17);
   const edge = new THREE.Mesh(new THREE.BoxGeometry(width + 0.45, 0.055, depth + 0.45), foundationEdgeMaterial);
@@ -411,6 +427,9 @@ function createBuildingFoundation(object: THREE.Object3D, chunk: THREE.Group) {
   foundation.userData.temporaryGeometry = true;
   chunk.add(foundation);
   heightMeshes.push(foundation);
+  const chunkHeights = heightMeshesByChunk.get(chunk);
+  if (chunkHeights) chunkHeights.push(foundation);
+  else heightMeshesByChunk.set(chunk, [foundation]);
   const random = seededRandom(Math.floor((tempCenter.x + 1000) * 37 + (tempCenter.z + 1000) * 71));
   const rubbleCount = 3 + Math.floor(random() * 4);
   for (let index = 0; index < rubbleCount; index++) {
@@ -511,6 +530,9 @@ function addGround(chunk: THREE.Group, material: THREE.Material) {
   ground.name = "Ground";
   chunk.add(ground);
   heightMeshes.push(ground);
+  const chunkHeights = heightMeshesByChunk.get(chunk);
+  if (chunkHeights) chunkHeights.push(ground);
+  else heightMeshesByChunk.set(chunk, [ground]);
 }
 
 function addStreetTiles(
@@ -925,6 +947,7 @@ function removeChunk(key: string, chunk: THREE.Group) {
   }
   simpleCollidersByChunk.delete(chunk);
   preciseCollisionMeshesByChunk.delete(chunk);
+  heightMeshesByChunk.delete(chunk);
   occlusionMeshesByChunk.delete(chunk);
   const objects = new Set<THREE.Object3D>();
   chunk.traverse((object) => {
@@ -1101,17 +1124,19 @@ export function findSafeSpawnPosition(x = 0, z = 0, radius = 0.5) {
 }
 
 export function updatePlayerWorldHeight(player: THREE.Object3D, delta: number) {
+  nearbyHeightMeshes.length = 0;
+  for (const chunk of collectNearbyChunks(player.position.x, player.position.z, 1)) {
+    const meshes = heightMeshesByChunk.get(chunk);
+    if (meshes) nearbyHeightMeshes.push(...meshes);
+  }
   rayOrigin.set(player.position.x, player.position.y + 12, player.position.z);
   raycaster.set(rayOrigin, downDirection);
   raycaster.near = 0;
   raycaster.far = 28;
-  const hits = raycaster.intersectObjects(heightMeshes, false);
+  const hits = raycaster.intersectObjects(nearbyHeightMeshes, false);
   let targetY = PLAYER_BASE_Y;
   for (const hit of hits) {
-    if (hit.point.y <= player.position.y + 2) {
-      targetY = hit.point.y + PLAYER_BASE_Y;
-      break;
-    }
+    if (hit.point.y <= player.position.y + 2) { targetY = hit.point.y + PLAYER_BASE_Y; break; }
   }
   player.position.y = THREE.MathUtils.lerp(player.position.y, targetY, 1 - Math.exp(-14 * delta));
 }
@@ -1168,6 +1193,7 @@ export function destroyAllChunks() {
   simpleCollidersByChunk.clear();
   preciseCollisionMeshesByChunk.clear();
   heightMeshes.length = 0;
+  heightMeshesByChunk.clear();
   occlusionMeshes.length = 0;
   occlusionMeshesByChunk.clear();
   cameraOcclusionDistance = 0;
