@@ -536,61 +536,27 @@ function addGround(chunk: THREE.Group, material: THREE.Material) {
 }
 
 function addStreetTiles(
-  chunk: THREE.Group,
-  random: () => number,
-  direction: Direction,
-  start = -HALF_CHUNK,
-  end = HALF_CHUNK,
-  crossOffset = 0
+  _chunk: THREE.Group,
+  _random: () => number,
+  _direction: Direction,
+  _start = -HALF_CHUNK,
+  _end = HALF_CHUNK,
+  _crossOffset = 0
 ) {
-  if (!URBAN_STREETS.length || end <= start) return;
-  const count = Math.max(1, Math.ceil((end - start) / 11));
-  const exactLength = (end - start) / count;
-  const definition = URBAN_STREETS[Math.floor(random() * URBAN_STREETS.length)];
-  for (let index = 0; index < count; index++) {
-    const along = start + exactLength * (index + 0.5);
-    placeLinearModel(
-      definition,
-      chunk,
-      direction === "x" ? along : crossOffset,
-      direction === "x" ? crossOffset : along,
-      {
-        direction,
-        targetLength: exactLength + 0.12,
-        targetCrossSize: ROAD_WIDTH + 2.4,
-        y: 0.006,
-        flattenSurface: true,
-        brightness: 0.015,
-        castShadow: false,
-        sinkIntoGround: 0.004,
-      }
-    );
-  }
+  return;
 }
 
 function addAlleyTiles(
-  chunk: THREE.Group,
-  random: () => number,
-  direction: Direction,
-  crossOffset = 0,
-  start = -HALF_CHUNK,
-  end = HALF_CHUNK
+  _chunk: THREE.Group,
+  _random: () => number,
+  _direction: Direction,
+  _crossOffset = 0,
+  _start = -HALF_CHUNK,
+  _end = HALF_CHUNK
 ) {
-  if (!URBAN_ALLEYS.length || end <= start) return;
-  const connector = URBAN_ALLEYS.find((item) => item.url.includes("Connecting_alley_and_street"));
-  const alleys = URBAN_ALLEYS.filter((item) => !item.url.includes("Connecting_alley_and_street"));
-  const usable = alleys.length ? alleys : URBAN_ALLEYS;
-  const count = Math.max(2, Math.ceil((end - start) / 8));
-  const exactLength = (end - start) / count;
-  for (let index = 0; index < count; index++) {
-    const along = start + exactLength * (index + 0.5);
-    const centerIndex = Math.floor(count / 2);
-    const definition = connector && (index === centerIndex || index === centerIndex - 1) ? connector : usable[modulo(index, usable.length)];
-    placeLinearModel(definition, chunk, direction === "x" ? along : crossOffset, direction === "x" ? crossOffset : along, {
-      direction, targetLength: exactLength + 0.12, targetCrossSize: ALLEY_WIDTH, y: 0.006, flattenSurface: true, brightness: 0.015, castShadow: false, sinkIntoGround: 0.004,
-    });
-  }
+  return;
 }
+
 
 function getRoadPoints(direction: Direction): RoadPoint[] {
   const result: RoadPoint[] = [];
